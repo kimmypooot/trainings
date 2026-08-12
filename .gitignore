@@ -25,3 +25,7 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Local SQLite scratch database (real dev DB is MySQL)
+/csc_tims-db
+/database/*.sqlite

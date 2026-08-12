@@ -15,19 +15,24 @@ const seals = [
 
 const features = [
     {
-        title: 'Training Catalogue',
-        description: 'Browse accredited programs, schedules, and slot availability in one place.',
+        title: 'Register for Trainings',
+        description: 'Browse the programs offered by the CSC and sign up online while slots last.',
         path: 'M4 6h16M4 12h16M4 18h10',
     },
     {
-        title: 'Enrolment & Tracking',
-        description: 'Submit nominations and follow each application through to completion.',
+        title: 'Your Certificates',
+        description: 'View and download the certificate for every training you complete.',
         path: 'M5 12.5l4.5 4.5L19 7.5',
     },
     {
-        title: 'Records & Reporting',
-        description: 'Generate certificates and agency-level training reports on demand.',
-        path: 'M6 20V10m6 10V4m6 16v-6',
+        title: 'Event QR Code',
+        description: 'Get a personal QR code for fast check-in at large CSC events.',
+        path: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z',
+    },
+    {
+        title: 'Your Profile',
+        description: 'Keep your details and training history current in one account.',
+        path: 'M4.5 20a7.5 7.5 0 0 1 15 0M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7',
     },
 ];
 
@@ -91,12 +96,12 @@ const stats = [
                 </h1>
 
                 <p class="mx-auto mt-6 max-w-xl text-base leading-relaxed text-pretty text-white/75 sm:text-lg">
-                    A single record of every training program, nomination, and certificate across the
-                    Commission — accessible to agencies, coordinators, and personnel alike.
+                    Create your account to register for training programs offered by the Commission, keep your
+                    certificates in one place, and check in to events with your own QR code.
                 </p>
 
                 <div class="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-                    <AppButton href="/login" size="lg" on-dark>Get Started</AppButton>
+                    <AppButton href="/register" size="lg" on-dark>Create your account</AppButton>
                     <AppButton href="/#programs" variant="ghost" size="lg" on-dark>Learn More</AppButton>
                 </div>
             </div>
@@ -122,14 +127,14 @@ const stats = [
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="mx-auto max-w-2xl text-center">
                     <h2 class="text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
-                        Everything the training cycle needs
+                        Everything you need in one account
                     </h2>
                     <p class="mt-4 text-base leading-relaxed text-pretty text-csc-ink/70">
-                        From the first nomination to the final certificate, TIMS keeps one authoritative record.
+                        From signing up for a program to downloading the certificate that proves you finished it.
                     </p>
                 </div>
 
-                <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     <article
                         v-for="feature in features"
                         :key="feature.title"
@@ -167,13 +172,14 @@ const stats = [
         <section class="bg-csc-blue-tint py-20">
             <div class="mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
                 <h2 class="text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
-                    Ready to manage your agency's training records?
+                    Ready to sign up for your next training?
                 </h2>
                 <p class="mx-auto mt-4 max-w-xl text-base leading-relaxed text-pretty text-csc-ink/70">
-                    Sign in with your CSC-issued account to view programs, nominate personnel, and track completions.
+                    Register an account to browse programs offered by the CSC, reserve your slot, and keep every
+                    certificate you earn.
                 </p>
                 <div class="mt-8">
-                    <AppButton href="/login" variant="accent" size="lg">Sign in to TIMS</AppButton>
+                    <AppButton href="/register" variant="accent" size="lg">Create your account</AppButton>
                 </div>
             </div>
         </section>

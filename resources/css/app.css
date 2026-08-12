@@ -25,6 +25,23 @@
     --color-csc-red-ink: #c4111f;
     --color-csc-ink: #374151;
     --color-csc-line: #e5e7eb;
+
+    /*
+     * Semantic status colours, deliberately separate from the brand palette.
+     *
+     * Inside the signed-in app the brand red is retired, so a red "Cancelled"
+     * badge never reads as a stray piece of CSC branding. Every one of these is
+     * AA-compliant for text on its matching -soft background, and status is
+     * never signalled by colour alone — badges always carry an icon and label.
+     */
+    --color-success: #15803d;
+    --color-success-soft: #eaf6ee;
+    --color-warning: #b45309;
+    --color-warning-soft: #fdf3e7;
+    --color-danger: #c4111f;
+    --color-danger-soft: #fdeef0;
+    --color-info: #2a338f;
+    --color-info-soft: #eef0f9;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -67,7 +67,7 @@ class PublicPagesTest extends TestCase
         ]);
 
         $this->post('/login', ['email' => 'user@csc.gov.ph', 'password' => 'correct-password'])
-            ->assertRedirect('/');
+            ->assertRedirect('/profile/complete');
 
         $this->assertAuthenticatedAs($user);
     }
@@ -79,6 +79,84 @@ class PublicPagesTest extends TestCase
         $this->get('/auth/google')
             ->assertRedirect('/login')
             ->assertSessionHasErrors('form');
+    }
+
+    public function test_register_page_renders(): void
+    {
+        $this->get('/register')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Auth/Register')
+                ->has('googleEnabled')
+            );
+    }
+
+    public function test_registration_creates_and_signs_in_a_participant(): void
+    {
+        $this->post('/register', [
+            'email' => 'juan@example.com',
+            'password' => 'sikreto123',
+            'password_confirmation' => 'sikreto123',
+            'consent' => true,
+        ])->assertRedirect('/profile/complete');
+
+        $user = User::where('email', 'juan@example.com')->first();
+
+        $this->assertNotNull($user);
+        $this->assertNull($user->name, 'The name is collected on the profile form, not at registration.');
+        $this->assertNotSame('sikreto123', $user->password, 'Password must be hashed.');
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_registration_validates_its_input(): void
+    {
+        $this->from('/register')
+            ->post('/register', [
+                'email' => 'not-an-email',
+                'password' => 'short',
+                'password_confirmation' => 'mismatch',
+                'consent' => false,
+            ])
+            ->assertRedirect('/register')
+            ->assertSessionHasErrors(['email', 'password', 'consent']);
+
+        $this->assertGuest();
+    }
+
+    public function test_registration_rejects_a_duplicate_email(): void
+    {
+        User::factory()->create(['email' => 'taken@example.com']);
+
+        $this->from('/register')
+            ->post('/register', [
+                'email' => 'taken@example.com',
+                'password' => 'sikreto123',
+                'password_confirmation' => 'sikreto123',
+                'consent' => true,
+            ])
+            ->assertRedirect('/register')
+            ->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+    }
+
+    public function test_visitor_count_is_shared_and_counted_once_per_session(): void
+    {
+        $this->get('/')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('visitors', 1));
+
+        // Same session revisiting must not inflate the tally.
+        $this->get('/')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('visitors', 1));
+
+        // A fresh session counts as a new visitor.
+        $this->flushSession();
+
+        $this->get('/login')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('visitors', 2));
     }
 
     public function test_logout_ends_the_session(): void

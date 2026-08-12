@@ -1,6 +1,6 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
 import AppLogo from '@/Components/AppLogo.vue';
 import AppButton from '@/Components/AppButton.vue';
 
@@ -34,24 +34,24 @@ const footerSeals = [
     },
 ];
 
-// The three blocks below follow the standard GOVPH footer template used across
-// Philippine government sites: Republic of the Philippines, About GOVPH, and
-// Government Links.
+const quickLinks = [
+    { label: 'Home', href: '/' },
+    { label: 'Programs', href: '/#programs' },
+    { label: 'About TIMS', href: '/#about' },
+    { label: 'Create an account', href: '/register' },
+    { label: 'Sign in', href: '/login' },
+];
+
+// Required GOVPH links for Philippine government sites.
 const aboutGovphLinks = [
     { label: 'GOV.PH', href: 'https://www.gov.ph' },
     { label: 'Open Data Portal', href: 'https://data.gov.ph' },
     { label: 'Official Gazette', href: 'https://www.officialgazette.gov.ph' },
 ];
 
-const governmentLinks = [
-    { label: 'Office of the President', href: 'https://op-proper.gov.ph' },
-    { label: 'Office of the Vice President', href: 'https://ovp.gov.ph' },
-    { label: 'Senate of the Philippines', href: 'https://www.senate.gov.ph' },
-    { label: 'House of Representatives', href: 'https://www.congress.gov.ph' },
-    { label: 'Supreme Court', href: 'https://sc.judiciary.gov.ph' },
-    { label: 'Court of Appeals', href: 'https://ca.judiciary.gov.ph' },
-    { label: 'Sandiganbayan', href: 'https://sb.judiciary.gov.ph' },
-];
+// Shared from HandleInertiaRequests; counted once per session.
+const page = usePage();
+const visitorCount = computed(() => page.props.visitors ?? 0);
 
 const scrolled = ref(false);
 const menuOpen = ref(false);
@@ -102,8 +102,9 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                     </a>
                 </nav>
 
-                <div class="hidden md:block">
-                    <AppButton href="/login" size="sm">Login</AppButton>
+                <div class="hidden items-center gap-2 md:flex">
+                    <AppButton href="/login" variant="ghost" size="sm">Sign in</AppButton>
+                    <AppButton href="/register" size="sm">Register</AppButton>
                 </div>
 
                 <button
@@ -138,7 +139,8 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                     >
                         {{ item.label }}
                     </a>
-                    <AppButton href="/login" size="sm" block class="mt-2">Login</AppButton>
+                    <AppButton href="/login" variant="ghost" size="sm" block class="mt-2">Sign in</AppButton>
+                    <AppButton href="/register" size="sm" block class="mt-2">Register</AppButton>
                 </nav>
             </div>
         </header>
@@ -147,117 +149,176 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
             <slot />
         </main>
 
-        <footer id="contact" class="bg-csc-blue-deep text-white/80">
-            <div class="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-                <div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
-                    <!-- Agency identity + contact -->
-                    <section>
-                        <AppLogo variant="light" size="md" />
-                        <p class="mt-4 max-w-xs text-sm leading-relaxed">
-                            The Training Information Management System of the Civil Service Commission.
+        <footer id="contact" class="bg-csc-blue-deep">
+            <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+                <div class="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+                    <!-- Col 1: Brand + seals -->
+                    <div>
+                        <div class="mb-3 flex items-center gap-2">
+                            <img src="/images/csc-logo.png" alt="" class="h-7 w-7 object-contain" aria-hidden="true" />
+                            <span class="text-sm font-semibold text-white">CSC TIMS</span>
+                        </div>
+                        <p class="text-xs leading-relaxed text-white/60">
+                            Training Information Management System.<br />
+                            Serving the Philippine civil service with integrity, competence, and excellence.
                         </p>
-                        <address class="mt-4 space-y-1 text-sm not-italic">
-                            <p>IBP Road, Constitution Hills</p>
-                            <p>Quezon City, Philippines</p>
-                            <p>
+
+                        <div class="mt-4 flex flex-wrap items-center gap-3">
+                            <a
+                                v-for="seal in footerSeals"
+                                :key="seal.src"
+                                :href="seal.href"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+                            >
+                                <img
+                                    :src="seal.src"
+                                    :alt="seal.alt"
+                                    class="h-16 w-auto opacity-80 transition-opacity duration-150 hover:opacity-100"
+                                />
+                            </a>
+                        </div>
+
+                        <p class="mt-4 text-xs leading-relaxed text-white/40">
+                            All content is in the public domain unless otherwise stated.
+                        </p>
+                    </div>
+
+                    <!-- Col 2: Quick links -->
+                    <div>
+                        <h2 class="mb-3 text-xs font-semibold tracking-wider text-white uppercase">Quick Links</h2>
+                        <ul class="space-y-2">
+                            <li v-for="link in quickLinks" :key="link.href">
                                 <a
-                                    href="mailto:tims@csc.example.gov"
-                                    class="rounded transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                    :href="link.href"
+                                    class="rounded text-sm text-white/60 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                                 >
-                                    tims@csc.example.gov
+                                    {{ link.label }}
                                 </a>
-                            </p>
-                        </address>
-                    </section>
-
-                    <!-- System -->
-                    <section>
-                        <h2 class="text-sm font-semibold tracking-wide text-white uppercase">System</h2>
-                        <ul class="mt-4 space-y-2 text-sm">
-                            <li><a href="/login" class="transition-colors hover:text-white">Sign in</a></li>
-                            <li><a href="/#programs" class="transition-colors hover:text-white">Programs</a></li>
-                            <li><a href="/#about" class="transition-colors hover:text-white">About TIMS</a></li>
-                            <li><a href="/#contact" class="transition-colors hover:text-white">Help desk</a></li>
+                            </li>
                         </ul>
-                    </section>
+                    </div>
 
-                    <!-- About GOVPH -->
-                    <section>
-                        <h2 class="text-sm font-semibold tracking-wide text-white uppercase">About GOVPH</h2>
-                        <p class="mt-4 text-sm leading-relaxed">
+                    <!-- Col 3: GOVPH -->
+                    <div>
+                        <h2 class="mb-3 text-xs font-semibold tracking-wider text-white uppercase">GOVPH</h2>
+                        <p class="mb-3 text-xs leading-relaxed text-white/50">
                             Learn more about the Philippine government, its structure, how government works and the
                             people behind it.
                         </p>
-                        <ul class="mt-4 space-y-2 text-sm">
+                        <ul class="space-y-2">
                             <li v-for="link in aboutGovphLinks" :key="link.href">
                                 <a
                                     :href="link.href"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    class="rounded transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                    class="rounded text-sm text-white/60 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                                 >
                                     {{ link.label }}
                                 </a>
                             </li>
                         </ul>
-                    </section>
-
-                    <!-- Government links -->
-                    <section>
-                        <h2 class="text-sm font-semibold tracking-wide text-white uppercase">Government Links</h2>
-                        <ul class="mt-4 space-y-2 text-sm">
-                            <li v-for="link in governmentLinks" :key="link.href">
-                                <a
-                                    :href="link.href"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="rounded transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                                >
-                                    {{ link.label }}
-                                </a>
-                            </li>
-                        </ul>
-                    </section>
-                </div>
-
-                <!-- Seals + public domain notice -->
-                <div
-                    class="mt-12 flex flex-col gap-6 border-t border-white/15 pt-8 sm:flex-row sm:items-center sm:justify-between"
-                >
-                    <div class="flex flex-wrap items-center gap-6 sm:gap-8">
-                        <a
-                            v-for="seal in footerSeals"
-                            :key="seal.src"
-                            :href="seal.href"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
-                        >
-                            <img
-                                :src="seal.src"
-                                :alt="seal.alt"
-                                class="h-16 w-auto opacity-80 transition-opacity duration-150 hover:opacity-100 sm:h-20"
-                            />
-                        </a>
                     </div>
 
-                    <p class="max-w-sm text-sm leading-relaxed sm:text-right">
-                        <span class="font-semibold text-white">Republic of the Philippines.</span>
-                        All content is in the public domain unless otherwise stated.
-                    </p>
+                    <!-- Col 4: Contact -->
+                    <div>
+                        <h2 class="mb-3 text-xs font-semibold tracking-wider text-white uppercase">Contact</h2>
+                        <ul class="space-y-2 text-sm text-white/60">
+                            <li class="flex items-start gap-2">
+                                <svg
+                                    class="mt-0.5 size-4 shrink-0 text-white/40"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                    aria-hidden="true"
+                                >
+                                    <rect x="2.5" y="4.5" width="19" height="15" rx="2" />
+                                    <path d="m3 6 9 6 9-6" stroke-linecap="round" />
+                                </svg>
+                                <a
+                                    href="mailto:tims@csc.gov.ph"
+                                    class="rounded transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                >
+                                    tims@csc.gov.ph
+                                </a>
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <svg
+                                    class="mt-0.5 size-4 shrink-0 text-white/40"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        d="M4 5c0-.6.4-1 1-1h3l2 5-2.5 1.5a12 12 0 0 0 5 5L14 13l5 2v3c0 .6-.4 1-1 1h-1A15 15 0 0 1 4 6V5Z"
+                                        stroke-linejoin="round"
+                                    />
+                                </svg>
+                                (02) 8931-8092
+                            </li>
+                            <li class="flex items-start gap-2">
+                                <svg
+                                    class="mt-0.5 size-4 shrink-0 text-white/40"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                    aria-hidden="true"
+                                >
+                                    <path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke-linejoin="round" />
+                                    <circle cx="12" cy="10" r="2.5" />
+                                </svg>
+                                Civil Service Commission, IBP Road, Constitution Hills, Quezon City
+                            </li>
+                        </ul>
+
+                        <ul class="mt-6 space-y-2 text-sm">
+                            <li>
+                                <Link
+                                    href="/privacy-policy"
+                                    class="rounded text-white/60 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                >
+                                    Privacy Policy
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/terms-of-service"
+                                    class="rounded text-white/60 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                >
+                                    Terms of Service
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
-                <!-- Bottom bar -->
-                <div
-                    class="mt-8 flex flex-col gap-3 border-t border-white/15 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between"
-                >
-                    <p>&copy; {{ new Date().getFullYear() }} Civil Service Commission.</p>
-                    <p class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <Link href="/privacy-policy" class="transition-colors hover:text-white">Privacy Policy</Link>
-                        <span class="inline-block h-1 w-4 bg-csc-red" aria-hidden="true" />
-                        <Link href="/terms-of-service" class="transition-colors hover:text-white">
-                            Terms of Service
-                        </Link>
+                <div class="mt-8 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-6 sm:flex-row">
+                    <p class="text-xs text-white/40">
+                        &copy; {{ new Date().getFullYear() }} Civil Service Commission. All rights reserved.
+                    </p>
+
+                    <p class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                        <svg
+                            class="size-3.5 text-white/40"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                        </svg>
+                        <span class="text-[11px] font-medium tracking-wide text-white/50">TOTAL VISITORS</span>
+                        <span class="text-xs font-semibold text-white/80">{{ visitorCount.toLocaleString() }}</span>
                     </p>
                 </div>
             </div>

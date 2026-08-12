@@ -1,0 +1,309 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Enums\RegistrationStatus;
+use App\Enums\Role;
+use App\Models\Certificate;
+use App\Models\CertificateVerification;
+use App\Models\Profile;
+use App\Models\Registration;
+use App\Models\Training;
+use App\Models\User;
+use App\Notifications\CertificateReleased;
+use App\Support\CertificateService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia;
+use Tests\TestCase;
+
+/**
+ * Certificate issuance and the public verification endpoint that replaces v1's
+ * `verify-certificate.php`.
+ */
+class CertificateTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Storage::fake(CertificateService::DISK);
+    }
+
+    private function staff(Role $role = Role::Admin): User
+    {
+        return User::factory()->create(['role' => $role, 'profile_completed_at' => now()]);
+    }
+
+    private function participant(): User
+    {
+        $user = User::factory()->create(['profile_completed_at' => now()]);
+        Profile::factory()->for($user)->create();
+
+        return $user->refresh();
+    }
+
+    private function completedRegistration(): Registration
+    {
+        return Registration::factory()->completed()->create([
+            'user_id' => $this->participant()->getKey(),
+            'training_id' => Training::factory()->create()->getKey(),
+        ]);
+    }
+
+    public function test_releasing_a_certificate_writes_a_pdf_and_a_record(): void
+    {
+        $registration = $this->completedRegistration();
+
+        $certificate = CertificateService::release($registration, $this->staff());
+
+        $this->assertNotNull($certificate->generated_at);
+        $this->assertStringStartsWith('CSC8-', $certificate->certificate_number);
+        $this->assertSame(32, strlen($certificate->verification_code));
+
+        Storage::disk(CertificateService::DISK)->assertExists($certificate->file_path);
+
+        // A real PDF, not an empty placeholder.
+        $this->assertStringStartsWith(
+            '%PDF',
+            Storage::disk(CertificateService::DISK)->get($certificate->file_path)
+        );
+    }
+
+    public function test_an_incomplete_registration_cannot_be_issued_a_certificate(): void
+    {
+        $registration = Registration::factory()->approved()->create([
+            'user_id' => $this->participant()->getKey(),
+            'training_id' => Training::factory()->create()->getKey(),
+        ]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Only a completed registration');
+
+        CertificateService::release($registration, $this->staff());
+    }
+
+    public function test_releasing_twice_does_not_mint_a_second_certificate(): void
+    {
+        $registration = $this->completedRegistration();
+        $staff = $this->staff();
+
+        $first = CertificateService::release($registration, $staff);
+        $second = CertificateService::release($registration->fresh(), $staff);
+
+        $this->assertSame($first->id, $second->id);
+        $this->assertSame($first->certificate_number, $second->certificate_number);
+        $this->assertSame(1, Certificate::count());
+    }
+
+    public function test_the_participant_is_notified_when_their_certificate_is_released(): void
+    {
+        Notification::fake();
+
+        $registration = $this->completedRegistration();
+
+        CertificateService::release($registration, $this->staff());
+
+        Notification::assertSentTo($registration->user, CertificateReleased::class);
+    }
+
+    public function test_a_participant_can_download_their_own_certificate(): void
+    {
+        $registration = $this->completedRegistration();
+        $certificate = CertificateService::release($registration, $this->staff());
+
+        $this->actingAs($registration->user)
+            ->get("/my/certificates/{$certificate->id}/download")
+            ->assertOk()
+            ->assertHeader('content-disposition', "attachment; filename={$certificate->certificate_number}.pdf");
+
+        $this->assertSame(1, $certificate->fresh()->download_count);
+    }
+
+    public function test_a_participant_cannot_download_someone_elses_certificate(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->actingAs($this->participant())
+            ->get("/my/certificates/{$certificate->id}/download")
+            ->assertForbidden();
+    }
+
+    public function test_the_certificates_page_separates_released_from_awaiting(): void
+    {
+        $participant = $this->participant();
+
+        $released = Registration::factory()->completed()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create()->getKey(),
+        ]);
+        Registration::factory()->completed()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create()->getKey(),
+        ]);
+
+        CertificateService::release($released, $this->staff());
+
+        $this->actingAs($participant)
+            ->get('/my/certificates')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('My/Certificates')
+                ->has('released', 1)
+                ->has('awaitingRelease', 1)
+            );
+    }
+
+    public function test_the_public_verification_page_works_without_signing_in(): void
+    {
+        $registration = $this->completedRegistration();
+        $certificate = CertificateService::release($registration, $this->staff());
+
+        $this->get("/verify/{$certificate->verification_code}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Certificates/Verify')
+                ->where('certificate.number', $certificate->certificate_number)
+                ->where('certificate.participant', $registration->user->name)
+            );
+    }
+
+    public function test_verification_never_discloses_contact_details(): void
+    {
+        $registration = $this->completedRegistration();
+        $certificate = CertificateService::release($registration, $this->staff());
+
+        // The employer checking a certificate has no business seeing the
+        // participant's email or which office they belong to.
+        $this->get("/verify/{$certificate->verification_code}")
+            ->assertOk()
+            ->assertDontSee($registration->user->email);
+    }
+
+    public function test_each_verification_is_logged(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->get("/verify/{$certificate->verification_code}")->assertOk();
+        $this->get("/verify/{$certificate->verification_code}")->assertOk();
+
+        $this->assertSame(2, CertificateVerification::count());
+        $this->assertSame(2, $certificate->fresh()->verification_count);
+        $this->assertNotNull($certificate->fresh()->last_verified_at);
+    }
+
+    public function test_an_unknown_verification_code_is_not_found(): void
+    {
+        $this->get('/verify/'.str_repeat('x', 32))->assertNotFound();
+    }
+
+    public function test_an_unreleased_certificate_cannot_be_verified(): void
+    {
+        // A row exists but no PDF was ever generated — it must not verify.
+        $certificate = Certificate::factory()->create();
+
+        $this->get("/verify/{$certificate->verification_code}")->assertNotFound();
+    }
+
+    public function test_the_verification_code_is_not_the_certificate_number(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        // Guessing the printed sequential number must not resolve anything —
+        // otherwise every certificate CSC issued would be enumerable.
+        $this->get("/verify/{$certificate->certificate_number}")->assertNotFound();
+    }
+
+    public function test_hrd_can_issue_a_certificate_from_the_roster(): void
+    {
+        $registration = $this->completedRegistration();
+
+        $this->actingAs($this->staff())
+            ->post("/admin/registrations/{$registration->id}/certificate")
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, Certificate::count());
+    }
+
+    public function test_hrd_can_issue_certificates_for_a_whole_training(): void
+    {
+        $training = Training::factory()->create();
+
+        foreach (range(1, 3) as $ignored) {
+            Registration::factory()->completed()->create([
+                'user_id' => $this->participant()->getKey(),
+                'training_id' => $training->getKey(),
+            ]);
+        }
+
+        $this->actingAs($this->staff())
+            ->post("/admin/trainings/{$training->id}/certificates")
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(3, Certificate::whereNotNull('generated_at')->count());
+    }
+
+    public function test_bulk_release_reports_when_there_is_nothing_to_issue(): void
+    {
+        $training = Training::factory()->create();
+
+        $this->actingAs($this->staff())
+            ->from('/admin/trainings')
+            ->post("/admin/trainings/{$training->id}/certificates")
+            ->assertSessionHasErrors('certificate');
+    }
+
+    public function test_field_office_staff_cannot_issue_certificates(): void
+    {
+        $registration = $this->completedRegistration();
+
+        $this->actingAs($this->staff(Role::FieldOffice))
+            ->post("/admin/registrations/{$registration->id}/certificate")
+            ->assertForbidden();
+
+        $this->assertSame(0, Certificate::count());
+    }
+
+    public function test_certificate_numbers_are_sequential_within_a_year(): void
+    {
+        $training = Training::factory()->create(['starts_at' => now()->addWeek()]);
+        $staff = $this->staff();
+        $numbers = [];
+
+        foreach (range(1, 3) as $ignored) {
+            $registration = Registration::factory()->completed()->create([
+                'user_id' => $this->participant()->getKey(),
+                'training_id' => $training->getKey(),
+            ]);
+
+            $numbers[] = CertificateService::release($registration, $staff)->certificate_number;
+        }
+
+        $year = now()->addWeek()->format('Y');
+
+        $this->assertSame([
+            "CSC8-{$year}-000001",
+            "CSC8-{$year}-000002",
+            "CSC8-{$year}-000003",
+        ], $numbers);
+    }
+
+    public function test_completed_registrations_without_certificates_still_render(): void
+    {
+        $participant = $this->participant();
+
+        Registration::factory()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create()->getKey(),
+            'status' => RegistrationStatus::Completed,
+        ]);
+
+        $this->actingAs($participant)->get('/my/certificates')->assertOk();
+    }
+}

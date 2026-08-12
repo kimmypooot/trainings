@@ -1,0 +1,251 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Enums\Role;
+use App\Models\FieldOffice;
+use App\Models\Profile;
+use App\Models\User;
+use Database\Seeders\DemoSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia;
+use Tests\TestCase;
+
+class UserManagementTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function superAdmin(): User
+    {
+        return User::factory()->create([
+            'role' => Role::SuperAdmin,
+            'profile_completed_at' => now(),
+        ]);
+    }
+
+    public function test_only_superadmins_reach_the_page(): void
+    {
+        $participant = User::factory()->create(['profile_completed_at' => now()]);
+        Profile::factory()->for($participant)->create();
+
+        $this->actingAs($participant)->get('/admin/users')->assertForbidden();
+
+        foreach ([Role::FieldOffice, Role::Admin, Role::Management] as $role) {
+            $staff = User::factory()->create(['role' => $role, 'profile_completed_at' => now()]);
+            $this->actingAs($staff)->get('/admin/users')->assertForbidden();
+        }
+
+        $this->actingAs($this->superAdmin())->get('/admin/users')->assertOk();
+    }
+
+    public function test_the_list_shows_staff_only(): void
+    {
+        $participant = User::factory()->create(['profile_completed_at' => now()]);
+        Profile::factory()->for($participant)->create();
+        User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]);
+
+        $this->actingAs($this->superAdmin())
+            ->get('/admin/users')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Admin/Users/Index')
+                // The acting superadmin plus the admin — never the participant.
+                ->has('users.data', 2)
+            );
+    }
+
+    public function test_superadmin_can_create_a_staff_account(): void
+    {
+        $this->actingAs($this->superAdmin())
+            ->post('/admin/users', [
+                'name' => 'Jane Cruz',
+                'email' => 'jane@csc.gov.ph',
+                'role' => Role::Admin->value,
+                'password' => 'sikreto123',
+                'password_confirmation' => 'sikreto123',
+            ])
+            ->assertRedirect('/admin/users')
+            ->assertSessionHas('success');
+
+        $user = User::where('email', 'jane@csc.gov.ph')->first();
+
+        $this->assertSame(Role::Admin, $user->role);
+        $this->assertTrue($user->is_active);
+        $this->assertTrue(Hash::check('sikreto123', $user->password));
+        // Staff never fill in a participant profile, so the gate must not catch them.
+        $this->assertTrue($user->hasCompletedProfile());
+    }
+
+    public function test_a_field_office_account_must_be_assigned_an_office(): void
+    {
+        $this->actingAs($this->superAdmin())
+            ->from('/admin/users/create')
+            ->post('/admin/users', [
+                'name' => 'Office Staff',
+                'email' => 'office@csc.gov.ph',
+                'role' => Role::FieldOffice->value,
+                'password' => 'sikreto123',
+                'password_confirmation' => 'sikreto123',
+            ])
+            ->assertSessionHasErrors('field_office_id');
+    }
+
+    public function test_changing_away_from_field_office_clears_the_office(): void
+    {
+        $office = FieldOffice::where('code', 'lfoi')->first();
+        $user = User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => $office->id,
+            'profile_completed_at' => now(),
+        ]);
+
+        $this->actingAs($this->superAdmin())
+            ->put("/admin/users/{$user->id}", [
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => Role::Admin->value,
+                'is_active' => true,
+            ])
+            ->assertRedirect('/admin/users');
+
+        $user->refresh();
+
+        $this->assertSame(Role::Admin, $user->role);
+        $this->assertNull($user->field_office_id);
+    }
+
+    public function test_password_is_only_changed_when_supplied(): void
+    {
+        $user = User::factory()->create([
+            'role' => Role::Admin,
+            'password' => 'original123',
+            'profile_completed_at' => now(),
+        ]);
+        $original = $user->password;
+
+        $this->actingAs($this->superAdmin())->put("/admin/users/{$user->id}", [
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => Role::Admin->value,
+            'is_active' => true,
+        ]);
+
+        $this->assertSame($original, $user->fresh()->password);
+
+        $this->actingAs($this->superAdmin())->put("/admin/users/{$user->id}", [
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => Role::Admin->value,
+            'is_active' => true,
+            'password' => 'brandnew123',
+            'password_confirmation' => 'brandnew123',
+        ]);
+
+        $this->assertTrue(Hash::check('brandnew123', $user->fresh()->password));
+    }
+
+    public function test_a_superadmin_cannot_change_their_own_role_or_deactivate_themselves(): void
+    {
+        $me = $this->superAdmin();
+        User::factory()->create(['role' => Role::SuperAdmin, 'profile_completed_at' => now()]);
+
+        $this->actingAs($me)
+            ->from("/admin/users/{$me->id}/edit")
+            ->put("/admin/users/{$me->id}", [
+                'name' => $me->name,
+                'email' => $me->email,
+                'role' => Role::Admin->value,
+                'is_active' => true,
+            ])
+            ->assertSessionHasErrors('role');
+
+        $this->actingAs($me)
+            ->from('/admin/users')
+            ->post("/admin/users/{$me->id}/toggle")
+            ->assertSessionHasErrors('user');
+
+        $this->assertSame(Role::SuperAdmin, $me->fresh()->role);
+        $this->assertTrue($me->fresh()->is_active);
+    }
+
+    public function test_the_last_active_superadmin_cannot_be_demoted_or_deactivated(): void
+    {
+        $only = $this->superAdmin();
+        $other = User::factory()->create(['role' => Role::SuperAdmin, 'profile_completed_at' => now()]);
+
+        // Demoting the second one is fine while another remains…
+        $this->actingAs($only)->put("/admin/users/{$other->id}", [
+            'name' => $other->name,
+            'email' => $other->email,
+            'role' => Role::Admin->value,
+            'is_active' => true,
+        ])->assertRedirect('/admin/users');
+
+        // …but now `$only` is the last one, and an admin acting on them fails.
+        $actor = User::factory()->create(['role' => Role::SuperAdmin, 'profile_completed_at' => now()]);
+        $actor->update(['is_active' => false]);
+
+        $this->actingAs($only)
+            ->from('/admin/users')
+            ->post("/admin/users/{$only->id}/toggle")
+            ->assertSessionHasErrors('user');
+
+        $this->assertTrue($only->fresh()->is_active);
+    }
+
+    public function test_a_deactivated_account_cannot_sign_in(): void
+    {
+        User::factory()->create([
+            'email' => 'off@csc.gov.ph',
+            'password' => 'sikreto123',
+            'role' => Role::Admin,
+            'is_active' => false,
+            'profile_completed_at' => now(),
+        ]);
+
+        $this->from('/login')
+            ->post('/login', ['email' => 'off@csc.gov.ph', 'password' => 'sikreto123'])
+            ->assertRedirect('/login')
+            ->assertSessionHasErrors('form');
+
+        $this->assertGuest();
+    }
+
+    public function test_the_demo_seeder_assigns_roles_and_offices(): void
+    {
+        // Guards a real trap: role, field_office_id, and is_active are not
+        // mass-assignable, so a seeder using fill() silently creates
+        // participants instead of staff.
+        $this->seed(DemoSeeder::class);
+
+        $expected = [
+            'admin@csc.gov.ph' => Role::Admin,
+            'superadmin@csc.gov.ph' => Role::SuperAdmin,
+            'fieldoffice@csc.gov.ph' => Role::FieldOffice,
+            'management@csc.gov.ph' => Role::Management,
+        ];
+
+        foreach ($expected as $email => $role) {
+            $user = User::where('email', $email)->first();
+
+            $this->assertNotNull($user, "{$email} was not seeded.");
+            $this->assertSame($role, $user->role);
+            $this->assertTrue($user->is_active);
+        }
+
+        $this->assertNotNull(
+            User::where('email', 'fieldoffice@csc.gov.ph')->value('field_office_id'),
+            'The field office account must be scoped to an office.'
+        );
+    }
+
+    public function test_a_participant_account_cannot_be_edited_here(): void
+    {
+        $participant = User::factory()->create(['profile_completed_at' => now()]);
+        Profile::factory()->for($participant)->create();
+
+        $this->actingAs($this->superAdmin())
+            ->get("/admin/users/{$participant->id}/edit")
+            ->assertNotFound();
+    }
+}

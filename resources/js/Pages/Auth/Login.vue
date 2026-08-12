@@ -79,8 +79,8 @@ const submit = () => {
                     </h1>
 
                     <p class="mt-6 text-base leading-relaxed text-pretty text-white/75 xl:text-lg">
-                        Access training programs, nominations, and completion records for your agency —
-                        all from one secure account.
+                        Register for training programs, download your certificates, and pull up your event QR
+                        code — all from one secure account.
                     </p>
                 </div>
             </div>
@@ -101,7 +101,7 @@ const submit = () => {
                     Sign in to your account
                 </h2>
                 <p class="mt-2 text-sm text-csc-ink/70">
-                    Use the credentials issued by your agency's TIMS coordinator.
+                    Sign in to register for trainings and manage your records.
                 </p>
 
                 <p
@@ -166,7 +166,7 @@ const submit = () => {
                 <form class="space-y-5" novalidate @submit.prevent="submit">
                     <AppInput
                         v-model="form.email"
-                        label="Email address"
+                        label="Email Address"
                         type="email"
                         autocomplete="username"
                         placeholder="juan.dela.cruz@csc.gov.ph"
@@ -207,7 +207,7 @@ const submit = () => {
                                 type="checkbox"
                                 class="size-4 rounded border-csc-line text-csc-blue accent-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                             />
-                            Remember me
+                            Remember Me
                         </label>
 
                         <a
@@ -225,9 +225,9 @@ const submit = () => {
 
                 <p class="mt-8 text-center text-sm text-csc-ink/70">
                     No account yet?
-                    <a href="/#contact" class="font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink">
-                        Contact your TIMS coordinator
-                    </a>
+                    <Link href="/register" class="font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink">
+                        Create one
+                    </Link>
                 </p>
 
                 <p class="mt-6 border-t border-csc-line pt-6 text-center text-xs leading-relaxed text-csc-ink/60">

@@ -29,9 +29,9 @@ class GoogleController extends Controller
     /**
      * Handle the callback from Google.
      *
-     * Accounts are provisioned by CSC, so this only signs in users that already
-     * exist — it never creates one. A Google account whose email is unknown to
-     * TIMS is bounced back to the login screen with an explanation.
+     * Participants self-register, so an unrecognised Google account creates a
+     * TIMS account rather than being turned away. An existing account matched
+     * by email gets its Google identity linked on first use.
      */
     public function callback(): RedirectResponse
     {
@@ -45,25 +45,37 @@ class GoogleController extends Controller
             ]);
         }
 
-        $user = User::where('google_id', $googleUser->getId())
-            ->orWhere('email', $googleUser->getEmail())
-            ->first();
+        $user = User::firstOrNew([
+            'google_id' => $googleUser->getId(),
+        ]);
 
-        if (! $user) {
-            return redirect()->route('login')->withErrors([
-                'form' => 'No TIMS account is linked to '.$googleUser->getEmail().'. Ask your agency coordinator to have one provisioned.',
-            ]);
+        if (! $user->exists) {
+            $user = User::where('email', $googleUser->getEmail())->first() ?? new User;
         }
 
         $user->forceFill([
+            'name' => $user->name ?: ($googleUser->getName() ?: $googleUser->getNickname()),
+            'email' => $user->email ?: $googleUser->getEmail(),
             'google_id' => $googleUser->getId(),
             'google_avatar' => $googleUser->getAvatar(),
             'email_verified_at' => $user->email_verified_at ?? now(),
         ])->save();
 
+        if (! $user->is_active) {
+            return redirect()->route('login')->withErrors([
+                'form' => 'This account has been deactivated. Contact the CSC administrator.',
+            ]);
+        }
+
         Auth::login($user, remember: true);
         request()->session()->regenerate();
 
-        return redirect()->intended(route('home'));
+        // A Google sign-up never sees the registration form, so it lands on the
+        // same profile gate as an email sign-up.
+        if (! $user->hasCompletedProfile()) {
+            return redirect()->route('profile.complete');
+        }
+
+        return redirect()->intended(route('dashboard'));
     }
 }

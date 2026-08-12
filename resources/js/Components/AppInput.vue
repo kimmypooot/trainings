@@ -10,9 +10,22 @@ const props = defineProps({
     autocomplete: { type: String, default: null },
     placeholder: { type: String, default: null },
     required: { type: Boolean, default: false },
+    // Profile records are kept in uppercase; transforms as the user types.
+    uppercase: { type: Boolean, default: false },
 });
 
-defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue']);
+
+const onInput = (event) => {
+    const value = props.uppercase ? event.target.value.toUpperCase() : event.target.value;
+
+    // Keep the field in step when the transform changes what was typed.
+    if (event.target.value !== value) {
+        event.target.value = value;
+    }
+
+    emit('update:modelValue', value);
+};
 
 const uid = useId();
 const inputId = `field-${uid}`;
@@ -51,8 +64,9 @@ const describedBy = computed(() => {
                         ? 'border-csc-red-ink focus:outline-csc-red-ink'
                         : 'border-csc-line hover:border-csc-blue/40 focus:border-csc-blue focus:outline-csc-blue',
                     $slots.affix ? 'pr-12' : '',
+                    uppercase ? 'uppercase placeholder:normal-case' : '',
                 ]"
-                @input="$emit('update:modelValue', $event.target.value)"
+                @input="onInput"
             />
 
             <div v-if="$slots.affix" class="absolute inset-y-0 right-0 flex items-center pr-2">

@@ -52,11 +52,31 @@ class LoginController extends Controller
             ])->onlyInput('email');
         }
 
+        // A deactivated account must not get a session, even with the right
+        // password. Checked after the attempt so the message cannot be used to
+        // probe which addresses exist.
+        if (! $request->user()->is_active) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors([
+                'form' => 'This account has been deactivated. Contact the CSC administrator.',
+            ])->onlyInput('email');
+        }
+
         RateLimiter::clear($throttleKey);
         $request->session()->regenerate();
 
-        // TODO: route to the role-specific dashboard once those pages exist.
-        return redirect()->intended(route('home'));
+        if ($request->user()->role->isStaff()) {
+            return redirect()->intended(route('admin.dashboard'));
+        }
+
+        if (! $request->user()->hasCompletedProfile()) {
+            return redirect()->route('profile.complete');
+        }
+
+        return redirect()->intended(route('dashboard'));
     }
 
     /**
