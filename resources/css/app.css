@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /*
+     * CSC brand palette.
+     *
+     * Blue carries the layout, white carries the content, red is an accent —
+     * one or two red elements per viewport, never a large red fill.
+     *
+     * Contrast note: white on --color-csc-red is 4.40:1, which fails WCAG AA
+     * for normal-size text. Use --color-csc-red-ink whenever red sits behind
+     * white text or is itself rendered as body-size text (6.09:1). Reserve
+     * --color-csc-red for non-text accents: rules, underlines, dots, borders.
+     */
+    --color-csc-blue: #2a338f;
+    --color-csc-blue-deep: #1e2668;
+    --color-csc-blue-tint: #eef0f9;
+    --color-csc-red: #ec1c2d;
+    --color-csc-red-ink: #c4111f;
+    --color-csc-ink: #374151;
+    --color-csc-line: #e5e7eb;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
