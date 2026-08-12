@@ -301,12 +301,19 @@ class AttendanceTest extends TestCase
 
     public function test_field_office_staff_cannot_mark_another_offices_participant(): void
     {
-        [, , $registration] = $this->scenario();
+        [$participant, , $registration] = $this->scenario();
+
+        // Both offices are pinned rather than left to ProfileFactory, which
+        // picks one at random — the two could land on the same office and the
+        // test would pass for the wrong reason.
+        [$theirs, $mine] = FieldOffice::active()->take(2)->get()->all();
+
+        $participant->profile->update(['field_office_id' => $mine->getKey()]);
 
         $otherOfficeStaff = User::factory()->create([
             'role' => Role::FieldOffice,
             'profile_completed_at' => now(),
-            'field_office_id' => FieldOffice::first()->getKey(),
+            'field_office_id' => $theirs->getKey(),
         ]);
 
         $this->actingAs($otherOfficeStaff)

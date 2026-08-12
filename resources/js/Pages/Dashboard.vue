@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
@@ -15,8 +15,6 @@ const props = defineProps({
     profile: { type: Object, required: true },
 });
 
-const page = usePage();
-
 const greeting = computed(() => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -25,20 +23,33 @@ const greeting = computed(() => {
     return 'Good evening';
 });
 
-const firstName = computed(() => props.profile.first_name ?? page.props.auth?.user?.email ?? '');
+const firstName = computed(() => props.profile.first_name ?? '');
+
+// Greet by name when we have one; "Good morning," trailing a comma into nothing
+// reads worse than the greeting on its own.
+const greetingLine = computed(() =>
+    firstName.value ? `${greeting.value}, ${firstName.value}` : greeting.value
+);
 
 const statusLine = computed(() => {
-    const { registered, certificates } = props.summary;
+    const { pending, registered, certificates } = props.summary;
 
-    if (!registered && !certificates) {
+    // Pending counts as upcoming here because it counts as upcoming in the hero
+    // card — the backend treats a pending registration as the next training, so
+    // saying "nothing upcoming" above it would contradict the card.
+    const upcoming = pending + registered;
+
+    if (!upcoming && !certificates) {
         return 'You have no upcoming trainings yet. Browse the catalogue to get started.';
     }
 
     const parts = [];
-    if (registered) parts.push(`${registered} upcoming training${registered === 1 ? '' : 's'}`);
+    if (upcoming) parts.push(`${upcoming} upcoming training${upcoming === 1 ? '' : 's'}`);
     if (certificates) parts.push(`${certificates} certificate${certificates === 1 ? '' : 's'} ready`);
 
-    return `You have ${parts.join(' and ')}.`;
+    const sentence = `You have ${parts.join(' and ')}.`;
+
+    return pending ? `${sentence} ${pending} ${pending === 1 ? 'is' : 'are'} awaiting approval.` : sentence;
 });
 
 const quickActions = [
@@ -68,8 +79,10 @@ const quickActions = [
     },
 ];
 
+// Labelled "Approved" rather than "Registered": the count excludes pending
+// registrations, and the badge vocabulary elsewhere already says "Approved".
 const stats = computed(() => [
-    { label: 'Registered', value: props.summary.registered, href: '/my/registrations' },
+    { label: 'Approved', value: props.summary.registered, href: '/my/registrations' },
     { label: 'Completed', value: props.summary.completed, href: '/my/registrations' },
     { label: 'Certificates', value: props.summary.certificates, href: '/my/certificates' },
 ]);
@@ -83,13 +96,17 @@ const stats = computed(() => [
             <!-- 1. Greeting + state -->
             <div>
                 <h2 class="text-xl font-semibold tracking-tight text-csc-blue sm:text-2xl">
-                    {{ greeting }}, {{ firstName }}
+                    {{ greetingLine }}
                 </h2>
                 <p class="mt-1.5 text-sm leading-relaxed text-csc-ink/70">{{ statusLine }}</p>
             </div>
 
             <!-- 2. Action required — rendered only when something is genuinely pending -->
-            <AppAlert v-if="!profile.organization" tone="warning" title="Your profile is missing employment details">
+            <AppAlert
+                v-if="!profile.organization || !profile.position"
+                tone="warning"
+                title="Your profile is missing employment details"
+            >
                 Complete your profile so your certificates carry the correct agency and position.
                 <template #action>
                     <AppButton href="/profile" size="sm" variant="ghost">Review</AppButton>
@@ -171,7 +188,7 @@ const stats = computed(() => [
                 <AppEmptyState
                     v-else
                     title="Nothing here yet"
-                    description="Your registrations, completions, and certificate releases will be listed here."
+                    description="Your registrations will be listed here as they are approved and completed."
                     icon="M12 8v4l2.5 2.5M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z"
                 />
             </AppCard>

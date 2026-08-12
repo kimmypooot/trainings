@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
@@ -6,12 +7,22 @@ import AppButton from '@/Components/AppButton.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 
-defineProps({
+const props = defineProps({
     stats: { type: Object, required: true },
     scopedTo: { type: String, default: null },
     upcoming: { type: Array, required: true },
     awaitingCompletion: { type: Array, required: true },
 });
+
+// A count is the natural handle for the list behind it, so each tile links
+// where one exists. Registrations has no index page of its own yet, so that
+// tile stays a plain figure rather than a link that goes nowhere useful.
+const tiles = computed(() => [
+    { label: 'Published', value: props.stats.published, href: '/admin/trainings?status=published' },
+    { label: 'Drafts', value: props.stats.drafts, href: '/admin/trainings?status=draft' },
+    { label: 'Participants', value: props.stats.participants, href: '/admin/participants' },
+    { label: 'Registrations', value: props.stats.registrations, href: null },
+]);
 </script>
 
 <template>
@@ -24,22 +35,21 @@ defineProps({
             </AppAlert>
 
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <div class="rounded-xl border border-csc-line bg-white p-4 sm:p-5">
-                    <span class="block text-2xl font-bold text-csc-blue sm:text-3xl">{{ stats.published }}</span>
-                    <span class="mt-1 block text-xs font-medium text-csc-ink/60 sm:text-sm">Published</span>
-                </div>
-                <div class="rounded-xl border border-csc-line bg-white p-4 sm:p-5">
-                    <span class="block text-2xl font-bold text-csc-blue sm:text-3xl">{{ stats.drafts }}</span>
-                    <span class="mt-1 block text-xs font-medium text-csc-ink/60 sm:text-sm">Drafts</span>
-                </div>
-                <div class="rounded-xl border border-csc-line bg-white p-4 sm:p-5">
-                    <span class="block text-2xl font-bold text-csc-blue sm:text-3xl">{{ stats.participants }}</span>
-                    <span class="mt-1 block text-xs font-medium text-csc-ink/60 sm:text-sm">Participants</span>
-                </div>
-                <div class="rounded-xl border border-csc-line bg-white p-4 sm:p-5">
-                    <span class="block text-2xl font-bold text-csc-blue sm:text-3xl">{{ stats.registrations }}</span>
-                    <span class="mt-1 block text-xs font-medium text-csc-ink/60 sm:text-sm">Registrations</span>
-                </div>
+                <component
+                    :is="tile.href ? Link : 'div'"
+                    v-for="tile in tiles"
+                    :key="tile.label"
+                    :href="tile.href ?? undefined"
+                    class="rounded-xl border border-csc-line bg-white p-4 sm:p-5"
+                    :class="
+                        tile.href
+                            ? 'block transition-colors duration-150 hover:border-csc-blue/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue'
+                            : ''
+                    "
+                >
+                    <span class="block text-2xl font-bold text-csc-blue sm:text-3xl">{{ tile.value }}</span>
+                    <span class="mt-1 block text-xs font-medium text-csc-ink/60 sm:text-sm">{{ tile.label }}</span>
+                </component>
             </div>
 
             <AppCard title="Needs Attention" subtitle="Finished trainings with participants not yet marked complete">
@@ -56,9 +66,12 @@ defineProps({
                         <AppButton :href="item.roster_url" size="sm" variant="ghost">Open Roster</AppButton>
                     </li>
                 </ul>
-                <p v-else class="text-sm text-csc-ink/60">
-                    Nothing pending. All finished trainings are up to date.
-                </p>
+                <AppEmptyState
+                    v-else
+                    title="Nothing pending"
+                    description="Every finished training has had its participants marked complete."
+                    icon="M5 13l4 4L19 7"
+                />
             </AppCard>
 
             <AppCard title="Upcoming Trainings">
@@ -79,12 +92,15 @@ defineProps({
                             </p>
                         </div>
                         <div class="flex items-center gap-3">
+                            <!-- Colour alone would not carry this, so a
+                                 nearly-full session also says so in words. -->
                             <span
                                 class="text-xs font-semibold"
                                 :class="training.nearly_full ? 'text-warning' : 'text-csc-ink/60'"
                             >
                                 {{ training.registered
                                 }}<template v-if="training.capacity"> / {{ training.capacity }}</template>
+                                <template v-if="training.nearly_full"> · Nearly full</template>
                             </span>
                             <Link
                                 :href="training.roster_url"
