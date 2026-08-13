@@ -10,7 +10,9 @@ use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeControll
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\RequestQueueController as AdminRequestQueueController;
+use App\Http\Controllers\Admin\ScannerController;
 use App\Http\Controllers\Admin\TrainingController as AdminTrainingController;
+use App\Http\Controllers\Admin\UndoController as AdminUndoController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\LoginController;
@@ -18,6 +20,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\CertificateVerificationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
@@ -31,7 +34,7 @@ use App\Http\Middleware\EnsureUserIsStaff;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', fn () => Inertia::render('Home'))->name('home');
+Route::get('/', [HomeController::class, 'index'])->name('home');
 
 /*
  * Certificate verification is deliberately public and unauthenticated — the
@@ -80,6 +83,13 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             Route::post('/registrations/{registration}/complete', [AdminTrainingController::class, 'complete'])
                 ->name('registrations.complete');
 
+            // One decision applied to a roster selection.
+            Route::post('/trainings/{training}/registrations/bulk', [AdminTrainingController::class, 'bulk'])
+                ->name('registrations.bulk');
+
+            // Takes back the decision just made, within its window.
+            Route::post('/undo', AdminUndoController::class)->name('undo');
+
             // Issuing certificates is HRD's call, in bulk or one at a time.
             Route::post('/trainings/{training}/certificates', [AdminCertificateController::class, 'releaseTraining'])
                 ->name('certificates.release-training');
@@ -97,6 +107,19 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             ->name('attendance.store');
         Route::post('/registrations/{registration}/attendance/check-out', [AdminAttendanceController::class, 'checkOut'])
             ->name('attendance.check-out');
+
+        /*
+         * The venue scanning station, same reasoning as the two routes above:
+         * scanning is door work, so every staff role gets it, scoped by office.
+         *
+         * The roster download hands a whole training's participants to a device
+         * that will then work without a network, which is why it stays inside
+         * this authenticated group and is never reachable as a public page.
+         */
+        Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner');
+        Route::get('/scanner/trainings/{training}/roster', [ScannerController::class, 'roster'])
+            ->name('scanner.roster');
+        Route::post('/scanner/sync', [ScannerController::class, 'sync'])->name('scanner.sync');
 
         // Account administration is superadmin-only.
         Route::middleware(EnsureUserIsStaff::class.':superadmin')->group(function () {
@@ -225,4 +248,16 @@ Route::middleware(['auth', EnsureProfileIsComplete::class])->group(function () {
     // Where a scanned code lands; the controller restricts it to staff.
     Route::get('/scan/{token}', [QrCodeController::class, 'scan'])->name('scan');
     Route::post('/scan/{token}/check-in', [QrCodeController::class, 'checkIn'])->name('scan.check-in');
+});
+
+/*
+ * Everything unmatched is a branded 404 through the SPA shell, so a typo in the
+ * bar or a stale bookmark lands on the app's own error page instead of
+ * Laravel's stock grey one. Inertia::render answers 200, so the status is
+ * corrected on the way out — both for Inertia JSON and for full-page loads.
+ */
+Route::fallback(function () {
+    return Inertia::render('Error', ['status' => 404])
+        ->toResponse(request())
+        ->setStatusCode(404);
 });
