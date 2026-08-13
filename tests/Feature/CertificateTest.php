@@ -2,10 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
 use App\Enums\RegistrationStatus;
 use App\Enums\Role;
+use App\Jobs\ReleaseCertificates;
 use App\Models\Certificate;
 use App\Models\CertificateVerification;
+use App\Models\Payment;
 use App\Models\Profile;
 use App\Models\Registration;
 use App\Models\Training;
@@ -53,6 +57,124 @@ class CertificateTest extends TestCase
             'user_id' => $this->participant()->getKey(),
             'training_id' => Training::factory()->create()->getKey(),
         ]);
+    }
+
+    /** A completed registration on a paid training, settled however you like. */
+    private function paidRegistration(PaymentMethod $method, PaymentStatus $status = PaymentStatus::Verified): Registration
+    {
+        $participant = $this->participant();
+
+        $registration = Registration::factory()->completed()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create([
+                'payment_required' => true,
+                'payment_amount' => 1500,
+            ])->getKey(),
+        ]);
+
+        Payment::factory()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $participant->getKey(),
+            'training_id' => $registration->training_id,
+            'payment_method' => $method,
+            'status' => $status,
+            'verified_at' => $status === PaymentStatus::Verified ? now() : null,
+        ]);
+
+        return $registration->refresh();
+    }
+
+    // --- The fee must have actually arrived ------------------------------
+
+    /**
+     * The certificate is the office's last leverage over an unpaid fee.
+     *
+     * A promissory note is enough to attend — see MeetingLinkTest — but not
+     * enough to walk away with the document that proves it.
+     */
+    public function test_a_certificate_is_withheld_while_the_fee_rests_on_a_promissory_note(): void
+    {
+        $registration = $this->paidRegistration(PaymentMethod::Promissory);
+
+        $this->expectException(ValidationException::class);
+
+        CertificateService::release($registration, $this->staff());
+    }
+
+    public function test_settling_the_note_in_cash_releases_the_certificate(): void
+    {
+        $registration = $this->paidRegistration(PaymentMethod::Promissory);
+
+        // The participant comes back and pays; the note is not deleted, it is
+        // simply no longer the only thing on file.
+        Payment::factory()->verified()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $registration->user_id,
+            'training_id' => $registration->training_id,
+            'payment_method' => PaymentMethod::Cash,
+        ]);
+
+        $certificate = CertificateService::release($registration->refresh(), $this->staff());
+
+        $this->assertNotNull($certificate->generated_at);
+    }
+
+    public function test_a_verified_payment_releases_the_certificate(): void
+    {
+        $registration = $this->paidRegistration(PaymentMethod::Online);
+
+        $certificate = CertificateService::release($registration, $this->staff());
+
+        $this->assertNotNull($certificate->generated_at);
+    }
+
+    public function test_a_payment_still_awaiting_verification_withholds_the_certificate(): void
+    {
+        $registration = $this->paidRegistration(PaymentMethod::Online, PaymentStatus::Pending);
+
+        $this->expectException(ValidationException::class);
+
+        CertificateService::release($registration, $this->staff());
+    }
+
+    /**
+     * The bulk run skips the unpaid rather than failing on them.
+     *
+     * An outstanding fee is an ordinary state, not an error, and the count in
+     * the flash message has to reflect what will actually be issued.
+     */
+    public function test_a_bulk_release_issues_to_the_paid_and_holds_the_rest(): void
+    {
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+        ]);
+
+        foreach ([PaymentMethod::Cash, PaymentMethod::Promissory] as $method) {
+            $participant = $this->participant();
+
+            $registration = Registration::factory()->completed()->create([
+                'user_id' => $participant->getKey(),
+                'training_id' => $training->getKey(),
+            ]);
+
+            Payment::factory()->verified()->create([
+                'registration_id' => $registration->getKey(),
+                'user_id' => $participant->getKey(),
+                'training_id' => $training->getKey(),
+                'payment_method' => $method,
+            ]);
+        }
+
+        $this->actingAs($this->staff())
+            ->from("/admin/trainings/{$training->id}/roster")
+            ->post("/admin/trainings/{$training->id}/certificates")
+            ->assertSessionHas('success');
+
+        (new ReleaseCertificates($training, $this->staff()))->handle();
+
+        // Exactly the one who paid in cash.
+        $this->assertSame(1, Certificate::whereNotNull('generated_at')->count());
     }
 
     public function test_releasing_a_certificate_writes_a_pdf_and_a_record(): void

@@ -22,8 +22,13 @@ class AttendanceService
 {
     /**
      * How late someone may arrive before a scan records Late rather than Present.
+     *
+     * Public because the offline scanner has to apply the same rule on the
+     * device, hours before its scans reach this class — see ScannerController.
+     * Both sides must read the number from here or a queued scan would show one
+     * status at the door and land as another on the server.
      */
-    private const LATE_AFTER_MINUTES = 30;
+    public const LATE_AFTER_MINUTES = 30;
 
     /**
      * Check a participant in from a scan.

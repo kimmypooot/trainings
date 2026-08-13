@@ -86,6 +86,41 @@ class PaymentTest extends TestCase
         Storage::disk('local')->assertExists($payment->proof_path);
     }
 
+    /**
+     * A promissory note is only on the table where the training offered one.
+     *
+     * Without this, the method is a way to claim a slot on a training the
+     * office had decided must be paid up front.
+     */
+    public function test_a_promissory_note_is_refused_where_the_training_does_not_accept_one(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $registration->training->forceFill(['accepts_promissory' => false])->save();
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Promissory->value,
+                'payment_date' => now()->toDateString(),
+            ])
+            ->assertSessionHasErrors('payment_method');
+
+        $registration->training->forceFill(['accepts_promissory' => true])->save();
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                // No reference number: a note is its own document.
+                'payment_method' => PaymentMethod::Promissory->value,
+                'payment_date' => now()->toDateString(),
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(PaymentMethod::Promissory, Payment::sole()->payment_method);
+    }
+
     public function test_a_non_cash_payment_must_carry_a_reference_number(): void
     {
         $participant = $this->participant();

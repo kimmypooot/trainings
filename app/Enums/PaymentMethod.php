@@ -11,6 +11,15 @@ enum PaymentMethod: string
     case Check = 'check';
     case Online = 'online';
     case CreditCard = 'credit_card';
+    /*
+     * Not a payment at all, but it travels the same road: the participant
+     * records it, the collecting officer verifies it, and it is what the
+     * office holds while the money is outstanding. Modelling it as a method
+     * rather than a flag on the registration means it shows up in the payment
+     * queue, the exports and the audit trail without any of them learning a
+     * second concept.
+     */
+    case Promissory = 'promissory';
 
     public function label(): string
     {
@@ -19,7 +28,19 @@ enum PaymentMethod: string
             self::Check => 'Check',
             self::Online => 'Online Transfer',
             self::CreditCard => 'Credit Card',
+            self::Promissory => 'Promissory Note',
         };
+    }
+
+    /**
+     * Whether this settles what is owed, as opposed to merely promising to.
+     *
+     * The distinction is what lets a promissory note open the training room
+     * door while still holding back the certificate.
+     */
+    public function isSettlement(): bool
+    {
+        return $this !== self::Promissory;
     }
 
     /**
@@ -30,7 +51,7 @@ enum PaymentMethod: string
      */
     public function requiresReference(): bool
     {
-        return $this !== self::Cash;
+        return ! in_array($this, [self::Cash, self::Promissory], true);
     }
 
     /**

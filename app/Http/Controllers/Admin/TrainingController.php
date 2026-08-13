@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\RegistrationStatus;
+use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Registration;
 use App\Models\Training;
 use App\Support\RegistrationService;
+use App\Support\UndoService;
 use DateTimeImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -79,6 +81,7 @@ class TrainingController extends Controller
                 TrainingStatus::cases()
             ),
             'modes' => TrainingMode::options(),
+            'levels' => TrainingLevel::options(),
         ];
     }
 
@@ -106,7 +109,10 @@ class TrainingController extends Controller
                 'training_code' => $training->training_code,
                 'description' => $training->description,
                 'category' => $training->category,
+                'level' => $training->level?->value,
                 'venue' => $training->venue,
+                'venue_details' => $training->venue_details,
+                'meeting_link' => $training->meeting_link,
                 'mode' => $training->mode->value,
                 'starts_at' => $training->starts_at->format('Y-m-d\TH:i'),
                 'ends_at' => $training->ends_at->format('Y-m-d\TH:i'),
@@ -121,6 +127,8 @@ class TrainingController extends Controller
                 'target_participants' => $training->target_participants,
                 'payment_required' => $training->payment_required,
                 'payment_amount' => $training->payment_amount,
+                'accepts_promissory' => $training->accepts_promissory,
+                'is_supervisory' => $training->is_supervisory,
                 'status' => $training->status->value,
             ],
             ...$this->formOptions(),
@@ -143,7 +151,7 @@ class TrainingController extends Controller
     {
         $officeId = $request->user()->scopedFieldOfficeId();
 
-        $registrations = Registration::with(['user.profile.fieldOffice', 'attendances', 'certificate'])
+        $registrations = Registration::with(['user.profile.fieldOffice', 'attendances', 'certificate', 'payments'])
             ->where('training_id', $training->getKey())
             // Field-office staff see only their own office's participants on
             // the roster; the training itself stays visible to everyone.
@@ -153,6 +161,10 @@ class TrainingController extends Controller
             ))
             ->orderBy('registered_at')
             ->get();
+
+        // Every row belongs to the training already in hand, so handing it over
+        // saves the attendance and fee predicates a query each per participant.
+        $registrations->each(fn (Registration $registration) => $registration->setRelation('training', $training));
 
         return Inertia::render('Admin/Trainings/Roster', [
             'training' => [
@@ -195,10 +207,13 @@ class TrainingController extends Controller
                     ])->all(),
                 'credited_days' => $registration->creditedDays(),
                 'can_complete' => $registration->status === RegistrationStatus::Approved
-                    && $registration->setRelation('training', $training)->hasSufficientAttendance(),
+                    && $registration->hasSufficientAttendance(),
                 'certificate_number' => $registration->certificate?->isReleased()
                     ? $registration->certificate->certificate_number
                     : null,
+                // Drives the "fee outstanding" note where a promissory note is
+                // still standing in for the money.
+                'fee_cleared' => $registration->hasClearedFee(),
             ])->all(),
             'summary' => [
                 'active' => $registrations->filter(fn (Registration $r) => $r->status->occupiesSlot())->count(),
@@ -233,12 +248,13 @@ class TrainingController extends Controller
 
         $decision = RegistrationStatus::from($validated['decision']);
 
+        $snapshot = UndoService::capture(collect([$registration]));
+
         RegistrationService::review($registration, $decision, $request->user(), $validated['remarks'] ?? null);
 
-        return back()->with(
-            'success',
-            "{$registration->user->name} — {$decision->label()}."
-        );
+        return back()
+            ->with('success', "{$registration->user->name} — {$decision->label()}.")
+            ->with('undo', $this->undoOffer($request, 'Decision taken back.', $snapshot));
     }
 
     /**
@@ -282,15 +298,133 @@ class TrainingController extends Controller
             ]);
         }
 
+        $snapshot = UndoService::capture(collect([$registration]));
+
+        $this->markCompleted($registration, $forced ? $validated['remarks'] : null);
+
+        return back()
+            ->with('success', "{$registration->user->name} marked as completed.")
+            ->with('undo', $this->undoOffer($request, 'Completion undone.', $snapshot));
+    }
+
+    /**
+     * Apply one decision to a selection from the roster.
+     *
+     * Bulk deliberately does less than the per-row actions: it never forces a
+     * completion past a short attendance record. An override has to carry a
+     * reason for that specific person to stay auditable, and a single reason
+     * smeared across forty people is not one. Anything ineligible is skipped
+     * and reported rather than silently dropped.
+     */
+    public function bulk(Request $request, Training $training): RedirectResponse
+    {
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['approved', 'waitlisted', 'rejected', 'completed'])],
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ($validated['action'] === 'rejected' && blank($validated['remarks'] ?? null)) {
+            return back()->withErrors(['remarks' => 'Give a reason when rejecting registrations.']);
+        }
+
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        /*
+         * Re-resolved from the training and the office scope rather than taken
+         * on trust: a selection posted from the page must not become a way to
+         * act on a registration the staff member cannot even see.
+         */
+        $registrations = Registration::with(['user', 'training', 'attendances'])
+            ->where('training_id', $training->getKey())
+            ->whereIn('id', $validated['ids'])
+            ->when($officeId !== null, fn ($query) => $query->whereHas(
+                'user.profile',
+                fn ($profile) => $profile->where('field_office_id', $officeId)
+            ))
+            ->get();
+
+        $skipped = 0;
+        // Snapshots are taken per row, immediately before it changes, so an
+        // undo restores exactly what this action touched and nothing it skipped.
+        $snapshot = [];
+
+        if ($validated['action'] === 'completed') {
+            foreach ($registrations as $registration) {
+                if ($registration->status !== RegistrationStatus::Approved
+                    || ! $registration->hasSufficientAttendance()) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $snapshot = [...$snapshot, ...UndoService::capture(collect([$registration]))];
+                $this->markCompleted($registration);
+            }
+
+            return back()
+                ->with('success', $this->bulkMessage(
+                    count($snapshot).' participant(s) marked as completed.',
+                    $skipped,
+                    'not approved, or short on attendance — complete those individually'
+                ))
+                ->with('undo', $this->undoOffer($request, 'Completions undone.', $snapshot));
+        }
+
+        $decision = RegistrationStatus::from($validated['action']);
+
+        foreach ($registrations as $registration) {
+            if ($registration->status !== RegistrationStatus::Pending) {
+                $skipped++;
+
+                continue;
+            }
+
+            $snapshot = [...$snapshot, ...UndoService::capture(collect([$registration]))];
+            RegistrationService::review($registration, $decision, $request->user(), $validated['remarks'] ?? null);
+        }
+
+        return back()
+            ->with('success', $this->bulkMessage(
+                count($snapshot)." registration(s) — {$decision->label()}.",
+                $skipped,
+                'no longer pending'
+            ))
+            ->with('undo', $this->undoOffer($request, 'Decisions taken back.', $snapshot));
+    }
+
+    /**
+     * Build the flash payload the toast turns into an Undo button.
+     *
+     * @return array{token: string, label: string, seconds: int}|null
+     */
+    private function undoOffer(Request $request, string $label, array $snapshot): ?array
+    {
+        $token = UndoService::offer($request->user(), $label, $snapshot);
+
+        return $token === null ? null : [
+            'token' => $token,
+            'label' => $label,
+            'seconds' => UndoService::WINDOW_SECONDS,
+        ];
+    }
+
+    /** Compose the outcome so a partial result never reads as a full one. */
+    private function bulkMessage(string $summary, int $skipped, string $reason): string
+    {
+        return $skipped === 0 ? $summary : "{$summary} {$skipped} skipped ({$reason}).";
+    }
+
+    private function markCompleted(Registration $registration, ?string $remarks = null): void
+    {
         $registration->forceFill([
             'status' => RegistrationStatus::Completed,
             // Falls back to the training's start only when completion was
             // forced; otherwise attendance has already set this.
             'attended_at' => $registration->attended_at ?? $registration->training->starts_at,
-            'review_remarks' => $forced ? $validated['remarks'] : $registration->review_remarks,
+            'review_remarks' => $remarks ?? $registration->review_remarks,
         ])->save();
-
-        return back()->with('success', "{$registration->user->name} marked as completed.");
     }
 
     /**
@@ -306,7 +440,21 @@ class TrainingController extends Controller
             ],
             'description' => ['nullable', 'string', 'max:5000'],
             'category' => ['nullable', 'string', 'max:100'],
+            'level' => ['nullable', Rule::enum(TrainingLevel::class)],
             'venue' => ['required', 'string', 'max:255'],
+            'venue_details' => ['nullable', 'string', 'max:2000'],
+            /*
+             * v1 demanded a link for online and hybrid runs and this keeps that
+             * rule, but as a URL rather than v1's free text: the link is
+             * rendered as an anchor for participants, and "check your email"
+             * typed into an href is worse than an empty field.
+             */
+            'meeting_link' => [
+                'nullable', 'url', 'max:512',
+                Rule::requiredIf(fn () => (
+                    TrainingMode::tryFrom($request->string('mode')->toString()) ?? $training?->mode
+                )?->requiresMeetingLink() ?? false),
+            ],
             // Both default rather than being required: face-to-face is the norm,
             // and a duration left blank is derived from the dates below. Making
             // them mandatory would block HRD on fields they rarely change.
@@ -330,6 +478,12 @@ class TrainingController extends Controller
             'payment_amount' => [
                 'nullable', 'required_if:payment_required,true', 'numeric', 'min:0', 'max:1000000',
             ],
+            // Whether the collecting officer will hold a slot against a
+            // promissory note. Only consulted on a paid training.
+            'accepts_promissory' => ['boolean'],
+            // An SDC obliges the participant to submit an output before the
+            // certificate is defensible.
+            'is_supervisory' => ['boolean'],
             'status' => ['required', Rule::enum(TrainingStatus::class)],
         ]);
 
@@ -353,6 +507,12 @@ class TrainingController extends Controller
         $ends = new DateTimeImmutable($data['ends_at']);
 
         $data['mode'] ??= $training?->mode->value ?? TrainingMode::FaceToFace->value;
+
+        // A run switched back to face-to-face drops its link rather than
+        // keeping a dead join URL that the training page would still render.
+        if (! TrainingMode::from($data['mode'])->requiresMeetingLink()) {
+            $data['meeting_link'] = null;
+        }
 
         // Inclusive of both endpoints: a one-day training spans one day.
         $data['duration_days'] ??= $starts->setTime(0, 0)->diff($ends->setTime(0, 0))->days + 1;

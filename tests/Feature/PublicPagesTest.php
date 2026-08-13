@@ -15,7 +15,22 @@ class PublicPagesTest extends TestCase
     {
         $this->get('/')
             ->assertOk()
-            ->assertInertia(fn (AssertableInertia $page) => $page->component('Home'));
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Home')
+                ->has('stats.0.figure')
+                ->has('stats.0.label')
+                ->where('stats.3.label', 'Regional offices')
+            );
+    }
+
+    public function test_an_unknown_route_renders_the_branded_404(): void
+    {
+        $this->get('/no-such-page')
+            ->assertNotFound()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Error')
+                ->where('status', 404)
+            );
     }
 
     public function test_login_page_renders_with_google_flag(): void

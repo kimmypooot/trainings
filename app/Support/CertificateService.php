@@ -34,11 +34,27 @@ class CertificateService
      */
     public static function release(Registration $registration, User $releasedBy): Certificate
     {
-        $registration->loadMissing(['user', 'training']);
+        $registration->loadMissing(['user', 'training', 'payments']);
 
         if ($registration->status !== RegistrationStatus::Completed) {
             throw ValidationException::withMessages([
                 'certificate' => 'Only a completed registration can be issued a certificate.',
+            ]);
+        }
+
+        /*
+         * A promissory note buys a seat, not a certificate. The office lets the
+         * participant attend on the strength of the note, but the document that
+         * proves they attended is withheld until the fee is actually settled —
+         * it is the only leverage left once the training is over, and a
+         * certificate cannot be recalled after it has been handed out.
+         */
+        if (! $registration->hasClearedFee()) {
+            throw ValidationException::withMessages([
+                'certificate' => sprintf(
+                    '%s attended on a promissory note. The certificate is held until the fee is paid and verified.',
+                    $registration->user->name
+                ),
             ]);
         }
 

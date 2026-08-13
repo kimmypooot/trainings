@@ -5,8 +5,9 @@ namespace App\Enums;
 /**
  * How a training is delivered. Ported from v1's `trainings.mode`.
  *
- * Venue stays required for every mode — for online runs it holds the platform
- * or meeting link, which is what participants actually need at the door.
+ * Venue stays required for every mode — an online run still names its platform
+ * ("Zoom", "Google Meet") there. The join link itself lives in `meeting_link`,
+ * which the modes below decide is mandatory.
  */
 enum TrainingMode: string
 {
@@ -27,6 +28,17 @@ enum TrainingMode: string
     public function isOnSite(): bool
     {
         return $this !== self::Online;
+    }
+
+    /**
+     * Modes where somebody attends remotely and so needs a link to join.
+     *
+     * Hybrid counts: half the room is dialling in, and a hybrid run published
+     * without a link is broken for exactly the people who cannot travel.
+     */
+    public function requiresMeetingLink(): bool
+    {
+        return $this !== self::FaceToFace;
     }
 
     /**

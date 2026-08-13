@@ -40,6 +40,9 @@ class TrainingController extends Controller
                 'meta' => [
                     'current_page' => $trainings->currentPage(),
                     'last_page' => $trainings->lastPage(),
+                    'per_page' => $trainings->perPage(),
+                    'from' => $trainings->firstItem(),
+                    'to' => $trainings->lastItem(),
                     'total' => $trainings->total(),
                 ],
             ],
@@ -53,13 +56,22 @@ class TrainingController extends Controller
     {
         abort_unless($training->status->isOpenToParticipants(), 404);
 
-        $registration = Registration::where('user_id', $request->user()->getKey())
+        $registration = Registration::with('payments')
+            ->where('user_id', $request->user()->getKey())
             ->where('training_id', $training->getKey())
             ->first();
 
         $training->loadCount([
             'registrations as active_registrations_count' => fn ($query) => $query->whereIn('status', RegistrationStatus::occupying()),
         ]);
+
+        /*
+         * The join link is withheld on the server rather than sent and hidden
+         * in the page: an Inertia payload is plain JSON in the response body,
+         * so anything shipped here is readable whatever the template does with
+         * it. Only the two booleans below cross the wire when the link does not.
+         */
+        $mayJoin = (bool) $registration?->setRelation('training', $training)->mayViewMeetingLink();
 
         return Inertia::render('Trainings/Show', [
             'training' => [
@@ -73,11 +85,22 @@ class TrainingController extends Controller
                 'objectives' => $training->objectives,
                 'prerequisites' => $training->prerequisites,
                 'target_participants' => $training->target_participants,
+                'level_label' => $training->level?->label(),
+                'venue_details' => $training->venue_details,
+                'is_supervisory' => $training->is_supervisory,
+                'accepts_promissory' => $training->payment_required && $training->accepts_promissory,
+                'meeting_link' => $mayJoin ? $training->meeting_link : null,
+                // Drives the "why can't I see it yet" line, so the page can say
+                // a link exists without disclosing it.
+                'has_meeting_link' => filled($training->meeting_link),
             ],
             'registration' => $registration ? [
                 'id' => $registration->id,
                 'status' => $registration->status->value,
                 'registered_at' => $registration->registered_at->format('d M Y'),
+                // Lets the page name the one thing still standing between the
+                // participant and the link, rather than a blanket "not yet".
+                'fee_settled' => $registration->hasSettledFee(),
             ] : null,
         ]);
     }

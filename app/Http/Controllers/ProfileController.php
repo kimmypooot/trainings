@@ -39,6 +39,7 @@ class ProfileController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'role_label' => $user->role->label(),
+                'is_verified' => $user->email_verified_at !== null,
             ],
             'profile' => $user->profile ? [
                 ...$user->profile->only([

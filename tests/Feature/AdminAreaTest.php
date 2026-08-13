@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Enums\Role;
+use App\Enums\TrainingLevel;
+use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Profile;
 use App\Models\Training;
 use App\Models\User;
@@ -53,6 +56,47 @@ class AdminAreaTest extends TestCase
             );
     }
 
+    public function test_dashboard_modal_lists_are_withheld_until_asked_for(): void
+    {
+        $this->actingAs($this->staff())
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Admin/Dashboard')
+                ->missing('registrationsList')
+                ->missing('awaitingCompletionList')
+            );
+    }
+
+    public function test_dashboard_modal_lists_arrive_on_a_partial_reload(): void
+    {
+        $participant = $this->participant();
+        $training = Training::factory()->create(['status' => TrainingStatus::Published]);
+        app(RegistrationService::class)->register($participant, $training);
+
+        $this->actingAs($this->staff());
+
+        // A partial visit carrying the wrong asset version gets a 409, so ask
+        // the middleware for the same value the real client would be holding.
+        $version = app(HandleInertiaRequests::class)->version(request());
+
+        // A partial visit answers with JSON rather than the root view, which
+        // assertInertia cannot read — so assert on the payload directly.
+        $response = $this->get('/admin', [
+            'X-Inertia' => true,
+            'X-Inertia-Version' => $version,
+            'X-Inertia-Partial-Component' => 'Admin/Dashboard',
+            'X-Inertia-Partial-Data' => 'registrationsList',
+        ])->assertOk();
+
+        $response->assertJsonCount(1, 'props.registrationsList');
+        $response->assertJsonPath('props.registrationsList.0.participant', $participant->name);
+        $response->assertJsonPath('props.registrationsList.0.training', $training->title);
+
+        // Only what was asked for comes back — the other dialog stays unqueried.
+        $response->assertJsonMissingPath('props.awaitingCompletionList');
+    }
+
     public function test_staff_are_not_held_by_the_participant_profile_gate(): void
     {
         $staff = User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => null]);
@@ -93,6 +137,98 @@ class AdminAreaTest extends TestCase
         $this->assertSame('Records Management Seminar', $training->title);
         $this->assertSame('records-management-seminar', $training->slug);
         $this->assertSame(30, $training->capacity);
+    }
+
+    /**
+     * The fields carried over from v1's create form all survive the round trip.
+     *
+     * Grouped into one test because the risk here is a field being dropped from
+     * the fillable list or the validated payload, which shows up identically
+     * for every one of them.
+     */
+    public function test_creating_a_training_stores_the_v1_fields(): void
+    {
+        $this->actingAs($this->staff())
+            ->post('/admin/trainings', [
+                'title' => 'Supervisory Development Course',
+                'venue' => 'Zoom',
+                'venue_details' => 'Link is re-sent an hour before each session.',
+                'meeting_link' => 'https://meet.google.com/abc-defg-hij',
+                'mode' => TrainingMode::Hybrid->value,
+                'level' => TrainingLevel::Intermediate->value,
+                'starts_at' => now()->addWeek()->format('Y-m-d\TH:i'),
+                'ends_at' => now()->addWeek()->addHours(8)->format('Y-m-d\TH:i'),
+                'capacity' => 25,
+                'payment_required' => true,
+                'payment_amount' => 1500,
+                'accepts_promissory' => false,
+                'is_supervisory' => true,
+                'status' => TrainingStatus::Published->value,
+            ])
+            ->assertRedirect('/admin/trainings');
+
+        $training = Training::first();
+
+        $this->assertSame(TrainingLevel::Intermediate, $training->level);
+        $this->assertSame('https://meet.google.com/abc-defg-hij', $training->meeting_link);
+        $this->assertSame('Link is re-sent an hour before each session.', $training->venue_details);
+        $this->assertFalse($training->accepts_promissory);
+        $this->assertTrue($training->is_supervisory);
+    }
+
+    public function test_online_and_hybrid_trainings_require_a_meeting_link(): void
+    {
+        foreach ([TrainingMode::Online, TrainingMode::Hybrid] as $mode) {
+            $this->actingAs($this->staff())
+                ->from('/admin/trainings/create')
+                ->post('/admin/trainings', [
+                    'title' => "Remote Run {$mode->value}",
+                    'venue' => 'Zoom',
+                    'mode' => $mode->value,
+                    'starts_at' => now()->addWeek()->format('Y-m-d\TH:i'),
+                    'ends_at' => now()->addWeek()->addHours(8)->format('Y-m-d\TH:i'),
+                    'status' => TrainingStatus::Draft->value,
+                ])
+                ->assertSessionHasErrors('meeting_link');
+        }
+
+        // Face-to-face has nobody dialling in, so the field stays optional.
+        $this->actingAs($this->staff())
+            ->post('/admin/trainings', [
+                'title' => 'In Person Run',
+                'venue' => 'CSC Regional Office',
+                // Blank rather than absent: the select posts an empty string
+                // when HRD has not decided on a level.
+                'level' => '',
+                'mode' => TrainingMode::FaceToFace->value,
+                'starts_at' => now()->addWeek()->format('Y-m-d\TH:i'),
+                'ends_at' => now()->addWeek()->addHours(8)->format('Y-m-d\TH:i'),
+                'status' => TrainingStatus::Draft->value,
+            ])
+            ->assertSessionHasNoErrors();
+    }
+
+    /** A link left behind by a mode change would be published as live. */
+    public function test_switching_back_to_face_to_face_clears_the_meeting_link(): void
+    {
+        $training = Training::factory()->create([
+            'mode' => TrainingMode::Online,
+            'meeting_link' => 'https://meet.google.com/abc-defg-hij',
+        ]);
+
+        $this->actingAs($this->staff())
+            ->put("/admin/trainings/{$training->id}", [
+                'title' => $training->title,
+                'venue' => 'CSC Regional Office',
+                'mode' => TrainingMode::FaceToFace->value,
+                'meeting_link' => 'https://meet.google.com/abc-defg-hij',
+                'starts_at' => $training->starts_at->format('Y-m-d\TH:i'),
+                'ends_at' => $training->ends_at->format('Y-m-d\TH:i'),
+                'status' => TrainingStatus::Published->value,
+            ])
+            ->assertRedirect('/admin/trainings');
+
+        $this->assertNull($training->refresh()->meeting_link);
     }
 
     public function test_training_validation_rejects_an_end_before_the_start(): void

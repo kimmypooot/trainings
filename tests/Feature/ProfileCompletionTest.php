@@ -6,6 +6,7 @@ use App\Models\FieldOffice;
 use App\Models\User;
 use App\Support\ProfileOptions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -53,6 +54,10 @@ class ProfileCompletionTest extends TestCase
             'password_confirmation' => 'sikreto123',
             'consent' => true,
         ])->assertRedirect('/profile/complete');
+
+        // Registration counts as verification — there is no separate email
+        // verification step in this system, and the badge depends on it.
+        $this->assertNotNull(DB::table('users')->where('email', 'juan@example.com')->value('email_verified_at'));
     }
 
     public function test_profile_form_renders_with_its_option_lists(): void

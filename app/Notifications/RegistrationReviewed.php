@@ -13,7 +13,36 @@ use App\Models\Registration;
  */
 class RegistrationReviewed extends ParticipantNotification
 {
-    public function __construct(private readonly Registration $registration) {}
+    private readonly RegistrationStatus $decision;
+
+    public function __construct(private readonly Registration $registration)
+    {
+        // Remembered at construction so the queued job can tell whether it is
+        // still delivering the decision it was created for.
+        $this->decision = $registration->status;
+    }
+
+    /**
+     * Withheld when the decision no longer stands.
+     *
+     * Delivery is delayed by the undo window, so a staff member who takes a
+     * decision back within it leaves nothing for the participant to read. By
+     * the time this runs the registration may have moved on for any reason —
+     * undone, re-decided, or cancelled — and in every one of those cases the
+     * message in hand is about a decision that is no longer true.
+     *
+     * @return array<int, string>
+     */
+    public function via(object $notifiable): array
+    {
+        $current = $this->registration->fresh();
+
+        if (! $current || $current->status !== $this->decision) {
+            return [];
+        }
+
+        return parent::via($notifiable);
+    }
 
     public function title(object $notifiable): string
     {
@@ -34,9 +63,10 @@ class RegistrationReviewed extends ParticipantNotification
 
         $body = match ($this->registration->status) {
             RegistrationStatus::Approved => sprintf(
-                'Your slot is confirmed for %s at %s. Bring your QR code — it is how we take attendance at the door.',
+                'Your slot is confirmed for %s at %s. Bring your QR code — it is how we take attendance at the door.%s',
                 $training->starts_at->format('d M Y, g:i A'),
-                $training->venue
+                $training->venue,
+                $this->joinLine()
             ),
             RegistrationStatus::Waitlisted => 'You will be moved up automatically if a slot frees up before the training starts.',
             RegistrationStatus::Rejected => 'Your registration was not approved on this occasion.',
@@ -50,5 +80,26 @@ class RegistrationReviewed extends ParticipantNotification
     public function url(object $notifiable): string
     {
         return route('registrations.index');
+    }
+
+    /**
+     * The join link, when approval is what unlocked it.
+     *
+     * Approval and payment verification are the two gates, and either can be
+     * the last one cleared — so both notifications carry the link and both ask
+     * the same question. On a paid training this stays empty until the money
+     * has been verified, which is the whole point of the rule.
+     */
+    private function joinLine(): string
+    {
+        $registration = $this->registration->fresh(['training', 'payments']);
+
+        if ($registration === null || ! $registration->mayViewMeetingLink()) {
+            return '';
+        }
+
+        $link = $registration->training->meeting_link;
+
+        return blank($link) ? '' : " Your join link for this training: {$link}";
     }
 }

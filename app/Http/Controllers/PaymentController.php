@@ -59,6 +59,10 @@ class PaymentController extends Controller
                 'registration_id' => $registration->id,
                 'training' => $registration->training->title,
                 'amount' => $registration->training->payment_amount,
+                // Whether a promissory note is on offer is set per training, so
+                // the method list has to be narrowed per row rather than once
+                // for the page.
+                'accepts_promissory' => $registration->training->accepts_promissory,
             ])->all(),
             'methods' => PaymentMethod::options(),
         ]);
@@ -74,7 +78,16 @@ class PaymentController extends Controller
 
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
-            'payment_method' => ['required', Rule::enum(PaymentMethod::class)],
+            'payment_method' => [
+                'required',
+                // A promissory note is only an option where the training was
+                // published as accepting one — otherwise it is a way to claim a
+                // slot without paying for it.
+                Rule::enum(PaymentMethod::class)->when(
+                    ! $registration->training->accepts_promissory,
+                    fn ($rule) => $rule->except(PaymentMethod::Promissory)
+                ),
+            ],
             // Cash is paid over the counter against a receipt; every other
             // method leaves a reference that is the only proof there is.
             'reference_number' => [

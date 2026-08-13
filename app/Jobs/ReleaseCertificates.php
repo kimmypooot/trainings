@@ -30,9 +30,13 @@ class ReleaseCertificates implements ShouldQueue
 
     public function handle(): void
     {
-        Registration::with(['user', 'training'])
+        Registration::with(['user', 'training', 'payments'])
             ->where('training_id', $this->training->getKey())
             ->where('status', RegistrationStatus::Completed)
+            // Filtered here as well as guarded in the service: an outstanding
+            // fee is an expected, ordinary state, and letting it surface as a
+            // logged exception per row would bury the real failures.
+            ->feeCleared()
             ->when($this->fieldOfficeId !== null, fn ($query) => $query->whereHas(
                 'user.profile',
                 fn ($profile) => $profile->where('field_office_id', $this->fieldOfficeId)

@@ -22,14 +22,22 @@ class CertificateController extends Controller
      */
     public function releaseTraining(Request $request, Training $training): RedirectResponse
     {
-        $pending = Registration::where('training_id', $training->getKey())
+        $awaiting = Registration::where('training_id', $training->getKey())
             ->where('status', RegistrationStatus::Completed)
-            ->whereDoesntHave('certificate', fn ($query) => $query->whereNotNull('generated_at'))
-            ->count();
+            ->whereDoesntHave('certificate', fn ($query) => $query->whereNotNull('generated_at'));
+
+        // Counted separately so the flash message can say what the batch will
+        // not cover. Reporting "queued 40" and quietly issuing 37 is how an
+        // unpaid fee goes unnoticed until the participant asks where their
+        // certificate is.
+        $pending = (clone $awaiting)->feeCleared()->count();
+        $held = (clone $awaiting)->count() - $pending;
 
         if ($pending === 0) {
             return back()->withErrors([
-                'certificate' => 'No completed registrations are waiting for a certificate.',
+                'certificate' => $held > 0
+                    ? "No certificates can be issued yet — {$held} completed participant(s) are still on an unpaid promissory note."
+                    : 'No completed registrations are waiting for a certificate.',
             ]);
         }
 
@@ -39,7 +47,9 @@ class CertificateController extends Controller
             $request->user()->scopedFieldOfficeId(),
         );
 
-        return back()->with('success', "Queued {$pending} certificate(s) for release.");
+        return back()->with('success', $held === 0
+            ? "Queued {$pending} certificate(s) for release."
+            : "Queued {$pending} certificate(s) for release. {$held} held — the fee is still outstanding.");
     }
 
     /**

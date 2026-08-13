@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\RegistrationStatus;
+use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use Carbon\CarbonImmutable;
@@ -14,11 +15,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'title', 'slug', 'training_code', 'description', 'category', 'venue', 'mode',
-    'starts_at', 'ends_at', 'duration_days', 'registration_opens_at',
-    'registration_closes_at', 'capacity', 'facilitator_name', 'facilitator_contact',
-    'objectives', 'prerequisites', 'target_participants', 'payment_required',
-    'payment_amount', 'status', 'created_by',
+    'title', 'slug', 'training_code', 'description', 'category', 'level', 'venue',
+    'venue_details', 'meeting_link', 'mode', 'starts_at', 'ends_at', 'duration_days',
+    'registration_opens_at', 'registration_closes_at', 'capacity', 'facilitator_name',
+    'facilitator_contact', 'objectives', 'prerequisites', 'target_participants',
+    'payment_required', 'payment_amount', 'accepts_promissory', 'is_supervisory',
+    'status', 'created_by',
 ])]
 class Training extends Model
 {
@@ -35,7 +37,10 @@ class Training extends Model
             'duration_days' => 'integer',
             'payment_required' => 'boolean',
             'payment_amount' => 'decimal:2',
+            'accepts_promissory' => 'boolean',
+            'is_supervisory' => 'boolean',
             'mode' => TrainingMode::class,
+            'level' => TrainingLevel::class,
             'status' => TrainingStatus::class,
         ];
     }

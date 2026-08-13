@@ -152,10 +152,19 @@ class RegistrationService
             return $registration;
         });
 
-        // Sent after the transaction commits, so a participant can never be
-        // told they are confirmed for a decision that then rolls back.
+        /*
+         * Sent after the transaction commits, so a participant can never be
+         * told they are confirmed for a decision that then rolls back.
+         *
+         * Held back for the length of the undo window on top of that: a
+         * decision the reviewer takes back within seconds should never have
+         * reached the participant at all. The notification re-checks the
+         * decision before it delivers, so an undo leaves nothing to read.
+         */
         $registration->loadMissing(['user', 'training']);
-        $registration->user->notify(new RegistrationReviewed($registration));
+        $registration->user->notify(
+            (new RegistrationReviewed($registration))->delay(now()->addSeconds(UndoService::WINDOW_SECONDS))
+        );
 
         return $registration;
     }
