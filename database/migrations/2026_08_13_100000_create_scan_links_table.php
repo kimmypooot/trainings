@@ -52,12 +52,27 @@ return new class extends Migration
             // office running three doors can tell its links apart.
             $table->string('label')->nullable();
 
-            $table->timestamp('expires_at');
-            $table->timestamp('revoked_at')->nullable();
+            /*
+             * dateTime, not timestamp, and this is load-bearing on MySQL.
+             *
+             * MySQL attaches `DEFAULT CURRENT_TIMESTAMP ON UPDATE
+             * CURRENT_TIMESTAMP` to the first NOT NULL TIMESTAMP column in a
+             * table that declares no default of its own. Under that rule every
+             * write to this row — and `last_used_at` is written on the very
+             * first unlock — silently reset the expiry to now, so a link died
+             * the instant somebody used it.
+             *
+             * SQLite has no such behaviour, so the test suite was perfectly
+             * green while the feature was broken against the real database.
+             * DATETIME carries no implicit default or auto-update on either
+             * engine, which is the only reason this column can be trusted.
+             */
+            $table->dateTime('expires_at');
+            $table->dateTime('revoked_at')->nullable();
 
             // Diagnostics for the issuer: whether the link was ever picked up,
             // and when it was last actually scanning.
-            $table->timestamp('last_used_at')->nullable();
+            $table->dateTime('last_used_at')->nullable();
 
             $table->timestamps();
 

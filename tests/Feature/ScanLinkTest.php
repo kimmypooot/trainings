@@ -405,6 +405,32 @@ class ScanLinkTest extends TestCase
         $this->assertNull($link->fresh()->revoked_at);
     }
 
+    /**
+     * Using a link must not shorten its life.
+     *
+     * This looks tautological and is not. `expires_at` was originally a
+     * TIMESTAMP column, and MySQL attaches ON UPDATE CURRENT_TIMESTAMP to the
+     * first NOT NULL TIMESTAMP column that declares no default — so writing
+     * `last_used_at` on the first unlock silently reset the expiry to now and
+     * killed the link the moment anyone used it.
+     *
+     * SQLite never reproduced it, which is exactly why the assertion is written
+     * down: it fails loudly on MySQL if the column type is ever changed back.
+     */
+    public function test_unlocking_does_not_move_the_expiry(): void
+    {
+        [$link] = $this->scenario();
+        $before = $link->expires_at;
+
+        $this->grantFor($link);
+
+        $link->refresh();
+
+        $this->assertTrue($link->isActive());
+        $this->assertNotNull($link->last_used_at);
+        $this->assertSame($before->toDateTimeString(), $link->expires_at->toDateTimeString());
+    }
+
     public function test_revoking_is_recorded_rather_than_deleting_the_row(): void
     {
         [$link] = $this->scenario();
