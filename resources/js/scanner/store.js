@@ -214,10 +214,29 @@ export async function applySyncResults(results) {
                     state: result.status === 'rejected' ? 'failed' : 'synced',
                     synced_at: new Date().toISOString(),
                     server_status: result.status,
+                    // Echoed back by the server rather than trusted from the
+                    // local record, so the badge reflects what actually
+                    // happened rather than what the device intended.
+                    dry_run: Boolean(result.dry_run),
                     message: result.message ?? null,
                 });
             };
         });
+    });
+}
+
+/**
+ * Drop every rehearsal scan for a training.
+ *
+ * Rehearsals are the one kind of scan it is safe to destroy on the device,
+ * because by definition the server never kept a copy — so this is offered as a
+ * plain button, where clearing real scans deliberately is not.
+ */
+export async function deleteTestScans(trainingId) {
+    const scans = await scansFor(trainingId);
+
+    await withStore(SCANS, 'readwrite', (store) => {
+        scans.filter((scan) => scan.dry_run).forEach((scan) => store.delete(scan.client_id));
     });
 }
 

@@ -39,6 +39,7 @@ class ScanLink extends Model
         'code_hash',
         'issued_by',
         'label',
+        'is_test',
         'expires_at',
         'revoked_at',
         'last_used_at',
@@ -53,6 +54,7 @@ class ScanLink extends Model
     protected function casts(): array
     {
         return [
+            'is_test' => 'boolean',
             'expires_at' => 'immutable_datetime',
             'revoked_at' => 'immutable_datetime',
             'last_used_at' => 'immutable_datetime',
@@ -92,7 +94,8 @@ class ScanLink extends Model
         Training $training,
         User $issuer,
         ?string $label = null,
-        ?CarbonImmutable $expiresAt = null
+        ?CarbonImmutable $expiresAt = null,
+        bool $isTest = false
     ): array {
         // Six digits rather than four. The gate is throttled, so this is not
         // guarded against a patient offline attacker — but it costs the operator
@@ -107,6 +110,7 @@ class ScanLink extends Model
             'code_hash' => Hash::make($code),
             'issued_by' => $issuer->getKey(),
             'label' => $label,
+            'is_test' => $isTest,
             'expires_at' => $expiresAt ?? CarbonImmutable::now()->addDays(self::DEFAULT_LIFETIME_DAYS),
         ]);
 

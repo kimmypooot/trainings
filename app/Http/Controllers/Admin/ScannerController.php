@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\Role;
 use App\Enums\TrainingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Training;
@@ -75,6 +76,9 @@ class ScannerController extends Controller
             'syncUrl' => route('admin.scanner.sync'),
             'scopedTo' => $request->user()->fieldOffice?->name,
             'operator' => $request->user()->name,
+            // Whether this operator may rehearse. Sent so the toggle is simply
+            // absent for everyone else rather than present and refused.
+            'canTest' => $request->user()->role === Role::SuperAdmin,
         ]);
     }
 
@@ -111,13 +115,26 @@ class ScannerController extends Controller
             'scans.*.client_id' => ['required', 'string', 'max:64'],
             'scans.*.registration_id' => ['required', 'integer'],
             'scans.*.scanned_at' => ['required', 'date'],
+            'dry_run' => ['sometimes', 'boolean'],
         ]);
+
+        // Refused rather than quietly downgraded to a live sync. A rehearsal
+        // that silently became real would be the worst possible outcome here,
+        // and an operator who cannot rehearse should be told so plainly.
+        $dryRun = (bool) ($validated['dry_run'] ?? false);
+
+        abort_if(
+            $dryRun && $request->user()->role !== Role::SuperAdmin,
+            403,
+            'Test mode is available to super administrators only.'
+        );
 
         $results = ScanStationService::sync(
             $validated['training_id'],
             $validated['scans'],
             $request->user(),
             $request->user()->scopedFieldOfficeId(),
+            $dryRun,
         );
 
         return response()->json([

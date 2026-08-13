@@ -81,17 +81,31 @@ export async function syncPending(syncUrl, { trainingId = null, grant = null } =
         return { sent: 0, synced: 0, duplicate: 0, rejected: 0 };
     }
 
+    /*
+     * Grouped by training *and* by whether the scan was a rehearsal.
+     *
+     * The second half matters more than it looks. A station that was in test
+     * mode and then left it would otherwise flush its practice scans in the
+     * same batch as real ones, under whichever flag happened to be current —
+     * and a rehearsal silently becoming real attendance is the one outcome test
+     * mode exists to prevent. A scan is marked when it is recorded, and that
+     * marking travels with it.
+     */
     const grouped = scans.reduce((groups, scan) => {
-        (groups[scan.training_id] ??= []).push(scan);
+        const key = `${scan.training_id}:${scan.dry_run ? 1 : 0}`;
+
+        (groups[key] ??= []).push(scan);
 
         return groups;
     }, {});
 
     const summary = { sent: 0, synced: 0, duplicate: 0, rejected: 0 };
 
-    for (const [training, rows] of Object.entries(grouped)) {
+    for (const [key, rows] of Object.entries(grouped)) {
+        const [training, dryRun] = key.split(':');
+
         for (const batch of chunk(rows, BATCH_SIZE)) {
-            const results = await postBatch(syncUrl, Number(training), batch, grant);
+            const results = await postBatch(syncUrl, Number(training), batch, grant, dryRun === '1');
 
             await applySyncResults(results);
 
@@ -112,7 +126,7 @@ export async function syncPending(syncUrl, { trainingId = null, grant = null } =
     return summary;
 }
 
-async function postBatch(syncUrl, trainingId, batch, grant = null) {
+async function postBatch(syncUrl, trainingId, batch, grant = null, dryRun = false) {
     const response = await fetch(syncUrl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -125,6 +139,10 @@ async function postBatch(syncUrl, trainingId, batch, grant = null) {
         },
         body: JSON.stringify({
             training_id: trainingId,
+            // Advisory only. The staff scanner refuses it from anyone but a
+            // super administrator, and the public station ignores it entirely
+            // in favour of the flag stored on the link itself.
+            dry_run: dryRun,
             scans: batch.map((scan) => ({
                 client_id: scan.client_id,
                 registration_id: scan.registration_id,

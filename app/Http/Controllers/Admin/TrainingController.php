@@ -195,6 +195,7 @@ class TrainingController extends Controller
                 ->map(fn (ScanLink $link) => [
                     'id' => $link->id,
                     'label' => $link->label,
+                    'is_test' => $link->is_test,
                     'url' => route('station.show', $link->token),
                     'expires_at' => $link->expires_at->format('d M Y'),
                     'last_used_at' => $link->last_used_at?->diffForHumans(),

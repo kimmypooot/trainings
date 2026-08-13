@@ -30,6 +30,16 @@ const stationLabel = ref('');
 const issuing = ref(false);
 
 /**
+ * Issue this station as a rehearsal.
+ *
+ * Super administrators only — the server refuses it from anyone else — and
+ * always reset after issuing, so the next station created is a real one unless
+ * somebody deliberately says otherwise.
+ */
+const stationIsTest = ref(false);
+const canIssueTest = computed(() => page.props.auth?.user?.role === 'superadmin');
+
+/**
  * The freshly issued link, code and all.
  *
  * Read from the flash bag because the plaintext code exists exactly once, in
@@ -53,10 +63,13 @@ function issueStation() {
 
     router.post(
         `/admin/trainings/${props.training.id}/scan-links`,
-        { label: stationLabel.value || null },
+        { label: stationLabel.value || null, is_test: stationIsTest.value },
         {
             preserveScroll: true,
-            onSuccess: () => (stationLabel.value = ''),
+            onSuccess: () => {
+                stationLabel.value = '';
+                stationIsTest.value = false;
+            },
             onFinish: () => (issuing.value = false),
         }
     );
@@ -351,7 +364,11 @@ const applyBulk = (action) => {
                 <!-- The one and only sighting of the code. -->
                 <div v-if="newStation" class="rounded-xl border border-success/40 bg-success-soft p-4">
                     <p class="text-sm font-semibold text-csc-ink">
-                        Station ready<span v-if="newStation.label"> · {{ newStation.label }}</span>
+                        {{ newStation.is_test ? 'Practice station ready' : 'Station ready' }}<span v-if="newStation.label"> · {{ newStation.label }}</span>
+                    </p>
+                    <p v-if="newStation.is_test" class="mt-1 text-xs font-semibold text-csc-ink">
+                        This station records nothing. Scans are answered as they would be live, but no
+                        attendance is saved.
                     </p>
                     <p class="mt-1 text-xs leading-relaxed text-csc-ink/70">
                         Copy each to whoever is working the door. Sending the code by a different
@@ -417,9 +434,24 @@ const applyBulk = (action) => {
                     </label>
 
                     <AppButton size="sm" :disabled="issuing" @click="issueStation">
-                        {{ issuing ? 'Creating…' : 'Create scanning station' }}
+                        {{ issuing ? 'Creating…' : stationIsTest ? 'Create practice station' : 'Create scanning station' }}
                     </AppButton>
                 </div>
+
+                <!-- Rehearsal stations, for super administrators only. -->
+                <label v-if="canIssueTest" class="mt-3 flex items-start gap-2">
+                    <input
+                        v-model="stationIsTest"
+                        type="checkbox"
+                        class="mt-0.5 size-4 rounded border-csc-ink/30 text-csc-blue focus:ring-csc-blue"
+                    />
+                    <span class="text-xs leading-relaxed text-csc-ink/70">
+                        <strong class="font-semibold text-csc-ink">Practice station</strong> — scans are
+                        checked against the real roster and answered exactly as they would be, but no
+                        attendance is ever recorded. Use this to prove phones, cameras and signal at the
+                        venue before the session starts.
+                    </span>
+                </label>
 
                 <!-- Live stations -->
                 <ul v-if="scanLinks.length" class="mt-4 space-y-2 border-t border-csc-ink/10 pt-4">
@@ -431,6 +463,7 @@ const applyBulk = (action) => {
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-sm font-medium text-csc-ink">
                                 {{ link.label ?? 'Unlabelled station' }}
+                                <AppBadge v-if="link.is_test" tone="warning" class="ml-1">Practice</AppBadge>
                             </p>
                             <p class="truncate text-xs text-csc-ink/60">
                                 Expires {{ link.expires_at }} ·

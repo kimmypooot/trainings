@@ -69,6 +69,9 @@ const {
     syncLabel,
     syncTone,
     rosterRows,
+    testing,
+    testedCount,
+    clearTestScans,
     download,
     activate,
     startCamera,
@@ -84,6 +87,9 @@ const {
     // must not resurrect the previous training's roster on the same phone.
     storageKey: `csc-tims-scan:last:${props.token}`,
     restoreLast: false,
+    // Fixed by the link, not chosen here. A phone handed to a volunteer does
+    // not get to decide whether the morning's attendance was real.
+    testMode: props.link?.is_test ?? false,
 });
 
 const panel = ref(null); // null | 'roster' | 'activity'
@@ -226,6 +232,28 @@ onMounted(async () => {
                     </span>
                 </div>
             </header>
+
+            <!--
+                A practice station says so on every screen, including before
+                the code is entered. Someone handed this phone must never scan a
+                real queue believing it counted.
+            -->
+            <div v-if="testing" class="bg-warning text-csc-ink">
+                <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-2">
+                    <AppIcon name="warning" size="sm" class="shrink-0" />
+                    <p class="min-w-0 flex-1 text-2xs font-semibold">
+                        PRACTICE STATION — scans are checked but never saved.
+                    </p>
+                    <button
+                        v-if="testedCount"
+                        type="button"
+                        class="shrink-0 rounded-md border border-csc-ink/30 px-2.5 py-1 text-2xs font-semibold transition-colors hover:bg-csc-ink/10"
+                        @click="clearTestScans"
+                    >
+                        Clear {{ testedCount }}
+                    </button>
+                </div>
+            </div>
 
             <!-- =========================== GATE =========================== -->
             <main v-if="locked" class="mx-auto w-full max-w-md flex-1 px-5 py-8">
@@ -431,6 +459,10 @@ onMounted(async () => {
                                     >
                                         Food restrictions: {{ verdict.participant.food_restrictions }}
                                     </p>
+
+                                    <p v-if="testing" class="mt-2 rounded-lg bg-black/25 px-2 py-1 text-2xs font-semibold">
+                                        Practice — nothing was saved.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -543,16 +575,22 @@ onMounted(async () => {
                             <span
                                 class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
                                 :class="{
-                                    'bg-success/25': scan.state === 'synced',
-                                    'bg-warning/25': scan.state === 'pending',
-                                    'bg-danger/30': scan.state === 'failed',
+                                    'bg-warning/30 text-white': scan.dry_run,
+                                    'bg-success/25': !scan.dry_run && scan.state === 'synced',
+                                    'bg-warning/25': !scan.dry_run && scan.state === 'pending',
+                                    'bg-danger/30': !scan.dry_run && scan.state === 'failed',
                                 }"
                             >
                                 <AppIcon
                                     :name="scan.state === 'synced' ? 'check' : scan.state === 'pending' ? 'clock' : 'warning'"
                                     size="sm"
                                 />
-                                {{ scan.state === 'synced' ? 'Synced' : scan.state === 'pending' ? 'Pending' : 'Failed' }}
+                                <template v-if="scan.dry_run">
+                                    {{ scan.state === 'pending' ? 'Test pending' : 'Tested' }}
+                                </template>
+                                <template v-else>
+                                    {{ scan.state === 'synced' ? 'Synced' : scan.state === 'pending' ? 'Pending' : 'Failed' }}
+                                </template>
                             </span>
                         </li>
                     </ul>

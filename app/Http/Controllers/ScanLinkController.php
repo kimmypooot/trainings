@@ -62,6 +62,10 @@ class ScanLinkController extends Controller
                 'training_title' => $link->training->title,
                 'venue' => $link->training->venue,
                 'label' => $link->label,
+                // Announced before the code is even entered: whoever picks this
+                // phone up should know it does not count before they scan a
+                // queue of people with it.
+                'is_test' => $link->is_test,
                 'expires_at' => $link->expires_at->toIso8601String(),
             ],
             'state' => match (true) {
@@ -148,11 +152,15 @@ class ScanLinkController extends Controller
         $results = ScanStationService::sync(
             $link->training_id,
             $validated['scans'],
+            // Read off the link, never off the request. The phone holding this
+            // station is not ours and does not get a say in whether its scans
+            // are real.
             // Attributed to the issuer. Attendance has to name a real user, and
             // the honest answer to "who recorded this" is the staff member who
             // put a station on that door.
             $link->issuer,
             $link->issuer->scopedFieldOfficeId(),
+            $link->is_test,
         );
 
         $link->forceFill(['last_used_at' => CarbonImmutable::now()])->save();

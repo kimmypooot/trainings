@@ -9,6 +9,7 @@ use App\Models\Training;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -120,8 +121,13 @@ class ScanStationService
      * @param  array<int, array<string, mixed>>  $scans
      * @return array<int, array<string, mixed>>
      */
-    public static function sync(int $trainingId, array $scans, User $actor, ?int $officeId): array
-    {
+    public static function sync(
+        int $trainingId,
+        array $scans,
+        User $actor,
+        ?int $officeId,
+        bool $dryRun = false
+    ): array {
         // Resolved as one query and then matched in memory: the same scoping as
         // the roster download, applied again here so a tampered payload cannot
         // check in someone outside the actor's office.
@@ -136,9 +142,62 @@ class ScanStationService
             ->keyBy('id');
 
         return array_map(
-            fn (array $scan) => self::applyScan($registrations, $scan, $actor),
+            fn (array $scan) => self::applyScan($registrations, $scan, $actor, $dryRun),
             $scans
         );
+    }
+
+    /**
+     * A scan played out in full and then thrown away.
+     *
+     * The obvious implementation — re-derive the verdict without calling
+     * AttendanceService — is the wrong one. It would mean two copies of rules
+     * like "only an approved participant can be marked" and "this training is
+     * not running today", and the copy nobody exercises is the one that drifts,
+     * so the rehearsal would eventually reassure an operator about a scan that
+     * would actually fail.
+     *
+     * So the real code runs, inside a transaction that is always rolled back.
+     * The verdict is exact by construction, and nothing survives. checkIn()
+     * opens its own transaction, which nests as a savepoint inside this one and
+     * is discarded with it.
+     *
+     * @param  array<string, mixed>  $scan
+     * @return array<string, mixed>
+     */
+    private static function rehearseScan(
+        Registration $registration,
+        array $scan,
+        User $actor,
+        CarbonImmutable $at,
+        bool $alreadyPresent
+    ): array {
+        DB::beginTransaction();
+
+        try {
+            $attendance = AttendanceService::checkIn($registration, $actor, $at);
+
+            return [
+                'client_id' => $scan['client_id'],
+                'status' => $alreadyPresent ? 'duplicate' : 'synced',
+                'dry_run' => true,
+                'training_day' => $attendance->training_day,
+                'attendance_status' => $attendance->status->value,
+                'time_in' => $attendance->time_in,
+                'name' => $registration->user->name,
+            ];
+        } catch (ValidationException $exception) {
+            return [
+                'client_id' => $scan['client_id'],
+                'status' => 'rejected',
+                'dry_run' => true,
+                'message' => $exception->validator->errors()->first(),
+            ];
+        } finally {
+            // Unconditional: a rehearsal that committed even once would be
+            // worse than having no test mode at all.
+            DB::rollBack();
+        }
     }
 
     /**
@@ -153,8 +212,12 @@ class ScanStationService
      * @param  array<string, mixed>  $scan
      * @return array<string, mixed>
      */
-    private static function applyScan(Collection $registrations, array $scan, User $actor): array
-    {
+    private static function applyScan(
+        Collection $registrations,
+        array $scan,
+        User $actor,
+        bool $dryRun = false
+    ): array {
         $registration = $registrations->get($scan['registration_id']);
 
         if ($registration === null) {
@@ -180,6 +243,10 @@ class ScanStationService
             ->where('training_day', $day)
             ->whereNotNull('time_in')
             ->exists();
+
+        if ($dryRun) {
+            return self::rehearseScan($registration, $scan, $actor, $at, $alreadyPresent);
+        }
 
         try {
             $attendance = AttendanceService::checkIn($registration, $actor, $at);

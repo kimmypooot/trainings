@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\ScanLink;
 use App\Models\Training;
@@ -38,7 +39,19 @@ class ScanLinkController extends Controller
             // Bounded rather than free: a station that outlives the training it
             // was cut for is just an unrevoked credential sitting in a chat log.
             'days' => ['nullable', 'integer', 'min:1', 'max:60'],
+            'is_test' => ['sometimes', 'boolean'],
         ]);
+
+        // A rehearsal station reaches real verdicts against a real roster and
+        // writes nothing. Restricted to super administrators because deciding
+        // that a door does not count is a system-level call, not a session one.
+        $isTest = (bool) ($validated['is_test'] ?? false);
+
+        abort_if(
+            $isTest && $request->user()->role !== Role::SuperAdmin,
+            403,
+            'Test stations can only be issued by a super administrator.'
+        );
 
         [$link, $code] = ScanLink::issue(
             $training,
@@ -47,6 +60,7 @@ class ScanLinkController extends Controller
             isset($validated['days'])
                 ? CarbonImmutable::now()->addDays((int) $validated['days'])
                 : null,
+            $isTest,
         );
 
         return back()->with('scan_link', [
@@ -54,6 +68,7 @@ class ScanLinkController extends Controller
             'url' => route('station.show', $link->token),
             'code' => $code,
             'label' => $link->label,
+            'is_test' => $link->is_test,
             'expires_at' => $link->expires_at->format('d M Y'),
         ]);
     }

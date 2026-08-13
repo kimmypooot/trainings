@@ -365,6 +365,118 @@ class ScanLinkTest extends TestCase
     }
 
     /* ---------------------------------------------------------------------- */
+    /* Practice stations */
+    /* ---------------------------------------------------------------------- */
+
+    public function test_a_practice_station_answers_normally_but_records_nothing(): void
+    {
+        [$link, , $registration] = $this->scenario(['is_test' => true]);
+
+        $this->postJson("/station/{$link->token}/sync", [
+            'scans' => [[
+                'client_id' => 'abc',
+                'registration_id' => $registration->id,
+                'scanned_at' => CarbonImmutable::now()->toIso8601String(),
+            ]],
+        ], ['X-Scan-Grant' => $this->grantFor($link)])
+            ->assertOk()
+            // The same verdict a live scan would have produced …
+            ->assertJsonPath('results.0.status', 'synced')
+            ->assertJsonPath('results.0.dry_run', true)
+            ->assertJsonPath('results.0.training_day', 1);
+
+        // … and no trace of it anywhere.
+        $this->assertSame(0, Attendance::count());
+        $this->assertNull($registration->fresh()->attended_at);
+    }
+
+    public function test_a_practice_station_still_refuses_what_a_real_one_would(): void
+    {
+        [$link] = $this->scenario(['is_test' => true]);
+        [, , $elsewhere] = $this->scenario();
+
+        // A rehearsal that reported success for a scan the live station would
+        // reject would be worse than no rehearsal at all.
+        $this->postJson("/station/{$link->token}/sync", [
+            'scans' => [[
+                'client_id' => 'abc',
+                'registration_id' => $elsewhere->id,
+                'scanned_at' => CarbonImmutable::now()->toIso8601String(),
+            ]],
+        ], ['X-Scan-Grant' => $this->grantFor($link)])
+            ->assertOk()
+            ->assertJsonPath('results.0.status', 'rejected');
+
+        $this->assertSame(0, Attendance::count());
+    }
+
+    public function test_only_a_superadmin_can_issue_a_practice_station(): void
+    {
+        $training = Training::factory()->startingToday()->create();
+
+        $this->actingAs($this->issuer(Role::Admin))
+            ->post("/admin/trainings/{$training->id}/scan-links", ['is_test' => true])
+            ->assertForbidden();
+
+        $this->assertSame(0, ScanLink::count());
+
+        $this->actingAs($this->issuer(Role::SuperAdmin))
+            ->post("/admin/trainings/{$training->id}/scan-links", ['is_test' => true])
+            ->assertRedirect();
+
+        $this->assertTrue(ScanLink::sole()->is_test);
+    }
+
+    public function test_only_a_superadmin_can_dry_run_the_staff_scanner(): void
+    {
+        [, $training, $registration] = $this->scenario();
+
+        $payload = [
+            'training_id' => $training->id,
+            'dry_run' => true,
+            'scans' => [[
+                'client_id' => 'abc',
+                'registration_id' => $registration->id,
+                'scanned_at' => CarbonImmutable::now()->toIso8601String(),
+            ]],
+        ];
+
+        $this->actingAs($this->issuer(Role::Admin))
+            ->postJson('/admin/scanner/sync', $payload)
+            ->assertForbidden();
+
+        // Refused outright rather than downgraded to a live write.
+        $this->assertSame(0, Attendance::count());
+
+        $this->actingAs($this->issuer(Role::SuperAdmin))
+            ->postJson('/admin/scanner/sync', $payload)
+            ->assertOk()
+            ->assertJsonPath('results.0.dry_run', true);
+
+        $this->assertSame(0, Attendance::count());
+    }
+
+    public function test_a_live_staff_sync_still_writes(): void
+    {
+        [, $training, $registration] = $this->scenario();
+
+        $this->actingAs($this->issuer(Role::SuperAdmin))
+            ->postJson('/admin/scanner/sync', [
+                'training_id' => $training->id,
+                'scans' => [[
+                    'client_id' => 'abc',
+                    'registration_id' => $registration->id,
+                    'scanned_at' => CarbonImmutable::now()->toIso8601String(),
+                ]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('results.0.status', 'synced');
+
+        // The guard against a dry run that leaked into the default path.
+        $this->assertSame(1, Attendance::count());
+    }
+
+    /* ---------------------------------------------------------------------- */
     /* Issuing */
     /* ---------------------------------------------------------------------- */
 

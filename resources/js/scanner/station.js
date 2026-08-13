@@ -1,7 +1,16 @@
 import { computed, onBeforeUnmount, onMounted, ref, unref, watch } from 'vue';
 import { Scanner, beep, buzz } from './camera';
 import { localTime, resolveScan } from './resolve';
-import { addScan, deleteRoster, getRoster, listRosters, retryFailed, saveRoster, scansFor } from './store';
+import {
+    addScan,
+    deleteRoster,
+    deleteTestScans,
+    getRoster,
+    listRosters,
+    retryFailed,
+    saveRoster,
+    scansFor,
+} from './store';
 import { SyncError, downloadRoster, syncPending } from './sync';
 
 /**
@@ -25,6 +34,16 @@ export function useScanStation({
     // public station opts out: it is pinned to one training by its link, and
     // reopening a *different* link must never restore the previous one's roster.
     restoreLast = true,
+    /*
+     * Whether scans recorded here are rehearsals.
+     *
+     * A ref on the staff scanner, where a super administrator turns it on and
+     * off; a fixed value on the public station, where it belongs to the link
+     * and the phone gets no say. Either way it is stamped onto each scan as it
+     * is recorded, so a scan's nature cannot be changed afterwards by toggling
+     * the station.
+     */
+    testMode = false,
 } = {}) {
     /* ---------------------------------------------------------------------- */
     /* State                                                                   */
@@ -346,6 +365,7 @@ export function useScanStation({
                 status: result.status,
                 time_in: localTime(at),
                 scanned_at: at.toISOString(),
+                dry_run: unref(testMode),
             });
 
             scans.value = [...scans.value, record];
@@ -393,6 +413,7 @@ export function useScanStation({
             time_in: localTime(at),
             scanned_at: at.toISOString(),
             by_hand: true,
+            dry_run: unref(testMode),
         });
 
         scans.value = [...scans.value, record];
@@ -465,6 +486,23 @@ export function useScanStation({
                         : 'Could not reach the server. Your scans are safe on this device and will be sent when a connection returns.';
             }
         }
+    }
+
+    /** Whether this station is currently rehearsing. */
+    const testing = computed(() => Boolean(unref(testMode)));
+
+    /** How many rehearsal scans this device is holding. */
+    const testedCount = computed(() => scans.value.filter((scan) => scan.dry_run).length);
+
+    /** Wipe the rehearsal off the device; the server never held any of it. */
+    async function clearTestScans() {
+        if (!roster.value) {
+            return;
+        }
+
+        await deleteTestScans(roster.value.training_id);
+        scans.value = await scansFor(roster.value.training_id);
+        syncMessage.value = 'Test scans cleared. Nothing was ever recorded on the server.';
     }
 
     async function retry() {
@@ -569,6 +607,9 @@ export function useScanStation({
         syncLabel,
         syncTone,
         rosterRows,
+        testing,
+        testedCount,
+        clearTestScans,
         // actions
         refreshStoredRosters,
         download,

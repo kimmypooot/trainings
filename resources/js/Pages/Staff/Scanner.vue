@@ -26,7 +26,17 @@ const props = defineProps({
     syncUrl: { type: String, required: true },
     scopedTo: { type: String, default: null },
     operator: { type: String, default: null },
+    canTest: { type: Boolean, default: false },
 });
+
+/**
+ * Rehearsal mode.
+ *
+ * Off on every load, never remembered. A station that came back from a screen
+ * lock still quietly in test mode would be the exact failure this is meant to
+ * prevent — an operator scanning a real queue into nothing.
+ */
+const testMode = ref(false);
 
 const {
     roster,
@@ -52,6 +62,9 @@ const {
     syncLabel,
     syncTone,
     rosterRows,
+    testing,
+    testedCount,
+    clearTestScans,
     download,
     activate,
     release,
@@ -61,7 +74,7 @@ const {
     markByHand,
     sync,
     retry,
-} = useScanStation({ syncUrl: props.syncUrl });
+} = useScanStation({ syncUrl: props.syncUrl, testMode });
 
 const panel = ref(null); // null | 'roster' | 'activity'
 const search = ref('');
@@ -111,6 +124,53 @@ async function confirmRelease() {
                 </span>
             </div>
         </header>
+
+        <!--
+            Rehearsal strip. Rendered for super administrators only, and sits
+            directly under the header so it is impossible to be in test mode
+            without the fact being on screen above whatever you are doing.
+        -->
+        <div v-if="canTest" :class="testing ? 'bg-warning text-csc-ink' : 'border-b border-white/10 bg-white/5'">
+            <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-2">
+                <template v-if="testing">
+                    <AppIcon name="warning" size="sm" class="shrink-0" />
+                    <p class="min-w-0 flex-1 text-2xs font-semibold">
+                        TEST MODE — scans are checked but never saved.
+                        <span v-if="testedCount"> {{ testedCount }} test scan{{ testedCount === 1 ? '' : 's' }} on this device.</span>
+                    </p>
+                    <button
+                        v-if="testedCount"
+                        type="button"
+                        class="shrink-0 rounded-md border border-csc-ink/30 px-2.5 py-1 text-2xs font-semibold transition-colors hover:bg-csc-ink/10"
+                        @click="clearTestScans"
+                    >
+                        Clear
+                    </button>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded-md bg-csc-ink px-2.5 py-1 text-2xs font-semibold text-white"
+                        @click="testMode = false"
+                    >
+                        Turn off
+                    </button>
+                </template>
+
+                <template v-else>
+                    <p class="min-w-0 flex-1 text-2xs text-white/60">
+                        Scans are recorded for real.
+                    </p>
+                    <button
+                        type="button"
+                        :disabled="pendingCount > 0"
+                        class="shrink-0 rounded-md border border-white/25 px-2.5 py-1 text-2xs font-semibold transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        :title="pendingCount ? 'Sync the waiting scans before rehearsing' : 'Rehearse without saving anything'"
+                        @click="testMode = true"
+                    >
+                        Start test mode
+                    </button>
+                </template>
+            </div>
+        </div>
 
         <!-- ============================ SETUP ============================ -->
         <main v-if="!roster" class="mx-auto w-full max-w-3xl flex-1 px-4 py-6">
@@ -326,6 +386,10 @@ async function confirmRelease() {
                                 >
                                     Food restrictions: {{ verdict.participant.food_restrictions }}
                                 </p>
+
+                                <p v-if="testing" class="mt-2 rounded-lg bg-black/25 px-2 py-1 text-2xs font-semibold">
+                                    Test mode — nothing was saved.
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -434,16 +498,24 @@ async function confirmRelease() {
                         <span
                             class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold"
                             :class="{
-                                'bg-success/25': scan.state === 'synced',
-                                'bg-warning/25': scan.state === 'pending',
-                                'bg-danger/30': scan.state === 'failed',
+                                'bg-warning/30 text-white': scan.dry_run,
+                                'bg-success/25': !scan.dry_run && scan.state === 'synced',
+                                'bg-warning/25': !scan.dry_run && scan.state === 'pending',
+                                'bg-danger/30': !scan.dry_run && scan.state === 'failed',
                             }"
                         >
                             <AppIcon
                                 :name="scan.state === 'synced' ? 'check' : scan.state === 'pending' ? 'clock' : 'warning'"
                                 size="sm"
                             />
-                            {{ scan.state === 'synced' ? 'Synced' : scan.state === 'pending' ? 'Pending' : 'Failed' }}
+                            <!-- A rehearsal never reads as "Synced": the whole
+                                 point is that no record exists anywhere. -->
+                            <template v-if="scan.dry_run">
+                                {{ scan.state === 'pending' ? 'Test pending' : 'Tested' }}
+                            </template>
+                            <template v-else>
+                                {{ scan.state === 'synced' ? 'Synced' : scan.state === 'pending' ? 'Pending' : 'Failed' }}
+                            </template>
                         </span>
                     </li>
                 </ul>
