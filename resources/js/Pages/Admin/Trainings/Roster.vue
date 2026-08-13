@@ -7,6 +7,7 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 
 const props = defineProps({
@@ -37,7 +38,15 @@ const issuing = ref(false);
  */
 const newStation = computed(() => page.props.flash?.scan_link ?? null);
 
-const copied = ref(false);
+/**
+ * Which field was copied last, so only that button acknowledges.
+ *
+ * Tracked as a name rather than a boolean because the link and the code are
+ * copied separately and usually one after the other — a shared flag would light
+ * up both and leave the operator unsure which one is actually on the clipboard.
+ */
+const copiedField = ref(null);
+let copiedTimer = null;
 
 function issueStation() {
     issuing.value = true;
@@ -58,23 +67,27 @@ function revokeStation(link) {
 }
 
 /**
- * Copy the link and its code together.
+ * Copy one field.
  *
- * Together because they are useless apart: whoever is being handed this station
- * needs both, and pasting them as one block is what stops the code being lost
- * between two messages.
+ * Separately rather than as one block: the link and the code travel by
+ * different routes in practice — the link into a chat message or a QR, the code
+ * read aloud or sent after it — and pasting them together is what puts a
+ * working credential and its password in the same place.
  */
-async function copyStation() {
-    if (!newStation.value) {
+async function copyField(field, value) {
+    try {
+        await navigator.clipboard.writeText(value);
+    } catch {
+        // Clipboard access needs a secure context; on plain http over a LAN
+        // address it simply is not there. Say nothing rather than claim a copy
+        // that did not happen — the value is on screen and selectable.
         return;
     }
 
-    await navigator.clipboard.writeText(
-        `${newStation.value.url}\nCode: ${newStation.value.code}`
-    );
+    copiedField.value = field;
 
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 2000);
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copiedField.value = null), 2000);
 }
 
 /*
@@ -341,25 +354,53 @@ const applyBulk = (action) => {
                         Station ready<span v-if="newStation.label"> · {{ newStation.label }}</span>
                     </p>
                     <p class="mt-1 text-xs leading-relaxed text-csc-ink/70">
-                        Send both lines to whoever is working the door. The code is shown once and
-                        cannot be recovered — if it is lost, issue a new station.
+                        Copy each to whoever is working the door. Sending the code by a different
+                        route than the link is safer, since either one alone is useless. The code
+                        is shown once and cannot be recovered — if it is lost, issue a new station.
                     </p>
 
+                    <!--
+                        Each value owns its copy control. The button sits inside
+                        the field rather than under the pair, so there is never a
+                        question of which one it acts on.
+                    -->
                     <div class="mt-3 space-y-2">
-                        <p class="rounded-lg bg-white px-3 py-2 font-mono text-xs break-all text-csc-ink">
-                            {{ newStation.url }}
-                        </p>
-                        <p class="rounded-lg bg-white px-3 py-2 font-mono text-lg font-bold tracking-[0.3em] text-csc-ink">
-                            {{ newStation.code }}
-                        </p>
+                        <div class="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
+                            <p class="min-w-0 flex-1 font-mono text-xs break-all text-csc-ink">
+                                {{ newStation.url }}
+                            </p>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded-md p-1.5 text-csc-ink/50 transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
+                                :title="copiedField === 'url' ? 'Link copied' : 'Copy link'"
+                                @click="copyField('url', newStation.url)"
+                            >
+                                <AppIcon
+                                    :name="copiedField === 'url' ? 'check' : 'clipboard'"
+                                    :label="copiedField === 'url' ? 'Link copied' : 'Copy link'"
+                                />
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
+                            <p class="min-w-0 flex-1 font-mono text-lg font-bold tracking-[0.3em] text-csc-ink">
+                                {{ newStation.code }}
+                            </p>
+                            <button
+                                type="button"
+                                class="shrink-0 rounded-md p-1.5 text-csc-ink/50 transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
+                                :title="copiedField === 'code' ? 'Code copied' : 'Copy code'"
+                                @click="copyField('code', newStation.code)"
+                            >
+                                <AppIcon
+                                    :name="copiedField === 'code' ? 'check' : 'clipboard'"
+                                    :label="copiedField === 'code' ? 'Code copied' : 'Copy code'"
+                                />
+                            </button>
+                        </div>
                     </div>
 
-                    <div class="mt-3 flex flex-wrap items-center gap-2">
-                        <AppButton size="sm" variant="ghost" @click="copyStation">
-                            {{ copied ? 'Copied' : 'Copy link and code' }}
-                        </AppButton>
-                        <span class="text-xs text-csc-ink/60">Expires {{ newStation.expires_at }}</span>
-                    </div>
+                    <p class="mt-3 text-xs text-csc-ink/60">Expires {{ newStation.expires_at }}</p>
                 </div>
 
                 <!-- Issue -->
