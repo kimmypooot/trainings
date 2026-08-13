@@ -7,6 +7,8 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppIcon from '@/Components/AppIcon.vue';
+import AppStat from '@/Components/AppStat.vue';
 
 const props = defineProps({
     summary: { type: Object, required: true },
@@ -57,27 +59,64 @@ const quickActions = [
         label: 'Browse Trainings',
         description: 'Find a program',
         href: '/trainings',
-        icon: 'M4 6h16M4 12h16M4 18h10',
+        icon: 'list',
     },
     {
         label: 'My QR Code',
         description: 'For event check-in',
         href: '/my/qr',
-        icon: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z',
+        icon: 'qr',
     },
     {
         label: 'Certificates',
         description: 'View and download',
         href: '/my/certificates',
-        icon: 'M12 4a5 5 0 1 1 0 10 5 5 0 0 1 0-10ZM9 14.5V21l3-1.8 3 1.8v-6.5',
+        icon: 'certificate',
     },
     {
         label: 'My Profile',
         description: 'Keep details current',
         href: '/profile',
-        icon: 'M4.5 20a7.5 7.5 0 0 1 15 0M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7',
+        icon: 'user',
     },
 ];
+
+/*
+ * How each kind of event reads on the feed.
+ *
+ * The tones borrow the semantic palette the badges already use, so a green tile
+ * means the same thing here as it does anywhere else in the app. Every tile
+ * also carries a distinct glyph — the feed has to survive greyscale print and
+ * colour blindness on its own, exactly as AppBadge does.
+ */
+const activityTones = {
+    registered: { icon: 'bookmark', node: 'bg-csc-blue-tint text-csc-blue' },
+    approved: { icon: 'check', node: 'bg-info-soft text-info' },
+    waitlisted: { icon: 'clock', node: 'bg-warning-soft text-warning' },
+    rejected: { icon: 'close', node: 'bg-danger-soft text-danger' },
+    withdrawn: { icon: 'close', node: 'bg-csc-line/60 text-csc-ink/60' },
+    completed: { icon: 'check', node: 'bg-success-soft text-success' },
+    certificate: { icon: 'certificate', node: 'bg-success-soft text-success' },
+};
+
+// Consecutive entries sharing a day band sit under one heading, so the eye gets
+// "Today" once rather than the same date stamped on every row.
+const activityGroups = computed(() => {
+    const groups = [];
+
+    for (const entry of props.recentActivity) {
+        const last = groups.at(-1);
+
+        if (last?.label === entry.group) {
+            last.entries.push(entry);
+            continue;
+        }
+
+        groups.push({ label: entry.group, entries: [entry] });
+    }
+
+    return groups;
+});
 
 // Labelled "Approved" rather than "Registered": the count excludes pending
 // registrations, and the badge vocabulary elsewhere already says "Approved".
@@ -92,7 +131,7 @@ const stats = computed(() => [
     <Head title="Dashboard" />
 
     <AuthenticatedLayout title="Dashboard" current="dashboard">
-        <div class="mx-auto max-w-5xl space-y-6">
+        <div class="mx-auto max-w-6xl space-y-5">
             <!-- 1. Greeting + state -->
             <div>
                 <h2 class="text-xl font-semibold tracking-tight text-csc-blue sm:text-2xl">
@@ -138,11 +177,11 @@ const stats = computed(() => [
                 </template>
             </AppCard>
 
-            <AppCard v-else padded>
+            <AppCard v-else :padded="false">
                 <AppEmptyState
                     title="No upcoming trainings"
                     description="When you register for a training, it will appear here with its schedule, venue, and check-in code."
-                    icon="M8 3v3M16 3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"
+                    icon="calendar"
                 >
                     <template #action>
                         <AppButton href="/trainings" size="md">Browse Trainings</AppButton>
@@ -161,9 +200,7 @@ const stats = computed(() => [
                         class="flex min-h-24 flex-col justify-between rounded-xl border border-csc-line bg-white p-4 transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                     >
                         <span class="inline-flex size-9 items-center justify-center rounded-lg bg-csc-blue-tint text-csc-blue">
-                            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                <path :d="action.icon" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
+                            <AppIcon :name="action.icon" />
                         </span>
                         <span class="mt-3 block">
                             <span class="block text-sm font-semibold text-csc-ink">{{ action.label }}</span>
@@ -174,36 +211,78 @@ const stats = computed(() => [
             </div>
 
             <!-- 5. Recent activity -->
-            <AppCard title="Recent Activity" :padded="recentActivity.length === 0">
-                <ol v-if="recentActivity.length" class="divide-y divide-csc-line">
-                    <li v-for="entry in recentActivity" :key="entry.id" class="flex items-start gap-3 py-3.5">
-                        <AppBadge :status="entry.status" />
-                        <div class="min-w-0 flex-1">
-                            <p class="text-sm font-medium text-csc-ink">{{ entry.title }}</p>
-                            <p class="mt-0.5 text-xs text-csc-ink/60">{{ entry.happened_at }}</p>
-                        </div>
-                    </li>
-                </ol>
+            <AppCard title="Recent Activity" :padded="recentActivity.length > 0">
+                <template v-if="recentActivity.length" #action>
+                    <AppButton href="/my/registrations" size="sm" variant="ghost">View All</AppButton>
+                </template>
+
+                <!--
+                    Each event is its own tile, so a glance over the dashboard
+                    reads as a set of things that happened, not a sequence. The
+                    tiles sit in a two-up grid and borrow the quick-action card
+                    treatment — soft border, tinted hover, and a title + time
+                    on the right of the semantic icon tile.
+                -->
+                <div v-if="recentActivity.length" class="space-y-8">
+                    <section v-for="group in activityGroups" :key="group.label">
+                        <h3 class="mb-4 text-2xs font-semibold tracking-wider text-csc-ink/50 uppercase">
+                            {{ group.label }}
+                        </h3>
+
+                        <ul class="grid gap-4 sm:grid-cols-2">
+                            <li v-for="entry in group.entries" :key="entry.id">
+                                <Link
+                                    :href="entry.url"
+                                    class="group flex h-full items-start gap-4 rounded-xl border border-csc-line bg-white p-4 transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                >
+                                    <span
+                                        class="inline-flex size-10 shrink-0 items-center justify-center rounded-lg"
+                                        :class="activityTones[entry.kind].node"
+                                    >
+                                        <AppIcon :name="activityTones[entry.kind].icon" />
+                                    </span>
+
+                                    <span class="min-w-0 flex-1">
+                                        <span
+                                            class="block truncate text-sm leading-5 font-semibold text-csc-ink transition-colors group-hover:text-csc-blue"
+                                        >
+                                            {{ entry.title }}
+                                        </span>
+                                        <span class="mt-0.5 block truncate text-sm leading-5 text-csc-ink/70">
+                                            {{ entry.subject }}
+                                        </span>
+                                        <time
+                                            v-if="entry.at"
+                                            :datetime="entry.at"
+                                            :title="entry.at_exact"
+                                            class="mt-2 block text-xs leading-4 text-csc-ink/50"
+                                        >
+                                            {{ entry.at_label }}
+                                        </time>
+                                    </span>
+                                </Link>
+                            </li>
+                        </ul>
+                    </section>
+                </div>
 
                 <AppEmptyState
                     v-else
                     title="Nothing here yet"
-                    description="Your registrations will be listed here as they are approved and completed."
-                    icon="M12 8v4l2.5 2.5M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z"
+                    description="Registrations, approvals, completions, and certificates will appear here as they happen."
+                    icon="clock"
                 />
             </AppCard>
 
             <!-- 6. Summary counts — navigational, deliberately last -->
             <div class="grid grid-cols-3 gap-3">
-                <Link
+                <AppStat
                     v-for="stat in stats"
                     :key="stat.label"
+                    :label="stat.label"
+                    :value="stat.value"
                     :href="stat.href"
-                    class="rounded-xl border border-csc-line bg-white p-4 text-center transition-colors duration-150 hover:border-csc-blue/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue sm:p-5"
-                >
-                    <span class="block text-2xl font-bold text-csc-blue sm:text-3xl">{{ stat.value }}</span>
-                    <span class="mt-1 block text-xs font-medium text-csc-ink/60 sm:text-sm">{{ stat.label }}</span>
-                </Link>
+                />
             </div>
         </div>
     </AuthenticatedLayout>

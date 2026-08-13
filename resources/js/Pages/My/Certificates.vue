@@ -70,7 +70,7 @@ defineProps({
                 <AppEmptyState
                     title="No certificates yet"
                     description="Complete a training and your certificate will appear here once the Commission releases it."
-                    icon="M12 4a5 5 0 1 1 0 10 5 5 0 0 1 0-10ZM9 14.5V21l3-1.8 3 1.8v-6.5"
+                    icon="certificate"
                 >
                     <template #action>
                         <AppButton href="/trainings">Browse Trainings</AppButton>

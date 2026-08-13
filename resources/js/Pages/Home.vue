@@ -1,8 +1,13 @@
 <script setup>
+import { computed } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal.vue';
 import AppButton from '@/Components/AppButton.vue';
+
+const props = defineProps({
+    stats: { type: Array, default: () => [] },
+});
 
 // Arrangement follows the RO VIII portal: a single centred row of official
 // seals sitting above the eyebrow badge and headline, with the CSC logo in
@@ -36,12 +41,16 @@ const features = [
     },
 ];
 
-const stats = [
+// Failsafe copy when the controller passes nothing (e.g. the page is rendered
+// outside the Laravel app). The served figures normally come from HomeController.
+const fallbackStats = [
     { figure: '12,400+', label: 'Personnel enrolled' },
     { figure: '320', label: 'Programs delivered' },
     { figure: '96%', label: 'Completion rate' },
     { figure: '17', label: 'Regional offices' },
 ];
+
+const stats = computed(() => (props.stats.length ? props.stats : fallbackStats));
 </script>
 
 <template>

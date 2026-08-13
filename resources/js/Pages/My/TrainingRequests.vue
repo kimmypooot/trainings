@@ -1,9 +1,7 @@
 <script setup>
-import { computed } from 'vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
@@ -13,9 +11,6 @@ import AppEmptyState from '@/Components/AppEmptyState.vue';
 defineProps({
     requests: { type: Array, required: true },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const form = useForm({
     title: '',
@@ -34,8 +29,6 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
 
     <AuthenticatedLayout title="Request a Training" current="training-requests">
         <div class="mx-auto max-w-3xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
             <p class="text-sm leading-relaxed text-csc-ink/70">
                 If your agency needs a training that is not in the catalogue, ask CSC to run one. HRD reviews
                 every request and will schedule it if there is enough demand.
@@ -92,12 +85,12 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
                 </form>
             </AppCard>
 
-            <AppCard title="My Requests" :padded="!requests.length">
+            <AppCard title="My Requests" :padded="requests.length > 0">
                 <AppEmptyState
                     v-if="!requests.length"
                     title="No requests yet"
                     description="Requests you submit appear here with their status."
-                    icon="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"
+                    icon="document"
                 />
 
                 <ul v-else class="space-y-3">

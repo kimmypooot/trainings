@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
@@ -7,6 +7,7 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPromptModal from '@/Components/AppPromptModal.vue';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -17,30 +18,61 @@ const props = defineProps({
 });
 
 const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 const errors = computed(() => Object.values(page.props.errors ?? {}));
+
+/*
+ * Anything that has to be justified opens the same dialog.
+ *
+ * `prompt` describes what is being decided; `onConfirm` receives the reason and
+ * performs it. One piece of state, so two dialogs can never be open at once.
+ */
+const prompt = ref(null);
+const promptBusy = ref(false);
+
+const askFor = (config) => {
+    prompt.value = config;
+};
+
+const closePrompt = () => {
+    prompt.value = null;
+    promptBusy.value = false;
+};
+
+const confirmPrompt = (reason) => {
+    promptBusy.value = true;
+    prompt.value.onConfirm(reason);
+};
+
+const post = (url, payload) =>
+    router.post(url, payload, {
+        preserveScroll: true,
+        onSuccess: closePrompt,
+        onFinish: () => (promptBusy.value = false),
+    });
 
 /**
  * Completion follows the attendance record. When it falls short the server
  * refuses, so the override path is explicit and has to carry a reason.
  */
 const markComplete = (registration) => {
-    let payload = {};
+    if (registration.can_complete) {
+        post(`/admin/registrations/${registration.id}/complete`, {});
 
-    if (!registration.can_complete) {
-        const remarks = window.prompt(
-            `${registration.name} was recorded for ${registration.credited_days} of ` +
-                `${training.duration_days} day(s). Give a reason to complete anyway:`
-        );
-
-        if (!remarks) {
-            return;
-        }
-
-        payload = { force: true, remarks };
+        return;
     }
 
-    router.post(`/admin/registrations/${registration.id}/complete`, payload, { preserveScroll: true });
+    askFor({
+        title: 'Complete without a full attendance record',
+        description:
+            `${registration.name} was recorded for ${registration.credited_days} of ` +
+            `${props.training.duration_days} day(s).`,
+        label: 'Reason for the override',
+        hint: 'Kept on the registration so the exception stays auditable.',
+        confirmLabel: 'Complete anyway',
+        minLength: 10,
+        onConfirm: (remarks) =>
+            post(`/admin/registrations/${registration.id}/complete`, { force: true, remarks }),
+    });
 };
 
 const setAttendance = (registration, day, status) => {
@@ -68,31 +100,117 @@ const awaitingCertificates = computed(
     () => props.registrations.filter((r) => r.status === 'completed' && !r.certificate_number).length
 );
 
-const decide = (id, decision) => {
-    // A rejection has to carry a reason, so it is the one path that prompts.
-    let remarks = null;
+const decide = (registration, decision) => {
+    const url = `/admin/registrations/${registration.id}/review`;
 
-    if (decision === 'rejected') {
-        remarks = window.prompt('Reason for rejecting this registration:');
+    // A rejection has to carry a reason, so it is the one path that asks.
+    if (decision !== 'rejected') {
+        post(url, { decision, remarks: null });
 
-        if (!remarks) {
-            return;
-        }
+        return;
     }
 
-    router.post(`/admin/registrations/${id}/review`, { decision, remarks }, { preserveScroll: true });
+    askFor({
+        title: 'Reject this registration',
+        description: `${registration.name} will be told the registration was not approved.`,
+        label: 'Reason for rejection',
+        hint: 'Recorded against the registration.',
+        confirmLabel: 'Reject registration',
+        minLength: 10,
+        onConfirm: (remarks) => post(url, { decision, remarks }),
+    });
 };
 
 const pendingCount = computed(() => props.registrations.filter((r) => r.status === 'pending').length);
 
 const restrictions = computed(() => props.registrations.filter((r) => r.food_restrictions));
+
+/*
+ * Selection.
+ *
+ * Only rows a bulk action could actually apply to are selectable — a checkbox
+ * beside a cancelled registration is a promise the server will refuse to keep.
+ */
+const selectable = computed(() =>
+    props.registrations.filter((r) => ['pending', 'approved'].includes(r.status))
+);
+
+const selected = ref(new Set());
+
+// A selection is only meaningful for the rows currently on screen; when the
+// roster reloads after an action, anything no longer selectable drops out.
+watch(
+    () => props.registrations,
+    () => {
+        const ids = new Set(selectable.value.map((r) => r.id));
+        selected.value = new Set([...selected.value].filter((id) => ids.has(id)));
+    }
+);
+
+const isSelected = (id) => selected.value.has(id);
+
+const toggle = (id) => {
+    const next = new Set(selected.value);
+    next.has(id) ? next.delete(id) : next.add(id);
+    selected.value = next;
+};
+
+const allSelected = computed(
+    () => selectable.value.length > 0 && selected.value.size === selectable.value.length
+);
+
+const toggleAll = () => {
+    selected.value = allSelected.value ? new Set() : new Set(selectable.value.map((r) => r.id));
+};
+
+const selectedRows = computed(() => props.registrations.filter((r) => selected.value.has(r.id)));
+const selectedPending = computed(() => selectedRows.value.filter((r) => r.status === 'pending').length);
+const selectedApproved = computed(() => selectedRows.value.filter((r) => r.status === 'approved').length);
+
+const applying = ref(false);
+
+const sendBulk = (action, remarks = null) => {
+    applying.value = true;
+
+    router.post(
+        `/admin/trainings/${props.training.id}/registrations/bulk`,
+        { action, ids: [...selected.value], remarks },
+        {
+            preserveScroll: true,
+            onSuccess: closePrompt,
+            onFinish: () => {
+                applying.value = false;
+                promptBusy.value = false;
+            },
+        }
+    );
+};
+
+const applyBulk = (action) => {
+    if (action !== 'rejected') {
+        sendBulk(action);
+
+        return;
+    }
+
+    const count = selectedPending.value;
+
+    askFor({
+        title: `Reject ${count} registration(s)`,
+        description: 'The same reason is recorded against every one of them.',
+        label: 'Reason for rejection',
+        confirmLabel: `Reject ${count}`,
+        minLength: 10,
+        onConfirm: (remarks) => sendBulk(action, remarks),
+    });
+};
 </script>
 
 <template>
     <Head :title="`Roster — ${training.title}`" />
 
     <AuthenticatedLayout title="Roster" current="admin-trainings">
-        <div class="mx-auto max-w-5xl space-y-5">
+        <div class="mx-auto max-w-6xl space-y-5">
             <Link
                 href="/admin/trainings"
                 class="inline-flex items-center gap-1.5 text-sm font-medium text-csc-blue hover:text-csc-blue-deep"
@@ -115,8 +233,6 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                     Export Roster (Excel)
                 </AppButton>
             </div>
-
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
 
             <AppAlert v-for="message in errors" :key="message" tone="danger">{{ message }}</AppAlert>
 
@@ -169,18 +285,94 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                 </ul>
             </AppAlert>
 
-            <AppCard title="Participants" :padded="!registrations.length">
+            <AppCard title="Participants" :padded="registrations.length > 0">
                 <AppEmptyState
                     v-if="!registrations.length"
                     title="No one has registered yet"
                     description="Registrations will appear here as participants sign up."
-                    icon="M3 20a6 6 0 0 1 12 0M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"
+                    icon="users"
                 />
 
-                <div v-else class="-mx-5 overflow-x-auto sm:-mx-6">
+                <template v-else>
+                <!--
+                    The bulk bar sticks to the bottom of the viewport rather
+                    than the top of the table: on a long roster the selection is
+                    made while scrolled well past any header.
+
+                    Below md it has to clear the mobile tab bar, which is fixed
+                    to the bottom at 3.5rem plus the safe-area inset; at md that
+                    bar is gone and this one can sit flush.
+                -->
+                <div
+                    v-if="selected.size"
+                    class="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-(--z-tabbar) -mx-5 flex flex-wrap items-center gap-3 border-t border-csc-line bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:bottom-0"
+                >
+                    <p class="text-sm font-medium text-csc-ink" role="status">
+                        {{ selected.size }} selected
+                    </p>
+
+                    <button
+                        type="button"
+                        class="rounded text-xs font-medium text-csc-ink/60 underline hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        @click="selected = new Set()"
+                    >
+                        Clear
+                    </button>
+
+                    <div class="ml-auto flex flex-wrap gap-2">
+                        <AppButton
+                            v-if="selectedPending"
+                            size="sm"
+                            variant="ghost"
+                            :loading="applying"
+                            @click="applyBulk('approved')"
+                        >
+                            Approve {{ selectedPending }}
+                        </AppButton>
+                        <AppButton
+                            v-if="selectedPending"
+                            size="sm"
+                            variant="ghost"
+                            :loading="applying"
+                            @click="applyBulk('waitlisted')"
+                        >
+                            Waitlist {{ selectedPending }}
+                        </AppButton>
+                        <AppButton
+                            v-if="selectedPending"
+                            size="sm"
+                            variant="ghost"
+                            :loading="applying"
+                            @click="applyBulk('rejected')"
+                        >
+                            Reject {{ selectedPending }}
+                        </AppButton>
+                        <AppButton
+                            v-if="selectedApproved"
+                            size="sm"
+                            :loading="applying"
+                            @click="applyBulk('completed')"
+                        >
+                            Mark {{ selectedApproved }} Complete
+                        </AppButton>
+                    </div>
+                </div>
+
+                <div class="-mx-5 overflow-x-auto sm:-mx-6">
                     <table class="w-full min-w-160 text-left text-sm">
                         <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
+                                <th scope="col" class="w-10 py-3 pl-5">
+                                    <input
+                                        type="checkbox"
+                                        class="size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        :checked="allSelected"
+                                        :indeterminate="selected.size > 0 && !allSelected"
+                                        :disabled="!selectable.length"
+                                        :aria-label="allSelected ? 'Clear selection' : 'Select all actionable participants'"
+                                        @change="toggleAll"
+                                    />
+                                </th>
                                 <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Participant</th>
                                 <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Agency</th>
                                 <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Field Office</th>
@@ -190,7 +382,21 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
-                            <tr v-for="registration in registrations" :key="registration.id">
+                            <tr
+                                v-for="registration in registrations"
+                                :key="registration.id"
+                                :class="isSelected(registration.id) ? 'bg-csc-blue-tint/50' : ''"
+                            >
+                                <td class="py-3.5 pl-5">
+                                    <input
+                                        v-if="['pending', 'approved'].includes(registration.status)"
+                                        type="checkbox"
+                                        class="size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        :checked="isSelected(registration.id)"
+                                        :aria-label="`Select ${registration.name}`"
+                                        @change="toggle(registration.id)"
+                                    />
+                                </td>
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">{{ registration.name }}</p>
                                     <p class="mt-0.5 text-xs text-csc-ink/60">{{ registration.email }}</p>
@@ -246,7 +452,7 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
 
                                     <p
                                         v-if="isMarkable(registration) && training.duration_days > 1"
-                                        class="mt-1 text-[11px] text-csc-ink/55"
+                                        class="mt-1 text-2xs text-csc-ink/55"
                                     >
                                         {{ registration.credited_days }} of {{ training.duration_days }} days
                                     </p>
@@ -256,7 +462,7 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                                         <button
                                             type="button"
                                             class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="decide(registration.id, 'approved')"
+                                            @click="decide(registration, 'approved')"
                                         >
                                             Approve
                                         </button>
@@ -264,7 +470,7 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                                         <button
                                             type="button"
                                             class="rounded text-xs font-semibold text-warning hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="decide(registration.id, 'waitlisted')"
+                                            @click="decide(registration, 'waitlisted')"
                                         >
                                             Waitlist
                                         </button>
@@ -272,7 +478,7 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                                         <button
                                             type="button"
                                             class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="decide(registration.id, 'rejected')"
+                                            @click="decide(registration, 'rejected')"
                                         >
                                             Reject
                                         </button>
@@ -290,9 +496,21 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                                     <template v-else-if="registration.status === 'completed'">
                                         <span
                                             v-if="registration.certificate_number"
-                                            class="font-mono text-[11px] text-csc-ink/60"
+                                            class="font-mono text-2xs text-csc-ink/60"
                                         >
                                             {{ registration.certificate_number }}
+                                        </span>
+                                        <!--
+                                            A promissory note gets someone into
+                                            the room but not onto a certificate,
+                                            so the button is replaced by the
+                                            reason rather than left to fail.
+                                        -->
+                                        <span
+                                            v-else-if="!registration.fee_cleared"
+                                            class="text-2xs text-warning"
+                                        >
+                                            Fee outstanding
                                         </span>
                                         <AppButton
                                             v-else
@@ -310,7 +528,21 @@ const restrictions = computed(() => props.registrations.filter((r) => r.food_res
                         </tbody>
                     </table>
                 </div>
+                </template>
             </AppCard>
         </div>
+
+        <AppPromptModal
+            :open="prompt !== null"
+            :title="prompt?.title ?? ''"
+            :description="prompt?.description"
+            :label="prompt?.label"
+            :hint="prompt?.hint"
+            :confirm-label="prompt?.confirmLabel"
+            :min-length="prompt?.minLength ?? 1"
+            :processing="promptBusy"
+            @confirm="confirmPrompt"
+            @close="closePrompt"
+        />
     </AuthenticatedLayout>
 </template>

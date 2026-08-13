@@ -1,19 +1,16 @@
 <script setup>
-import { computed } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPromptModal from '@/Components/AppPromptModal.vue';
 
 const props = defineProps({
     registrations: { type: Array, required: true },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const upcoming = computed(() => props.registrations.filter((r) => !r.training.is_past));
 const past = computed(() => props.registrations.filter((r) => r.training.is_past));
@@ -22,18 +19,22 @@ const past = computed(() => props.registrations.filter((r) => r.training.is_past
  * Withdrawing is a request, not an immediate cancellation — CSC caters and
  * prints against a confirmed head count — so the slot is held until reviewed.
  */
-const withdraw = (registration) => {
-    const reason = window.prompt(
-        `Why are you withdrawing from “${registration.training.title}”? CSC reviews every withdrawal.`
-    );
+const withdrawing = ref(null);
+const withdrawBusy = ref(false);
 
-    if (!reason) {
-        return;
-    }
+const closeWithdraw = () => {
+    withdrawing.value = null;
+    withdrawBusy.value = false;
+};
 
-    router.delete(`/my/registrations/${registration.id}`, {
+const submitWithdrawal = (reason) => {
+    withdrawBusy.value = true;
+
+    router.delete(`/my/registrations/${withdrawing.value.id}`, {
         data: { reason },
         preserveScroll: true,
+        onSuccess: closeWithdraw,
+        onFinish: () => (withdrawBusy.value = false),
     });
 };
 </script>
@@ -43,13 +44,11 @@ const withdraw = (registration) => {
 
     <AuthenticatedLayout title="My Registrations" current="registrations">
         <div class="mx-auto max-w-3xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
             <AppCard v-if="!registrations.length" :padded="false">
                 <AppEmptyState
                     title="You have not registered for any training yet"
                     description="Browse the catalogue and reserve a slot — your registrations will be listed here."
-                    icon="M7 4h10v16l-5-3-5 3z"
+                    icon="bookmark"
                 >
                     <template #action>
                         <AppButton href="/trainings">Browse Trainings</AppButton>
@@ -84,7 +83,7 @@ const withdraw = (registration) => {
                                     v-if="registration.can_withdraw"
                                     size="sm"
                                     variant="ghost"
-                                    @click="withdraw(registration)"
+                                    @click="withdrawing = registration"
                                 >
                                     Request Withdrawal
                                 </AppButton>
@@ -123,5 +122,22 @@ const withdraw = (registration) => {
                 </section>
             </template>
         </div>
+
+        <AppPromptModal
+            :open="withdrawing !== null"
+            title="Request withdrawal"
+            :description="
+                withdrawing
+                    ? `“${withdrawing.training.title}” — your slot is held until CSC reviews this.`
+                    : undefined
+            "
+            label="Why are you withdrawing?"
+            hint="CSC caters and prints against a confirmed head count, so every withdrawal is reviewed."
+            confirm-label="Send request"
+            :min-length="10"
+            :processing="withdrawBusy"
+            @confirm="submitWithdrawal"
+            @close="closeWithdraw"
+        />
     </AuthenticatedLayout>
 </template>

@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPromptModal from '@/Components/AppPromptModal.vue';
+import AppConfirmModal from '@/Components/AppConfirmModal.vue';
+import AppPagination from '@/Components/AppPagination.vue';
 
 const props = defineProps({
     payments: { type: Object, required: true },
@@ -15,32 +17,105 @@ const props = defineProps({
     statuses: { type: Array, default: () => [] },
 });
 
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
-
 const active = ref('payments');
 
 const pendingRefunds = computed(() => props.refunds.filter((r) => r.status === 'pending').length);
 
 const filterBy = (status) =>
-    router.get('/admin/payments', { status }, { preserveState: true, preserveScroll: true });
+    router.get(
+        '/admin/payments',
+        {
+            status,
+            // A new filter starts from the first page, not wherever the last
+            // filter left the user.
+            page: 1,
+        },
+        { preserveState: true, preserveScroll: true }
+    );
 
 /**
- * A rejection has to carry a reason — money decisions are the ones most likely
- * to be queried later.
+ * Two dialogs cover all reviews: a rejection has to carry a reason, so it opens
+ * the prompt; an approval is a yes/no on the spot, so it asks for confirmation
+ * instead of firing the moment the button is tapped.
  */
-const decide = (url, decision, rejectValue) => {
-    let remarks = null;
+const prompt = ref(null);
+const promptBusy = ref(false);
+const confirm = ref(null);
+const confirmBusy = ref(false);
 
-    if (decision === rejectValue) {
-        remarks = window.prompt('Reason for rejecting:');
+const closePrompt = () => {
+    prompt.value = null;
+    promptBusy.value = false;
+};
+const closeConfirm = () => {
+    confirm.value = null;
+    confirmBusy.value = false;
+};
 
-        if (!remarks) {
-            return;
-        }
-    }
+const confirmPrompt = (reason) => {
+    promptBusy.value = true;
+    prompt.value.onConfirm(reason);
+};
 
-    router.post(url, { decision, remarks }, { preserveScroll: true });
+const confirmDecision = () => {
+    confirmBusy.value = true;
+    confirm.value.onConfirm();
+};
+
+const post = (url, payload) =>
+    router.post(url, payload, {
+        preserveScroll: true,
+        onSuccess: () => {
+            closePrompt();
+            closeConfirm();
+        },
+        onFinish: () => {
+            promptBusy.value = false;
+            confirmBusy.value = false;
+        },
+    });
+
+/** Money decisions get the confirmation; only a rejection asks why. */
+const verifyPayment = (payment) => {
+    confirm.value = {
+        title: 'Verify this payment?',
+        description: `${payment.participant} paid PHP ${payment.amount} for “${payment.training}”.`,
+        confirmLabel: 'Verify payment',
+        onConfirm: () =>
+            post(`/admin/payments/${payment.id}/review`, { decision: 'verified', remarks: null }),
+    };
+};
+
+const rejectPayment = (payment) => {
+    prompt.value = {
+        title: 'Reject this payment',
+        description: 'The participant sees this reason and can submit a corrected proof of payment.',
+        label: 'Reason for rejection',
+        confirmLabel: 'Reject payment',
+        minLength: 10,
+        onConfirm: (remarks) => post(`/admin/payments/${payment.id}/review`, { decision: 'rejected', remarks }),
+    };
+};
+
+const approveRefund = (refund) => {
+    confirm.value = {
+        title: 'Approve this refund?',
+        description: `PHP ${refund.amount} will be returned to ${refund.participant} for “${refund.training}”.`,
+        confirmLabel: 'Approve refund',
+        onConfirm: () =>
+            post(`/admin/refunds/${refund.id}/review`, { decision: 'approved', remarks: null }),
+    };
+};
+
+const rejectRefund = (refund) => {
+    prompt.value = {
+        title: 'Decline this refund',
+        description: `The participant is shown this reason for the declined PHP ${refund.amount} refund.`,
+        label: 'Reason for declining',
+        confirmLabel: 'Decline refund',
+        minLength: 10,
+        onConfirm: (remarks) => post(`/admin/refunds/${refund.id}/review`, { decision: 'rejected', remarks }),
+    };
 };
 </script>
 
@@ -48,9 +123,7 @@ const decide = (url, decision, rejectValue) => {
     <Head title="Payments" />
 
     <AuthenticatedLayout title="Payments" current="admin-payments">
-        <div class="mx-auto max-w-5xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
+        <div class="mx-auto max-w-6xl space-y-5">
             <div class="flex flex-wrap gap-2" role="tablist">
                 <button
                     type="button"
@@ -107,12 +180,12 @@ const decide = (url, decision, rejectValue) => {
                     </button>
                 </div>
 
-                <AppCard title="Payment Verification" :padded="!payments.data.length">
+                <AppCard title="Payment Verification" :padded="payments.data.length > 0">
                     <AppEmptyState
                         v-if="!payments.data.length"
                         title="Nothing to verify"
                         description="Payments submitted by participants appear here."
-                        icon="M3 10h18M5 6h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"
+                        icon="card"
                     />
 
                     <ul v-else class="space-y-3">
@@ -153,17 +226,10 @@ const decide = (url, decision, rejectValue) => {
                                 </a>
 
                                 <template v-if="payment.status === 'pending'">
-                                    <AppButton
-                                        size="sm"
-                                        @click="decide(`/admin/payments/${payment.id}/review`, 'verified', 'rejected')"
-                                    >
+                                    <AppButton size="sm" @click="verifyPayment(payment)">
                                         Verify
                                     </AppButton>
-                                    <AppButton
-                                        size="sm"
-                                        variant="ghost"
-                                        @click="decide(`/admin/payments/${payment.id}/review`, 'rejected', 'rejected')"
-                                    >
+                                    <AppButton size="sm" variant="ghost" @click="rejectPayment(payment)">
                                         Reject
                                     </AppButton>
                                 </template>
@@ -171,14 +237,16 @@ const decide = (url, decision, rejectValue) => {
                         </li>
                     </ul>
                 </AppCard>
+
+                <AppPagination :pagination="payments" label="payments" class="pt-1" />
             </template>
 
-            <AppCard v-else title="Refund Requests" :padded="!refunds.length">
+            <AppCard v-else title="Refund Requests" :padded="refunds.length > 0">
                 <AppEmptyState
                     v-if="!refunds.length"
                     title="No refund requests"
                     description="Claims against verified payments appear here."
-                    icon="M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-3"
+                    icon="arrow-left"
                 />
 
                 <ul v-else class="space-y-3">
@@ -198,17 +266,10 @@ const decide = (url, decision, rejectValue) => {
                         </p>
 
                         <div v-if="refund.status === 'pending'" class="mt-4 flex flex-wrap gap-2">
-                            <AppButton
-                                size="sm"
-                                @click="decide(`/admin/refunds/${refund.id}/review`, 'approved', 'rejected')"
-                            >
+                            <AppButton size="sm" @click="approveRefund(refund)">
                                 Approve Refund
                             </AppButton>
-                            <AppButton
-                                size="sm"
-                                variant="ghost"
-                                @click="decide(`/admin/refunds/${refund.id}/review`, 'rejected', 'rejected')"
-                            >
+                            <AppButton size="sm" variant="ghost" @click="rejectRefund(refund)">
                                 Decline
                             </AppButton>
                         </div>
@@ -216,5 +277,27 @@ const decide = (url, decision, rejectValue) => {
                 </ul>
             </AppCard>
         </div>
+
+        <AppPromptModal
+            :open="prompt !== null"
+            :title="prompt?.title ?? ''"
+            :description="prompt?.description"
+            :label="prompt?.label"
+            :confirm-label="prompt?.confirmLabel"
+            :min-length="prompt?.minLength ?? 1"
+            :processing="promptBusy"
+            @confirm="confirmPrompt"
+            @close="closePrompt"
+        />
+
+        <AppConfirmModal
+            :open="confirm !== null"
+            :title="confirm?.title ?? ''"
+            :description="confirm?.description"
+            :confirm-label="confirm?.confirmLabel"
+            :processing="confirmBusy"
+            @confirm="confirmDecision"
+            @close="closeConfirm"
+        />
     </AuthenticatedLayout>
 </template>

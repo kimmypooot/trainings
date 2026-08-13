@@ -90,7 +90,7 @@ const employment = [
                 </AppCard>
             </template>
 
-            <AppCard title="Training History" :padded="!registrations.length">
+            <AppCard title="Training History" :padded="registrations.length > 0">
                 <ul v-if="registrations.length" class="divide-y divide-csc-line">
                     <li
                         v-for="registration in registrations"
@@ -109,7 +109,7 @@ const employment = [
                     v-else
                     title="No training history"
                     description="This participant has not registered for any training yet."
-                    icon="M7 4h10v16l-5-3-5 3z"
+                    icon="bookmark"
                 />
             </AppCard>
         </div>

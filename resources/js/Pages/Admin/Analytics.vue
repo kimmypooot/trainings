@@ -37,7 +37,7 @@ const tiles = computed(() => [
     <Head title="Analytics" />
 
     <AuthenticatedLayout title="Analytics" current="admin-analytics">
-        <div class="mx-auto max-w-5xl space-y-5">
+        <div class="mx-auto max-w-6xl space-y-5">
             <AppAlert v-if="scopedTo" tone="info">
                 Figures cover <strong>{{ scopedTo }}</strong> only.
             </AppAlert>

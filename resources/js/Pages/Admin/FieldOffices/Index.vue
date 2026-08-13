@@ -1,18 +1,13 @@
 <script setup>
-import { computed } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 
 defineProps({
     offices: { type: Array, required: true },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const toggle = (office) =>
     router.post(`/admin/field-offices/${office.id}/toggle`, {}, { preserveScroll: true });
@@ -23,8 +18,6 @@ const toggle = (office) =>
 
     <AuthenticatedLayout title="Field Offices" current="admin-field-offices">
         <div class="mx-auto max-w-6xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p class="text-sm leading-relaxed text-csc-ink/70">
                     Offices participants select on their profile. Deactivate rather than delete — existing
@@ -37,7 +30,7 @@ const toggle = (office) =>
                 <AppEmptyState
                     title="No field offices yet"
                     description="Add the offices participants can be assigned to."
-                    icon="M4 20h16M6 20V8l6-4 6 4v12M10 12h4"
+                    icon="building"
                 >
                     <template #action>
                         <AppButton href="/admin/field-offices/create">New Office</AppButton>

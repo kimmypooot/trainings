@@ -8,6 +8,17 @@ defineProps({
         default: 'plain',
         validator: (value) => ['plain', 'brand'].includes(value),
     },
+    /*
+     * Gutters around the body.
+     *
+     * Keep this true whenever the card holds real content — lists, tables and
+     * forms all assume the gutter is there, and a table that bleeds to the card
+     * edge with `-mx-5` needs a matching `px-5` to bleed *from*.
+     *
+     * Set it false only when the sole child brings its own padding, which in
+     * practice means an AppEmptyState. Reading it as "is the card empty?" is
+     * backwards and has been the source of every spacing bug here.
+     */
     padded: { type: Boolean, default: true },
 });
 </script>

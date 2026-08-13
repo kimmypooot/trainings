@@ -22,7 +22,7 @@ const light = computed(() => props.variant === 'light');
 
 const markSize = computed(() => ({ sm: 'h-8', md: 'h-10', lg: 'h-14' })[props.size]);
 const titleSize = computed(() => ({ sm: 'text-sm', md: 'text-base', lg: 'text-xl' })[props.size]);
-const subSize = computed(() => ({ sm: 'text-[10px]', md: 'text-[11px]', lg: 'text-xs' })[props.size]);
+const subSize = computed(() => ({ sm: 'text-[10px]', md: 'text-2xs', lg: 'text-xs' })[props.size]);
 </script>
 
 <template>

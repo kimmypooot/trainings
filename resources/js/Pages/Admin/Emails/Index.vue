@@ -1,13 +1,12 @@
 <script setup>
-import { computed } from 'vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPagination from '@/Components/AppPagination.vue';
 
 const props = defineProps({
     logs: { type: Object, required: true },
@@ -15,9 +14,6 @@ const props = defineProps({
     trainings: { type: Array, default: () => [] },
     audiences: { type: Array, default: () => [] },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const form = useForm({
     training_id: props.trainings[0]?.value ?? '',
@@ -37,9 +33,7 @@ const submit = () =>
     <Head title="Emails" />
 
     <AuthenticatedLayout title="Emails" current="admin-emails">
-        <div class="mx-auto max-w-5xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
+        <div class="mx-auto max-w-6xl space-y-5">
             <AppCard
                 title="Send an Announcement"
                 subtitle="Goes to the selected participants by email and as an in-app notification."
@@ -106,12 +100,12 @@ const submit = () =>
                 </form>
             </AppCard>
 
-            <AppCard title="Sent Mail" :padded="!logs.data.length">
+            <AppCard title="Sent Mail" :padded="logs.data.length > 0">
                 <AppEmptyState
                     v-if="!logs.data.length"
                     title="Nothing sent yet"
                     description="Outbound mail is recorded here automatically."
-                    icon="M3 7l9 6 9-6M3 7v10h18V7M3 7l9-4 9 4"
+                    icon="envelope"
                 />
 
                 <div v-else class="-mx-5 overflow-x-auto sm:-mx-6">
@@ -141,6 +135,8 @@ const submit = () =>
                         </tbody>
                     </table>
                 </div>
+
+                <AppPagination :pagination="logs" label="emails" class="pt-3" />
             </AppCard>
         </div>
     </AuthenticatedLayout>

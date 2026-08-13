@@ -1,26 +1,21 @@
 <script setup>
-import { computed } from 'vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPagination from '@/Components/AppPagination.vue';
 
 defineProps({
     trainings: { type: Object, required: true },
 });
 
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 </script>
 
 <template>
     <Head title="Trainings" />
 
     <AuthenticatedLayout title="Trainings" current="trainings">
-        <div class="mx-auto max-w-5xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
+        <div class="mx-auto max-w-6xl space-y-5">
             <p class="text-sm leading-relaxed text-csc-ink/70">
                 Programs offered by the Civil Service Commission. Slots are taken on a first-come basis.
             </p>
@@ -35,7 +30,7 @@ const flash = computed(() => page.props.flash?.success);
                         <!-- Date block reads faster than a formatted string in a grid -->
                         <div class="flex size-14 shrink-0 flex-col items-center justify-center rounded-lg bg-csc-blue text-white">
                             <span class="text-lg leading-none font-bold">{{ training.day }}</span>
-                            <span class="mt-0.5 text-[11px] font-medium uppercase">{{ training.month }}</span>
+                            <span class="mt-0.5 text-2xs font-medium uppercase">{{ training.month }}</span>
                         </div>
 
                         <div class="min-w-0 flex-1">
@@ -75,11 +70,13 @@ const flash = computed(() => page.props.flash?.success);
                 </article>
             </div>
 
+            <AppPagination v-if="trainings.data.length" :pagination="trainings" label="trainings" class="pt-1" />
+
             <AppCard v-else :padded="false">
                 <AppEmptyState
                     title="No trainings available right now"
                     description="When the Commission publishes a new program, it will appear here."
-                    icon="M8 3v3M16 3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"
+                    icon="calendar"
                 />
             </AppCard>
         </div>

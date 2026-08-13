@@ -1,22 +1,21 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
+import AppSelect from '@/Components/AppSelect.vue';
+import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPromptModal from '@/Components/AppPromptModal.vue';
 
 const props = defineProps({
     payments: { type: Array, required: true },
     awaitingPayment: { type: Array, required: true },
     methods: { type: Array, required: true },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const paying = ref(null);
 
@@ -28,12 +27,22 @@ const form = useForm({
     proof: null,
 });
 
-// Cash is settled over the counter against a receipt; every other method has a
-// reference that is the only proof there is.
-const needsReference = computed(() => form.payment_method !== 'cash');
+// Cash is settled over the counter against a receipt, and a promissory note is
+// its own document; every other method has a reference that is the only proof
+// there is.
+const needsReference = computed(() => !['cash', 'promissory'].includes(form.payment_method));
+
+const isPromissory = computed(() => form.payment_method === 'promissory');
+
+// Offered only where the training was published as accepting one. The server
+// applies the same rule — this keeps the option from appearing where it would
+// only be rejected.
+const availableMethods = computed(() =>
+    props.methods.filter((method) => method.value !== 'promissory' || paying.value?.accepts_promissory)
+);
 
 const startPaying = (item) => {
-    paying.value = item.registration_id;
+    paying.value = item;
     form.reset();
     form.amount = item.amount;
 };
@@ -47,14 +56,26 @@ const submit = () =>
         },
     });
 
-const requestRefund = (payment) => {
-    const reason = window.prompt('Why are you requesting a refund? (at least 10 characters)');
+const refunding = ref(null);
+const refundBusy = ref(false);
 
-    if (!reason) {
-        return;
-    }
+const closeRefund = () => {
+    refunding.value = null;
+    refundBusy.value = false;
+};
 
-    router.post(`/my/payments/${payment.id}/refund`, { reason }, { preserveScroll: true });
+const submitRefund = (reason) => {
+    refundBusy.value = true;
+
+    router.post(
+        `/my/payments/${refunding.value.id}/refund`,
+        { reason },
+        {
+            preserveScroll: true,
+            onSuccess: closeRefund,
+            onFinish: () => (refundBusy.value = false),
+        }
+    );
 };
 </script>
 
@@ -63,8 +84,6 @@ const requestRefund = (payment) => {
 
     <AuthenticatedLayout title="Payments" current="payments">
         <div class="mx-auto max-w-3xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
             <!-- Owed -->
             <AppCard v-if="awaitingPayment.length" title="Awaiting Payment">
                 <ul class="space-y-3">
@@ -79,7 +98,7 @@ const requestRefund = (payment) => {
                                 <p class="mt-0.5 text-sm text-csc-ink/60">PHP {{ item.amount }}</p>
                             </div>
                             <AppButton
-                                v-if="paying !== item.registration_id"
+                                v-if="paying?.registration_id !== item.registration_id"
                                 size="sm"
                                 @click="startPaying(item)"
                             >
@@ -88,7 +107,7 @@ const requestRefund = (payment) => {
                         </div>
 
                         <form
-                            v-if="paying === item.registration_id"
+                            v-if="paying?.registration_id === item.registration_id"
                             class="mt-5 grid gap-5 border-t border-csc-line pt-5"
                             novalidate
                             @submit.prevent="submit"
@@ -102,27 +121,13 @@ const requestRefund = (payment) => {
                                     required
                                 />
 
-                                <div>
-                                    <label
-                                        for="method"
-                                        class="mb-1.5 block text-sm font-medium text-csc-ink"
-                                    >
-                                        Method <span class="text-csc-red-ink" aria-hidden="true">*</span>
-                                    </label>
-                                    <select
-                                        id="method"
-                                        v-model="form.payment_method"
-                                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                                    >
-                                        <option
-                                            v-for="method in methods"
-                                            :key="method.value"
-                                            :value="method.value"
-                                        >
-                                            {{ method.label }}
-                                        </option>
-                                    </select>
-                                </div>
+                                <AppSelect
+                                    v-model="form.payment_method"
+                                    label="Method"
+                                    :options="availableMethods"
+                                    :error="form.errors.payment_method"
+                                    required
+                                />
 
                                 <AppInput
                                     v-if="needsReference"
@@ -134,16 +139,22 @@ const requestRefund = (payment) => {
 
                                 <AppInput
                                     v-model="form.payment_date"
-                                    label="Date Paid"
+                                    :label="isPromissory ? 'Date Signed' : 'Date Paid'"
                                     type="date"
                                     :error="form.errors.payment_date"
                                     required
                                 />
                             </div>
 
+                            <AppAlert v-if="isPromissory" tone="info">
+                                A promissory note secures your slot and gives you access to the training,
+                                including the join link for online sessions. Your certificate is held until
+                                the fee is paid and verified.
+                            </AppAlert>
+
                             <div>
                                 <label for="proof" class="mb-1.5 block text-sm font-medium text-csc-ink">
-                                    Proof of Payment
+                                    {{ isPromissory ? 'Signed Promissory Note' : 'Proof of Payment' }}
                                 </label>
                                 <input
                                     id="proof"
@@ -172,12 +183,12 @@ const requestRefund = (payment) => {
             </AppCard>
 
             <!-- History -->
-            <AppCard title="My Payments" :padded="!payments.length">
+            <AppCard title="My Payments" :padded="payments.length > 0">
                 <AppEmptyState
                     v-if="!payments.length"
                     title="No payments recorded"
                     description="Payments you submit appear here with their verification status."
-                    icon="M3 10h18M5 6h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"
+                    icon="card"
                 />
 
                 <ul v-else class="space-y-3">
@@ -212,7 +223,7 @@ const requestRefund = (payment) => {
                                 v-if="payment.can_request_refund"
                                 size="sm"
                                 variant="ghost"
-                                @click="requestRefund(payment)"
+                                @click="refunding = payment"
                             >
                                 Request Refund
                             </AppButton>
@@ -224,5 +235,22 @@ const requestRefund = (payment) => {
                 </ul>
             </AppCard>
         </div>
+
+        <AppPromptModal
+            :open="refunding !== null"
+            title="Request a refund"
+            :description="
+                refunding
+                    ? `PHP ${refunding.amount} for “${refunding.training}”. CSC finance reviews every request.`
+                    : undefined
+            "
+            label="Why are you requesting a refund?"
+            hint="At least 10 characters, so finance can act on it without coming back to you."
+            confirm-label="Send request"
+            :min-length="10"
+            :processing="refundBusy"
+            @confirm="submitRefund"
+            @close="closeRefund"
+        />
     </AuthenticatedLayout>
 </template>

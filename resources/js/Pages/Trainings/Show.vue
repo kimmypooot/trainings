@@ -6,6 +6,7 @@ import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -13,7 +14,6 @@ const props = defineProps({
 });
 
 const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 const error = computed(() => page.props.errors?.registration);
 
 const working = ref(false);
@@ -22,6 +22,28 @@ const confirmingCancel = ref(false);
 const isActive = computed(
     () => props.registration && ['pending', 'approved', 'completed'].includes(props.registration.status)
 );
+
+// Why the join link is not on the page yet. The link itself never reaches the
+// client until it is earned, so this only ever names the missing step.
+const joinLockedReason = computed(() => {
+    if (!props.training.has_meeting_link || props.training.meeting_link) {
+        return null;
+    }
+
+    if (!props.registration) {
+        return 'Register for this training to receive the join link.';
+    }
+
+    if (!props.registration.fee_settled) {
+        return 'The join link is released once your payment has been verified.';
+    }
+
+    if (props.registration.status === 'pending') {
+        return 'The join link is released once CSC approves your registration.';
+    }
+
+    return null;
+});
 
 const register = () => {
     working.value = true;
@@ -54,7 +76,6 @@ const cancel = () => {
                 All Trainings
             </Link>
 
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
             <AppAlert v-if="error" tone="danger">{{ error }}</AppAlert>
 
             <AppCard>
@@ -87,11 +108,50 @@ const cancel = () => {
                             </template>
                         </dd>
                     </div>
-                    <div v-if="training.registration_closes_at" class="sm:col-span-2">
+                    <div v-if="training.level_label">
+                        <dt class="text-csc-ink/60">Level</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">{{ training.level_label }}</dd>
+                    </div>
+                    <div v-if="training.registration_closes_at">
                         <dt class="text-csc-ink/60">Registration closes</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ training.registration_closes_at }}</dd>
                     </div>
+                    <div v-if="training.venue_details" class="sm:col-span-2">
+                        <dt class="text-csc-ink/60">Venue details</dt>
+                        <dd class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink/75">
+                            {{ training.venue_details }}
+                        </dd>
+                    </div>
                 </dl>
+
+                <!-- The join link, once it has been earned. -->
+                <div v-if="training.meeting_link" class="mt-5 rounded-lg bg-info-soft p-4">
+                    <h3 class="flex items-center gap-2 text-sm font-semibold text-info">
+                        <AppIcon name="link" size="sm" />
+                        Join link
+                    </h3>
+                    <a
+                        :href="training.meeting_link"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="mt-1.5 block text-sm font-medium break-all text-csc-blue underline underline-offset-2 transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    >
+                        {{ training.meeting_link }}
+                    </a>
+                    <p class="mt-1.5 text-xs text-csc-ink/60">
+                        Please keep this link to yourself — it is issued to you alone.
+                    </p>
+                </div>
+
+                <p v-else-if="joinLockedReason" class="mt-5 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70">
+                    <AppIcon name="lock" size="sm" class="mt-0.5 shrink-0" />
+                    {{ joinLockedReason }}
+                </p>
+
+                <AppAlert v-if="training.is_supervisory" tone="info" class="mt-5">
+                    This is a Supervisory Development Course. You will be asked to submit an output
+                    before your completion is credited.
+                </AppAlert>
 
                 <div v-if="training.description" class="mt-6 border-t border-csc-line pt-5">
                     <h3 class="text-sm font-semibold text-csc-blue">About this training</h3>

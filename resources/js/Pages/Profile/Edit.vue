@@ -1,9 +1,8 @@
 <script setup>
-import { computed, watch } from 'vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { watch } from 'vue';
+import { Head, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
@@ -14,9 +13,6 @@ const props = defineProps({
     user: { type: Object, required: true },
     profile: { type: Object, default: null },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const form = useForm({
     first_name: props.profile?.first_name ?? '',
@@ -54,15 +50,33 @@ const submit = () => form.put('/profile');
     <Head title="My Profile" />
 
     <AuthenticatedLayout title="My Profile" current="profile">
-        <div class="mx-auto max-w-3xl space-y-6">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
+        <div class="mx-auto max-w-3xl space-y-5">
             <!-- Identity summary -->
             <AppCard>
                 <div class="flex items-center gap-4">
                     <AppAvatar :name="user.name" size="lg" />
                     <div class="min-w-0">
-                        <p class="truncate text-lg font-semibold text-csc-blue">{{ user.name ?? '—' }}</p>
+                        <p class="flex min-w-0 items-center gap-1.5 text-lg font-semibold text-csc-blue">
+                            <span class="truncate">{{ user.name ?? '—' }}</span>
+                            <svg
+                                v-if="user.is_verified"
+                                viewBox="0 0 24 24"
+                                class="size-5 shrink-0 text-csc-blue"
+                                role="img"
+                                aria-label="Verified email"
+                                title="Verified email"
+                            >
+                                <circle cx="12" cy="12" r="10" fill="currentColor" />
+                                <path
+                                    d="M8.5 12.2l2.4 2.4 4.6-5"
+                                    fill="none"
+                                    stroke="#fff"
+                                    stroke-width="2.4"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                />
+                            </svg>
+                        </p>
                         <p class="truncate text-sm text-csc-ink/70">{{ user.email }}</p>
                         <p class="mt-1.5 inline-block rounded-full bg-csc-blue-tint px-2.5 py-0.5 text-xs font-medium text-csc-blue">
                             {{ user.role_label }}

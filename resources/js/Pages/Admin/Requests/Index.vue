@@ -1,12 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPromptModal from '@/Components/AppPromptModal.vue';
+import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 
 const props = defineProps({
     cancellations: { type: Array, required: true },
@@ -14,9 +16,6 @@ const props = defineProps({
     outputs: { type: Array, required: true },
     scopedTo: { type: String, default: null },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const tabs = computed(() => [
     { key: 'cancellations', label: 'Withdrawals', count: pendingCount(props.cancellations) },
@@ -31,34 +30,145 @@ function pendingCount(items) {
 }
 
 /**
- * A rejection has to carry a reason, so it is the one path that prompts —
- * the same rule the registration roster applies.
+ * Two dialogs cover a review: the rejection asks for a reason that goes on the
+ * record; the approval is decided in one glance, so its weight is carried by a
+ * confirmation rather than a forced note.
  */
-const decide = (url, decision) => {
-    let remarks = null;
+const prompt = ref(null);
+const promptBusy = ref(false);
+const confirm = ref(null);
+const confirmBusy = ref(false);
 
-    if (decision === 'rejected') {
-        remarks = window.prompt('Reason for declining:');
-
-        if (!remarks) {
-            return;
-        }
-    }
-
-    router.post(url, { decision, remarks }, { preserveScroll: true });
+const closePrompt = () => {
+    prompt.value = null;
+    promptBusy.value = false;
+};
+const closeConfirm = () => {
+    confirm.value = null;
+    confirmBusy.value = false;
 };
 
-const convert = (id) =>
-    router.post(`/admin/requests/trainings/${id}/convert`, {}, { preserveScroll: true });
+const confirmPrompt = (reason) => {
+    promptBusy.value = true;
+    prompt.value.onConfirm(reason);
+};
+
+const confirmDecision = () => {
+    confirmBusy.value = true;
+    confirm.value.onConfirm();
+};
+
+const post = (url, payload) =>
+    router.post(url, payload, {
+        preserveScroll: true,
+        onSuccess: () => {
+            closePrompt();
+            closeConfirm();
+        },
+        onFinish: () => {
+            promptBusy.value = false;
+            confirmBusy.value = false;
+        },
+    });
+
+const rejectWithReason = (config) => {
+    prompt.value = config;
+};
+
+const approveWithConfirm = (config) => {
+    confirm.value = config;
+};
+
+/**
+ * Approvals release capacity or commit money-adjacent decisions; each asks
+ * before it fires. Rejections carry a reason.
+ */
+const approveCancellation = (item) => {
+    approveWithConfirm({
+        title: 'Release this slot?',
+        description: `${item.participant} will be withdrawn from “${item.training}” and the slot offered to the next person.`,
+        confirmLabel: 'Approve & Release Slot',
+        onConfirm: () =>
+            post(`/admin/requests/cancellations/${item.id}`, { decision: 'approved', remarks: null }),
+    });
+};
+
+const rejectCancellation = (item) => {
+    rejectWithReason({
+        title: 'Decline this withdrawal',
+        description: 'The participant keeps their slot and is shown this reason.',
+        label: 'Reason for declining',
+        confirmLabel: 'Decline request',
+        minLength: 10,
+        onConfirm: (remarks) =>
+            post(`/admin/requests/cancellations/${item.id}`, { decision: 'rejected', remarks }),
+    });
+};
+
+const approveTraining = (item) => {
+    approveWithConfirm({
+        title: 'Approve this training request?',
+        description: `“${item.title}” is approved for scheduling on behalf of ${item.requester ?? 'the agency'}.`,
+        confirmLabel: 'Approve request',
+        onConfirm: () =>
+            post(`/admin/requests/trainings/${item.id}`, { decision: 'approved', remarks: null }),
+    });
+};
+
+const rejectTraining = (item) => {
+    rejectWithReason({
+        title: 'Decline this training request',
+        description: 'The requester is shown this reason.',
+        label: 'Reason for declining',
+        confirmLabel: 'Decline request',
+        minLength: 10,
+        onConfirm: (remarks) =>
+            post(`/admin/requests/trainings/${item.id}`, { decision: 'rejected', remarks }),
+    });
+};
+
+const acceptOutput = (item) => {
+    approveWithConfirm({
+        title: 'Accept this output?',
+        description: `“${item.title}” by ${item.participant} is accepted and will let their certificate go out.`,
+        confirmLabel: 'Accept output',
+        onConfirm: () =>
+            post(`/admin/requests/outputs/${item.id}`, { decision: 'approved', remarks: null }),
+    });
+};
+
+const returnOutput = (item) => {
+    rejectWithReason({
+        title: 'Return this output',
+        description: `${item.participant} is told what to fix and can resubmit.`,
+        label: 'Reason for returning',
+        confirmLabel: 'Return output',
+        minLength: 10,
+        onConfirm: (remarks) =>
+            post(`/admin/requests/outputs/${item.id}`, { decision: 'rejected', remarks }),
+    });
+};
+
+const convert = (id) => {
+    const item = props.trainingRequests.find((request) => request.id === id);
+
+    approveWithConfirm({
+        title: 'Create a draft training?',
+        description: item
+            ? `A draft is created from “${item.title}” for you to finish the venue and schedule.`
+            : 'A draft training is created from this approved request.',
+        confirmLabel: 'Create Draft Training',
+        onConfirm: () =>
+            router.post(`/admin/requests/trainings/${id}/convert`, {}, { preserveScroll: true }),
+    });
+};
 </script>
 
 <template>
     <Head title="Requests" />
 
     <AuthenticatedLayout title="Requests" current="admin-requests">
-        <div class="mx-auto max-w-5xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
+        <div class="mx-auto max-w-6xl space-y-5">
             <AppAlert v-if="scopedTo" tone="info">
                 Showing requests from <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
@@ -90,12 +200,12 @@ const convert = (id) =>
             </div>
 
             <!-- Withdrawals -->
-            <AppCard v-if="active === 'cancellations'" title="Withdrawal Requests" :padded="!cancellations.length">
+            <AppCard v-if="active === 'cancellations'" title="Withdrawal Requests" :padded="cancellations.length > 0">
                 <AppEmptyState
                     v-if="!cancellations.length"
                     title="No withdrawal requests"
                     description="Participants asking to give up a slot appear here."
-                    icon="M6 18L18 6M6 6l12 12"
+                    icon="close"
                 />
 
                 <ul v-else class="space-y-3">
@@ -118,17 +228,10 @@ const convert = (id) =>
                         </p>
 
                         <div v-if="item.status === 'pending'" class="mt-4 flex flex-wrap gap-2">
-                            <AppButton
-                                size="sm"
-                                @click="decide(`/admin/requests/cancellations/${item.id}`, 'approved')"
-                            >
+                            <AppButton size="sm" @click="approveCancellation(item)">
                                 Approve &amp; Release Slot
                             </AppButton>
-                            <AppButton
-                                size="sm"
-                                variant="ghost"
-                                @click="decide(`/admin/requests/cancellations/${item.id}`, 'rejected')"
-                            >
+                            <AppButton size="sm" variant="ghost" @click="rejectCancellation(item)">
                                 Decline
                             </AppButton>
                         </div>
@@ -137,12 +240,12 @@ const convert = (id) =>
             </AppCard>
 
             <!-- Training requests -->
-            <AppCard v-if="active === 'trainings'" title="Requested Trainings" :padded="!trainingRequests.length">
+            <AppCard v-if="active === 'trainings'" title="Requested Trainings" :padded="trainingRequests.length > 0">
                 <AppEmptyState
                     v-if="!trainingRequests.length"
                     title="No training requests"
                     description="Agencies asking CSC to run a training appear here."
-                    icon="M8 3v3M16 3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"
+                    icon="calendar"
                 />
 
                 <ul v-else class="space-y-3">
@@ -172,17 +275,10 @@ const convert = (id) =>
 
                         <div class="mt-4 flex flex-wrap gap-2">
                             <template v-if="item.status === 'pending'">
-                                <AppButton
-                                    size="sm"
-                                    @click="decide(`/admin/requests/trainings/${item.id}`, 'approved')"
-                                >
+                                <AppButton size="sm" @click="approveTraining(item)">
                                     Approve
                                 </AppButton>
-                                <AppButton
-                                    size="sm"
-                                    variant="ghost"
-                                    @click="decide(`/admin/requests/trainings/${item.id}`, 'rejected')"
-                                >
+                                <AppButton size="sm" variant="ghost" @click="rejectTraining(item)">
                                     Decline
                                 </AppButton>
                             </template>
@@ -204,12 +300,12 @@ const convert = (id) =>
             </AppCard>
 
             <!-- Outputs -->
-            <AppCard v-if="active === 'outputs'" title="Submitted Outputs" :padded="!outputs.length">
+            <AppCard v-if="active === 'outputs'" title="Submitted Outputs" :padded="outputs.length > 0">
                 <AppEmptyState
                     v-if="!outputs.length"
                     title="No outputs submitted"
                     description="Post-training deliverables appear here for review."
-                    icon="M12 16V4m0 0L8 8m4-4 4 4M4 20h16"
+                    icon="upload"
                 />
 
                 <ul v-else class="space-y-3">
@@ -239,17 +335,10 @@ const convert = (id) =>
                         </div>
 
                         <div v-if="item.status === 'pending'" class="mt-4 flex flex-wrap gap-2">
-                            <AppButton
-                                size="sm"
-                                @click="decide(`/admin/requests/outputs/${item.id}`, 'approved')"
-                            >
+                            <AppButton size="sm" @click="acceptOutput(item)">
                                 Accept
                             </AppButton>
-                            <AppButton
-                                size="sm"
-                                variant="ghost"
-                                @click="decide(`/admin/requests/outputs/${item.id}`, 'rejected')"
-                            >
+                            <AppButton size="sm" variant="ghost" @click="returnOutput(item)">
                                 Return for Revision
                             </AppButton>
                         </div>
@@ -257,5 +346,27 @@ const convert = (id) =>
                 </ul>
             </AppCard>
         </div>
+
+        <AppPromptModal
+            :open="prompt !== null"
+            :title="prompt?.title ?? ''"
+            :description="prompt?.description"
+            :label="prompt?.label"
+            :confirm-label="prompt?.confirmLabel"
+            :min-length="prompt?.minLength ?? 1"
+            :processing="promptBusy"
+            @confirm="confirmPrompt"
+            @close="closePrompt"
+        />
+
+        <AppConfirmModal
+            :open="confirm !== null"
+            :title="confirm?.title ?? ''"
+            :description="confirm?.description"
+            :confirm-label="confirm?.confirmLabel"
+            :processing="confirmBusy"
+            @confirm="confirmDecision"
+            @close="closeConfirm"
+        />
     </AuthenticatedLayout>
 </template>

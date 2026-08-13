@@ -1,5 +1,6 @@
 <script setup>
 import { computed, useId } from 'vue';
+import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
     modelValue: { type: [String, Number, Boolean], default: '' },
@@ -59,22 +60,22 @@ const describedBy = computed(() => {
                 "
                 @change="$emit('update:modelValue', $event.target.value)"
             >
-                <option value="" disabled>{{ placeholder }}</option>
+                <!--
+                    An optional select has to be un-pickable again: disabling the
+                    placeholder on a field that allows no answer traps whoever
+                    chose one by accident.
+                -->
+                <option value="" :disabled="required">{{ placeholder }}</option>
                 <option v-for="option in normalized" :key="option.value" :value="option.value">
                     {{ option.label }}
                 </option>
             </select>
 
-            <svg
-                class="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-csc-ink/50"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                aria-hidden="true"
-            >
-                <path d="m6 9 6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <AppIcon
+                name="chevron-down"
+                size="sm"
+                class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-csc-ink/50"
+            />
         </div>
 
         <p v-if="hint && !error" :id="hintId" class="mt-1.5 text-xs text-csc-ink/60">{{ hint }}</p>

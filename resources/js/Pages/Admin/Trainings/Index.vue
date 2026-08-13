@@ -1,20 +1,17 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { ref, watch } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPagination from '@/Components/AppPagination.vue';
 
 const props = defineProps({
     trainings: { type: Object, required: true },
     filters: { type: Object, required: true },
     statuses: { type: Array, required: true },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const search = ref(props.filters.search ?? '');
 const status = ref(props.filters.status ?? '');
@@ -25,7 +22,13 @@ watch([search, status], () => {
     debounce = setTimeout(() => {
         router.get(
             '/admin/trainings',
-            { search: search.value || undefined, status: status.value || undefined },
+            {
+                search: search.value || undefined,
+                status: status.value || undefined,
+                // A filter change starts from the first page; staying on, say,
+                // page 4 of a narrowed search reads as "nothing found".
+                page: 1,
+            },
             { preserveState: true, replace: true }
         );
     }, 300);
@@ -45,8 +48,6 @@ const tones = {
 
     <AuthenticatedLayout title="Manage Trainings" current="admin-trainings">
         <div class="mx-auto max-w-6xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex flex-1 flex-col gap-3 sm:flex-row">
                     <input
@@ -75,7 +76,7 @@ const tones = {
                 <AppEmptyState
                     title="No trainings found"
                     description="Create one, or clear the filters if you were searching."
-                    icon="M8 3v3M16 3v3M4 9h16M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"
+                    icon="calendar"
                 >
                     <template #action>
                         <AppButton href="/admin/trainings/create">Create Training</AppButton>
@@ -161,6 +162,8 @@ const tones = {
                         </div>
                     </li>
                 </ul>
+
+                <AppPagination :pagination="trainings" label="trainings" class="pt-2" />
             </template>
         </div>
     </AuthenticatedLayout>

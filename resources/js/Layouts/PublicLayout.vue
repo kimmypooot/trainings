@@ -146,7 +146,11 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
         </header>
 
         <main class="flex-1">
-            <slot />
+            <Transition name="page" appear>
+                <div :key="page.component">
+                    <slot />
+                </div>
+            </Transition>
         </main>
 
         <footer id="contact" class="bg-csc-blue-deep">
@@ -317,7 +321,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                                 stroke-linejoin="round"
                             />
                         </svg>
-                        <span class="text-[11px] font-medium tracking-wide text-white/50">TOTAL VISITORS</span>
+                        <span class="text-2xs font-medium tracking-wide text-white/50">TOTAL VISITORS</span>
                         <span class="text-xs font-semibold text-white/80">{{ visitorCount.toLocaleString() }}</span>
                     </p>
                 </div>

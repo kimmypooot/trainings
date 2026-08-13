@@ -1,9 +1,8 @@
 <script setup>
 import { computed } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 
@@ -11,8 +10,6 @@ const props = defineProps({
     notifications: { type: Array, required: true },
 });
 
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 const hasUnread = computed(() => props.notifications.some((n) => !n.read));
 
 const markAllRead = () => router.post('/notifications/read');
@@ -23,8 +20,6 @@ const markAllRead = () => router.post('/notifications/read');
 
     <AuthenticatedLayout title="Notifications" current="notifications">
         <div class="mx-auto max-w-3xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
             <div v-if="hasUnread" class="flex justify-end">
                 <AppButton variant="ghost" size="sm" @click="markAllRead">Mark All as Read</AppButton>
             </div>
@@ -33,7 +28,7 @@ const markAllRead = () => router.post('/notifications/read');
                 <AppEmptyState
                     title="No notifications"
                     description="Updates about your registrations, trainings, and certificates will appear here."
-                    icon="M6 9a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 13 6 9ZM10 18.5a2 2 0 0 0 4 0"
+                    icon="bell"
                 />
             </AppCard>
 

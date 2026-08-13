@@ -1,6 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue';
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
@@ -10,9 +10,6 @@ defineProps({
     qr: { type: String, required: true },
     participant: { type: Object, required: true },
 });
-
-const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 
 const confirmingReset = ref(false);
 const regenerating = ref(false);
@@ -37,8 +34,6 @@ const regenerate = () => {
 
     <AuthenticatedLayout title="My QR Code" current="qr">
         <div class="mx-auto max-w-lg space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
-
             <AppCard>
                 <div class="text-center">
                     <p class="text-sm text-csc-ink/70">Show this code at the registration desk.</p>

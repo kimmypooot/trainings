@@ -6,6 +6,7 @@ import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPagination from '@/Components/AppPagination.vue';
 
 const props = defineProps({
     users: { type: Object, required: true },
@@ -14,7 +15,6 @@ const props = defineProps({
 });
 
 const page = usePage();
-const flash = computed(() => page.props.flash?.success);
 const error = computed(() => page.props.errors?.user);
 
 const search = ref(props.filters.search ?? '');
@@ -26,7 +26,13 @@ watch([search, role], () => {
     debounce = setTimeout(() => {
         router.get(
             '/admin/users',
-            { search: search.value || undefined, role: role.value || undefined },
+            {
+                search: search.value || undefined,
+                role: role.value || undefined,
+                // Start from the first page: paging on a new filter would drop
+                // the user onto page N of a much smaller result set.
+                page: 1,
+            },
             { preserveState: true, replace: true }
         );
     }, 300);
@@ -40,7 +46,6 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
 
     <AuthenticatedLayout title="Users &amp; Roles" current="admin-users">
         <div class="mx-auto max-w-6xl space-y-5">
-            <AppAlert v-if="flash" tone="success">{{ flash }}</AppAlert>
             <AppAlert v-if="error" tone="danger">{{ error }}</AppAlert>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -71,7 +76,7 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                 <AppEmptyState
                     title="No staff accounts found"
                     description="Add an account, or clear the filters if you were searching."
-                    icon="M3 20a6 6 0 0 1 12 0M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"
+                    icon="users"
                 >
                     <template #action>
                         <AppButton href="/admin/users/create">New Staff Account</AppButton>
@@ -174,6 +179,8 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                         </div>
                     </li>
                 </ul>
+
+                <AppPagination :pagination="users" label="staff accounts" class="pt-2" />
             </template>
         </div>
     </AuthenticatedLayout>

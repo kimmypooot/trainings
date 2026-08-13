@@ -16,6 +16,11 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
+// Anything not declared above (min, max, step, inputmode…) belongs on the
+// control, not on the wrapper div it would otherwise land on — a `min` silently
+// applied to a <div> is a constraint the browser never enforces.
+defineOptions({ inheritAttrs: false });
+
 const onInput = (event) => {
     const value = props.uppercase ? event.target.value.toUpperCase() : event.target.value;
 
@@ -50,6 +55,7 @@ const describedBy = computed(() => {
 
         <div class="relative">
             <input
+                v-bind="$attrs"
                 :id="inputId"
                 :type="type"
                 :value="modelValue"

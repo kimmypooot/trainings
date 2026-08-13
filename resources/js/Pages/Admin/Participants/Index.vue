@@ -5,6 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppPagination from '@/Components/AppPagination.vue';
 
 const props = defineProps({
     participants: { type: Object, required: true },
@@ -20,7 +21,12 @@ watch(search, () => {
     debounce = setTimeout(() => {
         router.get(
             '/admin/participants',
-            { search: search.value || undefined },
+            {
+                search: search.value || undefined,
+                // Searching from the middle of a paged result must not land on
+                // page N of the narrowed set — reset to the first page.
+                page: 1,
+            },
             { preserveState: true, replace: true }
         );
     }, 300);
@@ -48,7 +54,7 @@ watch(search, () => {
                 <AppEmptyState
                     title="No participants found"
                     description="Participants appear here once they register an account."
-                    icon="M3 20a6 6 0 0 1 12 0M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"
+                    icon="users"
                 />
             </AppCard>
 
@@ -105,6 +111,8 @@ watch(search, () => {
                         </p>
                     </li>
                 </ul>
+
+                <AppPagination :pagination="participants" label="participants" class="pt-2" />
             </template>
         </div>
     </AuthenticatedLayout>

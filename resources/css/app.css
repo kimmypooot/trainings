@@ -42,6 +42,111 @@
     --color-danger-soft: #fdeef0;
     --color-info: #2a338f;
     --color-info-soft: #eef0f9;
+
+    /*
+     * Stacking order, named so a new overlay does not have to guess.
+     *
+     * The drawer sits above its own backdrop and above the header; the modal
+     * sits above everything, because it is the one surface that must not be
+     * reachable past.
+     */
+    --z-tabbar: 20;
+    --z-header: 20;
+    --z-popover: 30;
+    --z-backdrop: 30;
+    --z-drawer: 40;
+    --z-skip-link: 50;
+    --z-modal: 100;
+
+    /* The nav and badge sizes that were previously written as text-[11px]. */
+    --text-2xs: 0.6875rem;
+    --text-2xs--line-height: 1rem;
+}
+
+/*
+ * Page transition. A short fade-and-rise so a navigation never pops hard into
+ * place. The reduced-motion block below already shrinks it to nothing for those
+ * who ask, so it needs no guard of its own.
+ */
+@keyframes page-enter {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.page-enter-active {
+    animation: page-enter 0.18s ease-out both;
+}
+
+/*
+ * Print.
+ *
+ * Rosters, attendance sheets, and participant lists get printed — this is a
+ * records system for a government office. What prints should be the content,
+ * not the shell: no sidebar, no sticky header, no mobile tab bar, no gutter
+ * held open for a sidebar that is not there, and no ink spent on backgrounds.
+ */
+@media print {
+    @page {
+        margin: 1.5cm;
+    }
+
+    body {
+        background: #fff !important;
+    }
+
+    /* The application shell */
+    aside,
+    header,
+    nav[aria-label='Primary'],
+    .print\:hidden {
+        display: none !important;
+    }
+
+    /* The content column no longer has a sidebar to make room for */
+    main {
+        padding: 0 !important;
+    }
+
+    body [class*='md:pl-'] {
+        padding-left: 0 !important;
+    }
+
+    /* Cards become rules on paper; tinted fills just waste toner */
+    [class*='rounded-'] {
+        box-shadow: none !important;
+    }
+
+    [class*='bg-csc-blue-tint'],
+    [class*='bg-white'] {
+        background: #fff !important;
+    }
+
+    /* Tables must not stay trapped in a horizontal scroller */
+    [class*='overflow-x-auto'] {
+        overflow: visible !important;
+    }
+
+    table {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    /* Keep rows whole and repeat headers across pages */
+    thead {
+        display: table-header-group;
+    }
+
+    tr,
+    li {
+        break-inside: avoid;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

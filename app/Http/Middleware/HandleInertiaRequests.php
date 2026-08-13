@@ -46,6 +46,9 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                // Present only while a decision can still be taken back; the
+                // toast turns it into the Undo button.
+                'undo' => fn () => $request->session()->get('undo'),
             ],
         ];
     }
