@@ -237,6 +237,25 @@ class ScanStationService
             $at = CarbonImmutable::now();
         }
 
+        /*
+         * A rehearsal held off the training's calendar still has to say
+         * something useful.
+         *
+         * Proving the phones on a Tuesday for a course that runs next Monday is
+         * the normal case, and "not running today" for every scan tests nothing
+         * but the off-day guard itself. So a dry run borrows the training's
+         * first day, keeping the clock so Present-versus-Late is still
+         * exercised. Only ever for a dry run: the guard is the whole point on a
+         * live door, where landing a mis-scanned code on day 1 is the failure.
+         */
+        if ($dryRun && $registration->training->dayNumberFor($at) === null) {
+            $first = $registration->training->trainingDays()[0]['date'] ?? null;
+
+            if ($first !== null) {
+                $at = $first->setTime((int) $at->format('H'), (int) $at->format('i'), (int) $at->format('s'));
+            }
+        }
+
         $day = $registration->training->dayNumberFor($at);
 
         $alreadyPresent = $day !== null && Attendance::where('registration_id', $registration->getKey())

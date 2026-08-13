@@ -105,7 +105,17 @@ export function useScanStation({
             date.getDate()
         ).padStart(2, '0')}`;
 
-        return roster.value.training.days.find((day) => day.date === key) ?? null;
+        const running = roster.value.training.days.find((day) => day.date === key) ?? null;
+
+        // A practice station stands in on day 1 when the training is not
+        // running, so the roster panel, the "x of y marked" count and marking
+        // by hand all stay usable during a rehearsal. Live stations get null,
+        // which is what disables all three.
+        if (running === null && unref(testMode)) {
+            return roster.value.training.days[0] ?? null;
+        }
+
+        return running;
     });
 
     const markedToday = computed(() => {
@@ -352,7 +362,9 @@ export function useScanStation({
             return;
         }
 
-        const result = await resolveScan(text, roster.value, scans.value);
+        const result = await resolveScan(text, roster.value, scans.value, {
+            practice: unref(testMode),
+        });
 
         if (result.verdict === 'success') {
             const at = result.at ?? new Date();

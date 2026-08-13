@@ -137,12 +137,15 @@ export function existingFor(participant, scans, day) {
  *  - `duplicate` recognised, already marked — do nothing, say so plainly;
  *  - `off-day`   recognised, but the training is not running today. This is the
  *                guard that stops a code scanned at the wrong venue, or on the
- *                wrong date, from quietly landing on day 1;
+ *                wrong date, from quietly landing on day 1. A practice station
+ *                is the one caller allowed past it, since a rehearsal is rarely
+ *                held on a training day — it lands on day 1 deliberately and
+ *                flags the result as `simulatedDay`;
  *  - `unknown`   a valid CSC code that is not on *this* roster — usually the
  *                operator has the wrong training loaded, so the message says so;
  *  - `invalid`   not a CSC participant code at all.
  */
-export async function resolveScan(text, roster, scans) {
+export async function resolveScan(text, roster, scans, { practice = false } = {}) {
     const token = tokenFrom(text);
 
     if (!token) {
@@ -160,26 +163,43 @@ export async function resolveScan(text, roster, scans) {
     }
 
     const at = new Date();
-    const day = dayNumberFor(roster.training, at);
+    let day = dayNumberFor(roster.training, at);
+    let simulatedDay = false;
 
     if (day === null) {
-        return {
-            verdict: 'off-day',
-            participant,
-            message: `“${roster.training.title}” is not running today, so there is no day to mark.`,
-        };
+        /*
+         * A rehearsal is almost never held on a training day.
+         *
+         * Someone proving the phones in the office on Tuesday for a course that
+         * runs next Monday would otherwise get "not running today" for every
+         * scan and learn nothing — the off-day guard would be the only thing
+         * they ever managed to test. So practice stations fall through onto
+         * day 1 and say so; the guard stays absolute for live scanning, which
+         * is the case it exists for.
+         */
+        if (!practice) {
+            return {
+                verdict: 'off-day',
+                participant,
+                message: `“${roster.training.title}” is not running today, so there is no day to mark.`,
+            };
+        }
+
+        day = roster.training.days[0]?.day ?? 1;
+        simulatedDay = true;
     }
 
     const existing = existingFor(participant, scans, day);
 
     if (existing) {
-        return { verdict: 'duplicate', participant, day, existing };
+        return { verdict: 'duplicate', participant, day, existing, simulatedDay };
     }
 
     return {
         verdict: 'success',
         participant,
         day,
+        simulatedDay,
         status: statusForArrival(roster.training, at),
         at,
     };

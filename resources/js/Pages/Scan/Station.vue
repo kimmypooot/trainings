@@ -462,6 +462,10 @@ onMounted(async () => {
 
                                     <p v-if="testing" class="mt-2 rounded-lg bg-black/25 px-2 py-1 text-2xs font-semibold">
                                         Practice — nothing was saved.
+                                        <template v-if="verdict.simulatedDay">
+                                            This training is not running today, so day
+                                            {{ verdict.day }} was stood in for the rehearsal.
+                                        </template>
                                     </p>
                                 </div>
                             </div>

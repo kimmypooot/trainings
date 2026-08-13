@@ -410,6 +410,75 @@ class ScanLinkTest extends TestCase
         $this->assertSame(0, Attendance::count());
     }
 
+    /**
+     * A training that has not started yet, with one approved participant.
+     *
+     * The default TrainingFactory already starts a week out, which is exactly
+     * the situation a rehearsal happens in.
+     *
+     * @return array{0: ScanLink, 1: Registration}
+     */
+    private function futureScenario(array $linkState = []): array
+    {
+        $training = Training::factory()->runningFor(1)->create();
+
+        $participant = User::factory()->create(['profile_completed_at' => now()]);
+        Profile::factory()->for($participant)->create();
+
+        $registration = Registration::factory()->approved()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+        ]);
+
+        $link = ScanLink::factory()->state($linkState)->create([
+            'training_id' => $training->getKey(),
+            'issued_by' => $this->issuer()->getKey(),
+        ]);
+
+        return [$link, $registration];
+    }
+
+    public function test_a_practice_station_can_rehearse_a_training_that_is_not_running_today(): void
+    {
+        [$link, $registration] = $this->futureScenario(['is_test' => true]);
+
+        // The whole point of rehearsing: it happens days before the session, so
+        // refusing every scan as "not running today" would test nothing.
+        $this->postJson("/station/{$link->token}/sync", [
+            'scans' => [[
+                'client_id' => 'abc',
+                'registration_id' => $registration->id,
+                'scanned_at' => CarbonImmutable::now()->toIso8601String(),
+            ]],
+        ], ['X-Scan-Grant' => $this->grantFor($link)])
+            ->assertOk()
+            ->assertJsonPath('results.0.status', 'synced')
+            ->assertJsonPath('results.0.dry_run', true)
+            // Day 1 stood in for the rehearsal.
+            ->assertJsonPath('results.0.training_day', 1);
+
+        $this->assertSame(0, Attendance::count());
+    }
+
+    public function test_a_live_station_still_refuses_a_training_that_is_not_running_today(): void
+    {
+        [$link, $registration] = $this->futureScenario();
+
+        // The off-day guard is absolute on a real door — landing a mis-scanned
+        // code on day 1 is precisely what it exists to stop.
+        $this->postJson("/station/{$link->token}/sync", [
+            'scans' => [[
+                'client_id' => 'abc',
+                'registration_id' => $registration->id,
+                'scanned_at' => CarbonImmutable::now()->toIso8601String(),
+            ]],
+        ], ['X-Scan-Grant' => $this->grantFor($link)])
+            ->assertOk()
+            ->assertJsonPath('results.0.status', 'rejected');
+
+        $this->assertSame(0, Attendance::count());
+    }
+
     public function test_only_a_superadmin_can_issue_a_practice_station(): void
     {
         $training = Training::factory()->startingToday()->create();
