@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Models\FieldOffice;
 use App\Models\Profile;
 use App\Models\User;
+use Database\Seeders\Concerns\SeedsRandomly;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -23,8 +24,13 @@ use Illuminate\Support\Str;
  */
 class SampleUsersSeeder extends Seeder
 {
+    use SeedsRandomly;
+
     /** Shared across every seeded account, since these are all throwaway logins. */
     public const PASSWORD = 'Password123';
+
+    /** Set this to replay a previous run's dataset exactly. */
+    public const SEED_ENV = 'SAMPLE_USERS_SEED';
 
     /**
      * How many of each role to create, as [min, max].
@@ -44,13 +50,11 @@ class SampleUsersSeeder extends Seeder
 
     public function run(): void
     {
-        if (app()->isProduction()) {
-            $this->command->error('SampleUsersSeeder is blocked in production — it creates known credentials.');
-
+        if ($this->blockedInProduction('SampleUsersSeeder')) {
             return;
         }
 
-        $seed = $this->applySeed();
+        $seed = $this->applySeed(self::SEED_ENV);
 
         $offices = FieldOffice::active()->pluck('id');
 
@@ -76,22 +80,6 @@ class SampleUsersSeeder extends Seeder
         }
 
         $this->report($created, $seed);
-    }
-
-    /**
-     * Seed Faker so a run can be reproduced.
-     *
-     * Randomised data is only useful if you can get back to the dataset that
-     * broke something, so the seed is chosen at random but always reported —
-     * set SAMPLE_USERS_SEED to replay a previous run exactly.
-     */
-    private function applySeed(): int
-    {
-        $seed = (int) (env('SAMPLE_USERS_SEED') ?: random_int(1, 999999));
-
-        fake()->seed($seed);
-
-        return $seed;
     }
 
     /**
@@ -189,6 +177,6 @@ class SampleUsersSeeder extends Seeder
         }
 
         $this->command->info('Sample users seeded. Password for every account: '.self::PASSWORD);
-        $this->command->info("Faker seed: {$seed} — replay with SAMPLE_USERS_SEED={$seed}");
+        $this->reportSeed($seed, self::SEED_ENV);
     }
 }

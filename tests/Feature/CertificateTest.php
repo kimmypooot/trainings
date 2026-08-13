@@ -124,6 +124,23 @@ class CertificateTest extends TestCase
         $this->assertSame(1, $certificate->fresh()->download_count);
     }
 
+    public function test_a_missing_pdf_is_a_not_found_rather_than_a_server_error(): void
+    {
+        $registration = $this->completedRegistration();
+        $certificate = CertificateService::release($registration, $this->staff());
+
+        // The record outliving its file is a normal state: seeded certificates
+        // carry a path with no PDF, and storage can be purged.
+        Storage::disk(CertificateService::DISK)->delete($certificate->file_path);
+
+        $this->actingAs($registration->user)
+            ->get("/my/certificates/{$certificate->id}/download")
+            ->assertNotFound();
+
+        // A failed download must not be counted as one.
+        $this->assertSame(0, $certificate->fresh()->download_count);
+    }
+
     public function test_a_participant_cannot_download_someone_elses_certificate(): void
     {
         $certificate = CertificateService::release($this->completedRegistration(), $this->staff());

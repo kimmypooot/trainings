@@ -13,7 +13,8 @@ class DatabaseSeeder extends Seeder
      * Seed the application's database.
      *
      * Order matters: offices first, since every profile points at one, then the
-     * fixed demo logins, then the randomised population on top.
+     * fixed demo logins, then the randomised population, and finally the
+     * activity that hangs off those accounts.
      */
     public function run(): void
     {
@@ -21,6 +22,7 @@ class DatabaseSeeder extends Seeder
             FieldOfficeSeeder::class,
             DemoSeeder::class,
             SampleUsersSeeder::class,
+            SampleActivitySeeder::class,
         ]);
     }
 }

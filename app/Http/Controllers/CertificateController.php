@@ -59,6 +59,11 @@ class CertificateController extends Controller
         abort_unless($certificate->user_id === $request->user()->getKey(), 403);
         abort_unless($certificate->isReleased(), 404);
 
+        // The record can outlive its file — seeded data carries a path with no
+        // PDF behind it, and a purged storage directory does the same. Without
+        // this the participant gets a 500 rather than an honest "not found".
+        abort_unless(Storage::disk(CertificateService::DISK)->exists($certificate->file_path), 404);
+
         CertificateService::recordDownload($certificate);
 
         return Storage::disk(CertificateService::DISK)->download(
