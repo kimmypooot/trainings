@@ -12,6 +12,7 @@
         --}}
         <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="32x32">
         <link rel="icon" href="{{ asset('images/favicon.png') }}" type="image/png" sizes="32x32">
+        <link rel="icon" href="{{ asset('images/favicon-192.png') }}" type="image/png" sizes="192x192">
         <link rel="apple-touch-icon" href="{{ asset('images/apple-touch-icon.png') }}">
 
         @fonts
