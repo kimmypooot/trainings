@@ -35,7 +35,7 @@ class ParticipantQrCode
      */
     private static function cacheKey(string $token): string
     {
-        return "qr-code:v2:{$token}";
+        return "qr-code:v3:{$token}";
     }
 
     private static function build(string $token): string

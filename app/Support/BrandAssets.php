@@ -24,4 +24,26 @@ class BrandAssets
 
         return null;
     }
+
+    /**
+     * The same mark with the transparent ground flattened to white.
+     *
+     * The GD writer endroid uses composites a logo's alpha channel in as black
+     * (`imagecopyresampled` on a non-alpha source), which puts a black plate
+     * behind the mark punchout. The QR's ground is white, so the mark is
+     * pre-flattened here — the browser-rendered `<img>` on certificates keeps
+     * the transparent original via `mark()`, the server-drawn QR gets this.
+     */
+    public static function markOnWhite(): ?string
+    {
+        foreach (['images/csc-logo-print-white.png', 'images/csc-logo-print.png', 'images/csc-logo.png'] as $candidate) {
+            $path = public_path($candidate);
+
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
 }

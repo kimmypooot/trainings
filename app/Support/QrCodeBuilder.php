@@ -27,7 +27,10 @@ class QrCodeBuilder
      */
     public static function dataUri(string $data, int $size = 600, bool $withLogo = true): string
     {
-        $logo = BrandAssets::mark();
+        // White-flattened mark: the GD writer turns a transparent logo ground
+        // into a black plate behind the punchout, which would swallow the code.
+        // The ground here is white, so it kicks the print copy out of the way.
+        $logo = BrandAssets::markOnWhite();
         $useLogo = $withLogo && $logo !== null;
 
         return (new Builder(
