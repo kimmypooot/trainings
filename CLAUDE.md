@@ -26,7 +26,7 @@ php artisan migrate:fresh --seed   # demo data
 php artisan tims:send-reminders --days=1
 ```
 
-Dev DB is MySQL (`csc_tims-db` under XAMPP); tests run on in-memory SQLite via `phpunit.xml`, so migrations must stay SQLite-compatible.
+Dev DB and the test suite run on MySQL under XAMPP (dev `csc_tims-db`, tests `csc_tims_test`); `tests/TestCase.php` auto-creates the test database, so `composer test` needs no manual SQL.
 
 Seeded demo logins (password `Password123`): `superadmin@csc.gov.ph`, `admin@csc.gov.ph`, `fieldoffice@csc.gov.ph`, `management@csc.gov.ph`, `participant@example.com`. `DatabaseSeeder` order matters: offices → demo logins → randomised users → activity.
 

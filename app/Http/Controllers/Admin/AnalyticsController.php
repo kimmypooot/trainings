@@ -77,8 +77,8 @@ class AnalyticsController extends Controller
     /**
      * Registrations per calendar month.
      *
-     * Grouped in PHP rather than SQL: the date functions differ between the
-     * MySQL used in production and the SQLite the test suite runs on.
+     * Grouped in PHP rather than SQL: the date functions differ between
+     * database engines, and the app and the test suite now share one.
      *
      * @return array<int, array{month: string, count: int}>
      */

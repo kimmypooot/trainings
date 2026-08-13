@@ -44,7 +44,7 @@ return new class extends Migration
      * Give existing rows a sensible duration and code.
      *
      * Done in PHP rather than SQL because the date arithmetic differs between
-     * MySQL and the SQLite used by the test suite.
+     * database engines.
      */
     private function backfill(): void
     {

@@ -62,10 +62,10 @@ return new class extends Migration
              * first unlock — silently reset the expiry to now, so a link died
              * the instant somebody used it.
              *
-             * SQLite has no such behaviour, so the test suite was perfectly
-             * green while the feature was broken against the real database.
              * DATETIME carries no implicit default or auto-update on either
-             * engine, which is the only reason this column can be trusted.
+             * engine, which is the only reason this column can be trusted. The
+             * test suite runs on the same engine now, so it would catch the
+             * regression loudly instead of silently passing.
              */
             $table->dateTime('expires_at');
             $table->dateTime('revoked_at')->nullable();

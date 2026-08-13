@@ -72,13 +72,8 @@ const submit = () => {
                     <span class="sr-only">Back to CSC TIMS home</span>
                 </Link>
 
-                <div class="mt-16 max-w-lg">
-                    <span class="flex items-center gap-2" aria-hidden="true">
-                        <span class="inline-block h-1 w-12 bg-white" />
-                        <span class="inline-block h-1 w-4 bg-csc-red" />
-                    </span>
-
-                    <h1 class="mt-8 text-4xl leading-tight font-semibold tracking-tight text-balance text-white xl:text-5xl">
+                <div class="mt-10 max-w-lg">
+                    <h1 class="text-4xl leading-tight font-semibold tracking-tight text-balance text-white xl:text-5xl">
                         Create your CSC TIMS account
                     </h1>
 

@@ -31,9 +31,8 @@ return new class extends Migration
         });
 
         // Only one request may be open per registration at a time. A partial
-        // unique index would be neater, but it is not portable across the
-        // MySQL used in production and the SQLite used by the test suite, so
-        // the rule is enforced in CancellationRequestService instead.
+        // unique index would be neater, but MySQL has no such feature, so the
+        // rule is enforced in CancellationRequestService instead.
         Schema::create('training_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('requested_by')->constrained('users')->cascadeOnDelete();
