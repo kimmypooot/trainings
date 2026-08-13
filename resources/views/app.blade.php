@@ -5,7 +5,14 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#2a338f">
 
-        <link rel="icon" href="/favicon.ico" sizes="any">
+        {{--
+            Both are declared on purpose. Browsers request /favicon.ico blind,
+            so it has to be a real file, while the PNG is what modern browsers
+            actually prefer and what stays sharp on a high-DPI tab strip.
+        --}}
+        <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="32x32">
+        <link rel="icon" href="{{ asset('images/favicon.png') }}" type="image/png" sizes="32x32">
+        <link rel="apple-touch-icon" href="{{ asset('images/apple-touch-icon.png') }}">
 
         @fonts
 
