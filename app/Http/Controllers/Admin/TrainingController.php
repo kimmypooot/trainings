@@ -9,6 +9,7 @@ use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Registration;
+use App\Models\ScanLink;
 use App\Models\Training;
 use App\Support\RegistrationService;
 use App\Support\UndoService;
@@ -183,6 +184,22 @@ class TrainingController extends Controller
             ],
             'scopedTo' => $request->user()->fieldOffice?->name,
             'attendanceStatuses' => AttendanceStatus::options(),
+            // Live stations only. A revoked or expired link is not something an
+            // operator can act on, and listing them would bury the one or two
+            // links that actually open a door today.
+            'scanLinks' => $training->scanLinks()
+                ->whereNull('revoked_at')
+                ->where('expires_at', '>', now())
+                ->latest()
+                ->get()
+                ->map(fn (ScanLink $link) => [
+                    'id' => $link->id,
+                    'label' => $link->label,
+                    'url' => route('station.show', $link->token),
+                    'expires_at' => $link->expires_at->format('d M Y'),
+                    'last_used_at' => $link->last_used_at?->diffForHumans(),
+                ])
+                ->all(),
             'registrations' => $registrations->map(fn (Registration $registration) => [
                 'id' => $registration->id,
                 'status' => $registration->status->value,

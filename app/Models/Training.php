@@ -50,6 +50,12 @@ class Training extends Model
         return $this->hasMany(Registration::class);
     }
 
+    /** Shareable scanning stations issued for this training's doors. */
+    public function scanLinks(): HasMany
+    {
+        return $this->hasMany(ScanLink::class);
+    }
+
     /** Registrations that occupy a slot. */
     public function activeRegistrations(): HasMany
     {

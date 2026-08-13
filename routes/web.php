@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeControll
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\RequestQueueController as AdminRequestQueueController;
+use App\Http\Controllers\Admin\ScanLinkController as AdminScanLinkController;
 use App\Http\Controllers\Admin\ScannerController;
 use App\Http\Controllers\Admin\TrainingController as AdminTrainingController;
 use App\Http\Controllers\Admin\UndoController as AdminUndoController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QrCodeController;
 use App\Http\Controllers\RegistrationController;
+use App\Http\Controllers\ScanLinkController;
 use App\Http\Controllers\RegistrationOutputController;
 use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\TrainingRequestController;
@@ -44,6 +46,41 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/verify/{code}', [CertificateVerificationController::class, 'show'])
     ->middleware('throttle:30,1')
     ->name('certificates.verify');
+
+/*
+ * The public attendance station.
+ *
+ * Unauthenticated because the person on the door is usually a volunteer with no
+ * account, but not unguarded: the URL token only identifies a link, and the
+ * six-digit code exchanged at /unlock is what actually opens it. See
+ * ScanLinkController for the full argument, and ScanLinkTest for the guard.
+ *
+ * Under /station rather than /scan deliberately. /scan/{token} is already the
+ * authenticated landing page for a *participant's* QR code — a different token
+ * namespace entirely — and putting these here would have shadowed it, silently
+ * sending staff who scan a badge to a public station page instead.
+ *
+ * Throttled hardest at the gate, which is the only guessable step. The roster
+ * and sync limits are set for a real door instead — a station flushing a long
+ * queue in batches must not be throttled into stranding attendance on a device.
+ */
+Route::prefix('station')->name('station.')->group(function () {
+    Route::get('/{token}', [ScanLinkController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('show');
+
+    Route::post('/{token}/unlock', [ScanLinkController::class, 'unlock'])
+        ->middleware('throttle:10,1')
+        ->name('unlock');
+
+    Route::get('/{token}/roster', [ScanLinkController::class, 'roster'])
+        ->middleware('throttle:30,1')
+        ->name('roster');
+
+    Route::post('/{token}/sync', [ScanLinkController::class, 'sync'])
+        ->middleware('throttle:120,1')
+        ->name('sync');
+});
 
 Route::get('/privacy-policy', fn () => Inertia::render('Legal/PrivacyPolicy'))->name('privacy-policy');
 Route::get('/terms-of-service', fn () => Inertia::render('Legal/TermsOfService'))->name('terms-of-service');
@@ -120,6 +157,20 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         Route::get('/scanner/trainings/{training}/roster', [ScannerController::class, 'roster'])
             ->name('scanner.roster');
         Route::post('/scanner/sync', [ScannerController::class, 'sync'])->name('scanner.sync');
+
+        /*
+         * Issuing a station to someone without an account. Kept in the same
+         * every-staff-role group as scanning itself, because deciding who works
+         * a door is the same job as working it — and a link can never grant
+         * more than its issuer already holds, so no role gains reach by having
+         * this. Revocation is here rather than superadmin-only for the same
+         * reason it matters at all: a phone goes missing mid-session and the
+         * person at the venue has to be able to kill the link themselves.
+         */
+        Route::post('/trainings/{training}/scan-links', [AdminScanLinkController::class, 'store'])
+            ->name('scan-links.store');
+        Route::delete('/scan-links/{scanLink}', [AdminScanLinkController::class, 'destroy'])
+            ->name('scan-links.destroy');
 
         // Account administration is superadmin-only.
         Route::middleware(EnsureUserIsStaff::class.':superadmin')->group(function () {

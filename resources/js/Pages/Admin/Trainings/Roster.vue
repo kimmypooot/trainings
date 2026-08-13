@@ -15,10 +15,67 @@ const props = defineProps({
     summary: { type: Object, required: true },
     scopedTo: { type: String, default: null },
     attendanceStatuses: { type: Array, default: () => [] },
+    scanLinks: { type: Array, default: () => [] },
 });
 
 const page = usePage();
 const errors = computed(() => Object.values(page.props.errors ?? {}));
+
+/* -------------------------------------------------------------------------- */
+/* Scanning stations                                                           */
+/* -------------------------------------------------------------------------- */
+
+const stationLabel = ref('');
+const issuing = ref(false);
+
+/**
+ * The freshly issued link, code and all.
+ *
+ * Read from the flash bag because the plaintext code exists exactly once, in
+ * the response to the request that created it — see Admin\ScanLinkController.
+ * Reloading this page will not bring it back, which is why the card says so.
+ */
+const newStation = computed(() => page.props.flash?.scan_link ?? null);
+
+const copied = ref(false);
+
+function issueStation() {
+    issuing.value = true;
+
+    router.post(
+        `/admin/trainings/${props.training.id}/scan-links`,
+        { label: stationLabel.value || null },
+        {
+            preserveScroll: true,
+            onSuccess: () => (stationLabel.value = ''),
+            onFinish: () => (issuing.value = false),
+        }
+    );
+}
+
+function revokeStation(link) {
+    router.delete(`/admin/scan-links/${link.id}`, { preserveScroll: true });
+}
+
+/**
+ * Copy the link and its code together.
+ *
+ * Together because they are useless apart: whoever is being handed this station
+ * needs both, and pasting them as one block is what stops the code being lost
+ * between two messages.
+ */
+async function copyStation() {
+    if (!newStation.value) {
+        return;
+    }
+
+    await navigator.clipboard.writeText(
+        `${newStation.value.url}\nCode: ${newStation.value.code}`
+    );
+
+    copied.value = true;
+    setTimeout(() => (copied.value = false), 2000);
+}
 
 /*
  * Anything that has to be justified opens the same dialog.
@@ -267,6 +324,87 @@ const applyBulk = (action) => {
                         <p class="text-xs text-csc-ink/60">Food restrictions</p>
                     </div>
                 </div>
+            </AppCard>
+
+            <!--
+                Scanning stations. Sits with the roster rather than on its own
+                screen because issuing one is part of preparing a session: the
+                person doing it is already looking at who is expected at the door.
+            -->
+            <AppCard
+                title="Scanning stations"
+                subtitle="Hand a door to someone without an account — a phone, a link and a code."
+            >
+                <!-- The one and only sighting of the code. -->
+                <div v-if="newStation" class="rounded-xl border border-success/40 bg-success-soft p-4">
+                    <p class="text-sm font-semibold text-csc-ink">
+                        Station ready<span v-if="newStation.label"> · {{ newStation.label }}</span>
+                    </p>
+                    <p class="mt-1 text-xs leading-relaxed text-csc-ink/70">
+                        Send both lines to whoever is working the door. The code is shown once and
+                        cannot be recovered — if it is lost, issue a new station.
+                    </p>
+
+                    <div class="mt-3 space-y-2">
+                        <p class="rounded-lg bg-white px-3 py-2 font-mono text-xs break-all text-csc-ink">
+                            {{ newStation.url }}
+                        </p>
+                        <p class="rounded-lg bg-white px-3 py-2 font-mono text-lg font-bold tracking-[0.3em] text-csc-ink">
+                            {{ newStation.code }}
+                        </p>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <AppButton size="sm" variant="ghost" @click="copyStation">
+                            {{ copied ? 'Copied' : 'Copy link and code' }}
+                        </AppButton>
+                        <span class="text-xs text-csc-ink/60">Expires {{ newStation.expires_at }}</span>
+                    </div>
+                </div>
+
+                <!-- Issue -->
+                <div class="mt-4 flex flex-wrap items-end gap-3">
+                    <label class="min-w-48 flex-1">
+                        <span class="text-xs font-medium text-csc-ink/70">Label (optional)</span>
+                        <input
+                            v-model="stationLabel"
+                            type="text"
+                            maxlength="60"
+                            placeholder="Front door, Hall B…"
+                            class="mt-1 w-full rounded-lg border border-csc-ink/20 px-3 py-2 text-sm focus:border-csc-blue focus:outline-none"
+                        />
+                    </label>
+
+                    <AppButton size="sm" :disabled="issuing" @click="issueStation">
+                        {{ issuing ? 'Creating…' : 'Create scanning station' }}
+                    </AppButton>
+                </div>
+
+                <!-- Live stations -->
+                <ul v-if="scanLinks.length" class="mt-4 space-y-2 border-t border-csc-ink/10 pt-4">
+                    <li
+                        v-for="link in scanLinks"
+                        :key="link.id"
+                        class="flex flex-wrap items-center gap-3 rounded-lg bg-csc-blue-tint/40 px-3 py-2.5"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-csc-ink">
+                                {{ link.label ?? 'Unlabelled station' }}
+                            </p>
+                            <p class="truncate text-xs text-csc-ink/60">
+                                Expires {{ link.expires_at }} ·
+                                <template v-if="link.last_used_at">last used {{ link.last_used_at }}</template>
+                                <template v-else>never used</template>
+                            </p>
+                        </div>
+
+                        <AppButton size="sm" variant="ghost" @click="revokeStation(link)">Revoke</AppButton>
+                    </li>
+                </ul>
+
+                <p v-else class="mt-4 border-t border-csc-ink/10 pt-4 text-xs text-csc-ink/60">
+                    No station is currently active for this training.
+                </p>
             </AppCard>
 
             <AppAlert v-if="awaitingCertificates" tone="info" title="Certificates ready to issue">

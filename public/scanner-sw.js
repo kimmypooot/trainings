@@ -12,10 +12,22 @@
  * to stay honest — this stays correct without that coupling.
  */
 
-const CACHE = 'csc-tims-scanner-v1';
+/*
+ * Bumped when the caching rules change, not when the app does. activate()
+ * drops every cache but this one, so a rename is what evicts pages cached
+ * under the old rules — here, stations cached before /scan/ was recognised.
+ */
+const CACHE = 'csc-tims-scanner-v2';
 
-/* The station page. Its assets are hashed, so they are cached as they appear. */
-const SCANNER_PATH = '/admin/scanner';
+/*
+ * The station pages. Their assets are hashed, so they are cached as they appear.
+ *
+ * Both doors are listed: the signed-in staff scanner and the public scan link.
+ * The public one matters more here, not less — it runs on a volunteer's own
+ * phone, which is far likelier to be locked, backgrounded and reopened in a
+ * dead spot than a tablet the office prepared.
+ */
+const SCANNER_PATHS = ['/admin/scanner', '/station/'];
 
 self.addEventListener('install', (event) => {
     // Take over immediately. A half-updated worker sitting in "waiting" while
@@ -55,7 +67,7 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    if (request.mode === 'navigate' && url.pathname.startsWith(SCANNER_PATH)) {
+    if (request.mode === 'navigate' && SCANNER_PATHS.some((path) => url.pathname.startsWith(path))) {
         event.respondWith(networkFirst(request));
 
         return;

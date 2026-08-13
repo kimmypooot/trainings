@@ -1,22 +1,11 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '@/Components/AppIcon.vue';
-import { Scanner, beep, buzz } from '@/scanner/camera';
-import { localTime, resolveScan } from '@/scanner/resolve';
-import {
-    addScan,
-    deleteRoster,
-    getRoster,
-    listRosters,
-    retryFailed,
-    saveRoster,
-    scansFor,
-} from '@/scanner/store';
-import { SyncError, downloadRoster, syncPending } from '@/scanner/sync';
+import { toneDots, useScanStation, verdictStyles } from '@/scanner/station';
 
 /**
- * The venue attendance station.
+ * The venue attendance station, for signed-in staff.
  *
  * Deliberately not wrapped in AuthenticatedLayout. This is a kiosk: it is held
  * in one hand at a door, it wants the whole screen for a camera viewport, and a
@@ -27,6 +16,9 @@ import { SyncError, downloadRoster, syncPending } from '@/scanner/sync';
  * is loaded. Props supply the list of trainings that *could* be downloaded and
  * the two URLs — beyond that the station is self-contained, because the whole
  * design assumes the network disappears the moment the session starts.
+ *
+ * The behaviour lives in useScanStation, shared with the public scan-link
+ * station at Pages/Scan/Station.vue; what remains here is this door's chrome.
  */
 
 const props = defineProps({
@@ -36,499 +28,51 @@ const props = defineProps({
     operator: { type: String, default: null },
 });
 
-/* -------------------------------------------------------------------------- */
-/* State                                                                       */
-/* -------------------------------------------------------------------------- */
-
-const roster = ref(null);
-const scans = ref([]);
-const storedRosters = ref([]);
-
-const video = ref(null);
-const scanner = ref(null);
-const cameraState = ref('idle'); // idle | starting | running | denied | unsupported
-const cameraError = ref(null);
-const torchOn = ref(false);
-const hasTorch = ref(false);
-
-const verdict = ref(null);
-let verdictTimer = null;
-
-const online = ref(navigator.onLine);
-const syncState = ref('idle'); // idle | syncing | error
-const syncMessage = ref(null);
-const lastSyncedAt = ref(null);
-const downloading = ref(null);
+const {
+    roster,
+    scans,
+    storedRosters,
+    video,
+    cameraState,
+    cameraError,
+    torchOn,
+    hasTorch,
+    verdict,
+    online,
+    syncState,
+    syncMessage,
+    lastSyncedAt,
+    downloading,
+    pendingCount,
+    failedCount,
+    syncedCount,
+    today,
+    markedToday,
+    activity,
+    syncLabel,
+    syncTone,
+    rosterRows,
+    download,
+    activate,
+    release,
+    startCamera,
+    stopCamera,
+    toggleTorch,
+    markByHand,
+    sync,
+    retry,
+} = useScanStation({ syncUrl: props.syncUrl });
 
 const panel = ref(null); // null | 'roster' | 'activity'
 const search = ref('');
 const confirmingRelease = ref(false);
 
-/** Remembered so a reopened tablet lands back on the training it was scanning. */
-const LAST_TRAINING_KEY = 'csc-tims-scanner:last-training';
+const rows = computed(() => rosterRows(search.value));
 
-let syncTimer = null;
-
-/* -------------------------------------------------------------------------- */
-/* Derived                                                                     */
-/* -------------------------------------------------------------------------- */
-
-const pendingCount = computed(() => scans.value.filter((scan) => scan.state === 'pending').length);
-const failedCount = computed(() => scans.value.filter((scan) => scan.state === 'failed').length);
-const syncedCount = computed(() => scans.value.filter((scan) => scan.state === 'synced').length);
-
-/**
- * How many of today's participants are accounted for.
- *
- * Counted against today specifically, not the whole training: on day three of a
- * run, "142 of 160" has to mean today's hall, not the sum of every day.
- */
-const today = computed(() => {
-    if (!roster.value) {
-        return null;
-    }
-
-    const date = new Date();
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
-        date.getDate()
-    ).padStart(2, '0')}`;
-
-    return roster.value.training.days.find((day) => day.date === key) ?? null;
-});
-
-const markedToday = computed(() => {
-    if (!roster.value || !today.value) {
-        return 0;
-    }
-
-    const day = today.value.day;
-
-    return roster.value.participants.filter(
-        (participant) =>
-            participant.attendance?.[String(day)] ||
-            scans.value.some(
-                (scan) =>
-                    scan.registration_id === participant.registration_id &&
-                    scan.training_day === day &&
-                    scan.state !== 'failed'
-            )
-    ).length;
-});
-
-/**
- * The roster as a checklist, for the manual fallback.
- *
- * A creased badge, a cracked phone screen, a participant who left their code at
- * the hotel — a station with no way to mark someone by hand sends them to the
- * back of a queue that has no answer for them.
- */
-const rosterRows = computed(() => {
-    if (!roster.value) {
-        return [];
-    }
-
-    const day = today.value?.day ?? null;
-    const term = search.value.trim().toLowerCase();
-
-    return roster.value.participants
-        .map((participant) => {
-            const fromServer = day === null ? null : participant.attendance?.[String(day)];
-            const local = scans.value.find(
-                (scan) =>
-                    scan.registration_id === participant.registration_id &&
-                    scan.training_day === day &&
-                    scan.state !== 'failed'
-            );
-
-            return {
-                ...participant,
-                marked: Boolean(fromServer || local),
-                time_in: fromServer?.time_in ?? local?.time_in ?? null,
-                status_label: fromServer?.status_label ?? (local?.status === 'late' ? 'Late' : local ? 'Present' : null),
-            };
-        })
-        .filter((row) => !term || row.name.toLowerCase().includes(term) || (row.organization ?? '').toLowerCase().includes(term));
-});
-
-/** Most recent first — the operator only ever looks at the last few. */
-const activity = computed(() => [...scans.value].sort((a, b) => b.scanned_at.localeCompare(a.scanned_at)));
-
-const syncLabel = computed(() => {
-    if (syncState.value === 'syncing') {
-        return 'Syncing…';
-    }
-
-    if (failedCount.value > 0) {
-        return `${failedCount.value} failed`;
-    }
-
-    if (pendingCount.value > 0) {
-        return `${pendingCount.value} pending`;
-    }
-
-    return online.value ? 'All synced' : 'Offline — nothing pending';
-});
-
-const syncTone = computed(() => {
-    if (syncState.value === 'error' || failedCount.value > 0) {
-        return 'danger';
-    }
-
-    if (syncState.value === 'syncing') {
-        return 'info';
-    }
-
-    return pendingCount.value > 0 ? 'warning' : 'success';
-});
-
-/* -------------------------------------------------------------------------- */
-/* Roster management                                                           */
-/* -------------------------------------------------------------------------- */
-
-async function refreshStoredRosters() {
-    storedRosters.value = await listRosters();
-}
-
-/**
- * Download a training's roster and make it the active one.
- *
- * Safe to repeat: re-downloading mid-session is how a station picks up
- * check-ins recorded elsewhere, and the local queue is untouched by it.
- */
-async function download(training) {
-    downloading.value = training.id;
-    syncMessage.value = null;
-
-    try {
-        const bundle = await downloadRoster(training.roster_url);
-
-        await saveRoster(training.id, bundle);
-        await refreshStoredRosters();
-        await activate(training.id);
-
-        syncState.value = 'idle';
-        syncMessage.value = `${bundle.participants.length} participants ready for offline scanning.`;
-    } catch (error) {
-        syncState.value = 'error';
-        syncMessage.value =
-            error instanceof SyncError
-                ? error.message
-                : 'Could not reach the server. Connect to a network and try again.';
-    } finally {
-        downloading.value = null;
-    }
-}
-
-async function activate(trainingId) {
-    const bundle = await getRoster(trainingId);
-
-    if (!bundle) {
-        return;
-    }
-
-    roster.value = bundle;
-    scans.value = await scansFor(trainingId);
-    localStorage.setItem(LAST_TRAINING_KEY, String(trainingId));
-}
-
-/**
- * Finish with a training and clear it off the device.
- *
- * Guarded behind a confirmation *and* a pending check: a roster carries the
- * identities of everyone in the hall, so it should not outlive the session — but
- * deleting it while scans are still queued would destroy attendance that exists
- * nowhere else.
- */
-async function release() {
-    if (!roster.value) {
-        return;
-    }
-
-    await deleteRoster(roster.value.training_id);
-    await refreshStoredRosters();
-
-    roster.value = null;
-    scans.value = [];
+async function confirmRelease() {
+    await release();
     confirmingRelease.value = false;
-    localStorage.removeItem(LAST_TRAINING_KEY);
-
-    stopCamera();
 }
-
-/* -------------------------------------------------------------------------- */
-/* Scanning                                                                    */
-/* -------------------------------------------------------------------------- */
-
-async function startCamera() {
-    if (!Scanner.isSupported()) {
-        cameraState.value = 'unsupported';
-        cameraError.value =
-            'This browser cannot open a camera. A camera needs a secure (https) connection — or use the roster to mark participants by hand.';
-
-        return;
-    }
-
-    cameraState.value = 'starting';
-    cameraError.value = null;
-
-    scanner.value = new Scanner({
-        video: video.value,
-        onResult: handleScan,
-        onError: () => {},
-    });
-
-    try {
-        await scanner.value.start();
-        cameraState.value = 'running';
-        hasTorch.value = scanner.value.hasTorch();
-    } catch (error) {
-        cameraState.value = 'denied';
-        cameraError.value =
-            error?.name === 'NotAllowedError'
-                ? 'Camera access was blocked. Allow it in the browser’s site settings, then try again.'
-                : 'No camera could be opened on this device.';
-    }
-}
-
-function stopCamera() {
-    scanner.value?.stop();
-    scanner.value = null;
-    cameraState.value = 'idle';
-    torchOn.value = false;
-}
-
-async function toggleTorch() {
-    const applied = await scanner.value?.setTorch(!torchOn.value);
-
-    if (applied) {
-        torchOn.value = !torchOn.value;
-    }
-}
-
-/**
- * One decoded code, end to end.
- *
- * The order is the point: decide, *write to IndexedDB*, then render. A device
- * that dies between the beep and the paint has still recorded the arrival, and
- * that is the guarantee the operator is relying on when they wave someone
- * through.
- */
-async function handleScan(text) {
-    if (!roster.value) {
-        return;
-    }
-
-    const result = await resolveScan(text, roster.value, scans.value);
-
-    if (result.verdict === 'success') {
-        const at = result.at ?? new Date();
-        const record = await addScan({
-            client_id: clientId(),
-            training_id: roster.value.training_id,
-            registration_id: result.participant.registration_id,
-            training_day: result.day,
-            name: result.participant.name,
-            status: result.status,
-            time_in: localTime(at),
-            scanned_at: at.toISOString(),
-        });
-
-        scans.value = [...scans.value, record];
-
-        // Straight away when there is a network, so the common case never
-        // accumulates a queue at all; harmless when there is not.
-        if (online.value) {
-            void sync({ quiet: true });
-        }
-    }
-
-    show(result);
-}
-
-function show(result) {
-    verdict.value = result;
-
-    beep(result.verdict);
-    buzz(result.verdict);
-
-    clearTimeout(verdictTimer);
-
-    // Long enough to read across a badge table, short enough that the next
-    // person is not left looking at somebody else's name.
-    verdictTimer = setTimeout(() => (verdict.value = null), result.verdict === 'success' ? 3500 : 6000);
-}
-
-/** Mark someone from the roster list, when their code cannot be read. */
-async function markByHand(participant) {
-    if (!roster.value || !today.value) {
-        return;
-    }
-
-    const at = new Date();
-    const record = await addScan({
-        client_id: clientId(),
-        training_id: roster.value.training_id,
-        registration_id: participant.registration_id,
-        training_day: today.value.day,
-        name: participant.name,
-        status: 'present',
-        time_in: localTime(at),
-        scanned_at: at.toISOString(),
-        by_hand: true,
-    });
-
-    scans.value = [...scans.value, record];
-
-    if (online.value) {
-        void sync({ quiet: true });
-    }
-}
-
-function clientId() {
-    return crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Sync                                                                        */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Push the queue.
- *
- * `quiet` is for the automatic runs that happen after every scan: they must not
- * paint an error banner over a busy door when the wifi drops for ten seconds.
- * The manual button is never quiet, because someone pressed it and is owed an
- * answer.
- */
-async function sync({ quiet = false } = {}) {
-    if (syncState.value === 'syncing' || !roster.value) {
-        return;
-    }
-
-    syncState.value = 'syncing';
-
-    if (!quiet) {
-        syncMessage.value = null;
-    }
-
-    try {
-        const summary = await syncPending(props.syncUrl, { trainingId: roster.value.training_id });
-
-        scans.value = await scansFor(roster.value.training_id);
-        syncState.value = 'idle';
-        lastSyncedAt.value = new Date();
-
-        if (!quiet) {
-            syncMessage.value =
-                summary.sent === 0
-                    ? 'Nothing was waiting — everything is already on the server.'
-                    : `${summary.synced} recorded, ${summary.duplicate} already present, ${summary.rejected} refused.`;
-        }
-    } catch (error) {
-        syncState.value = 'error';
-
-        if (!quiet) {
-            syncMessage.value =
-                error instanceof SyncError
-                    ? error.message
-                    : 'Could not reach the server. Your scans are safe on this device and will be sent when a connection returns.';
-        }
-    }
-}
-
-async function retry() {
-    if (!roster.value) {
-        return;
-    }
-
-    await retryFailed(roster.value.training_id);
-    scans.value = await scansFor(roster.value.training_id);
-
-    await sync();
-}
-
-/* -------------------------------------------------------------------------- */
-/* Lifecycle                                                                   */
-/* -------------------------------------------------------------------------- */
-
-function handleOnline() {
-    online.value = true;
-
-    // The whole reason the queue exists — a returning connection drains it
-    // without anyone having to notice that it came back.
-    void sync({ quiet: true });
-}
-
-function handleOffline() {
-    online.value = false;
-}
-
-onMounted(async () => {
-    await refreshStoredRosters();
-
-    const last = localStorage.getItem(LAST_TRAINING_KEY);
-
-    if (last) {
-        await activate(Number(last));
-    }
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // A slow safety net under the `online` event, which some Android browsers
-    // fire late or not at all after a screen lock.
-    syncTimer = setInterval(() => {
-        if (online.value && pendingCount.value > 0) {
-            void sync({ quiet: true });
-        }
-    }, 60000);
-
-    // Registered from here rather than app.js: this is the only page that needs
-    // to survive with the network unplugged, and a worker installed for the
-    // whole app would cache pages nobody asked to keep.
-    if ('serviceWorker' in navigator && import.meta.env.PROD) {
-        navigator.serviceWorker.register('/scanner-sw.js').catch(() => {
-            // Offline shell caching is an enhancement; the scan queue works
-            // without it as long as the tab stays open.
-        });
-    }
-});
-
-onBeforeUnmount(() => {
-    window.removeEventListener('online', handleOnline);
-    window.removeEventListener('offline', handleOffline);
-    clearInterval(syncTimer);
-    clearTimeout(verdictTimer);
-    stopCamera();
-});
-
-// Switching training mid-session must not leave a camera pointed at a roster it
-// no longer knows about.
-watch(
-    () => roster.value?.training_id,
-    () => scanner.value?.forget()
-);
-
-/* -------------------------------------------------------------------------- */
-/* Presentation                                                                */
-/* -------------------------------------------------------------------------- */
-
-const verdictStyles = {
-    success: { tone: 'bg-success text-white', icon: 'check', title: 'Checked in' },
-    duplicate: { tone: 'bg-warning text-white', icon: 'clock', title: 'Already marked' },
-    'off-day': { tone: 'bg-danger text-white', icon: 'warning', title: 'Not running today' },
-    unknown: { tone: 'bg-danger text-white', icon: 'warning', title: 'Not on this roster' },
-    invalid: { tone: 'bg-danger text-white', icon: 'close', title: 'Unrecognised code' },
-};
-
-const toneDots = {
-    success: 'bg-success',
-    warning: 'bg-warning',
-    danger: 'bg-danger',
-    info: 'bg-white',
-};
 </script>
 
 <template>
@@ -840,7 +384,7 @@ const toneDots = {
 
                 <ul class="mt-3 max-h-96 space-y-1.5 overflow-y-auto">
                     <li
-                        v-for="row in rosterRows"
+                        v-for="row in rows"
                         :key="row.registration_id"
                         class="flex items-center gap-3 rounded-lg bg-white/5 px-3 py-2.5"
                     >
@@ -940,7 +484,7 @@ const toneDots = {
                         <button
                             type="button"
                             class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-danger"
-                            @click="release"
+                            @click="confirmRelease"
                         >
                             Remove
                         </button>

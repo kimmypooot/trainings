@@ -49,6 +49,10 @@ class HandleInertiaRequests extends Middleware
                 // Present only while a decision can still be taken back; the
                 // toast turns it into the Undo button.
                 'undo' => fn () => $request->session()->get('undo'),
+                // A newly issued scanning station, carrying the one and only
+                // copy of its code. Flashed rather than queried back because
+                // the plaintext is never stored — see Admin\ScanLinkController.
+                'scan_link' => fn () => $request->session()->get('scan_link'),
             ],
         ];
     }

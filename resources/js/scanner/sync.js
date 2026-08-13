@@ -27,6 +27,31 @@ function csrfToken() {
     return match ? decodeURIComponent(match[1]) : '';
 }
 
+/**
+ * The public station's credential, when there is one.
+ *
+ * A signed-in staff scanner has no grant and authenticates by cookie; a station
+ * opened from a scan link carries one and no session at all. Both call the same
+ * functions, so the header is simply absent in the first case rather than the
+ * two paths forking.
+ */
+function grantHeader(grant) {
+    return grant ? { 'X-Scan-Grant': grant } : {};
+}
+
+/**
+ * What to tell the operator when the credential is refused.
+ *
+ * Worth distinguishing: "sign in again" is useless advice to a volunteer who
+ * never had an account, and "enter the code again" is useless to staff who
+ * never had a code.
+ */
+function expiredMessage(grant) {
+    return grant
+        ? 'This scanning link needs its code entered again. Your scans are safe on this device.'
+        : 'Your session has expired. Sign in again on this device, then sync.';
+}
+
 function chunk(items, size) {
     const chunks = [];
 
@@ -48,7 +73,7 @@ function chunk(items, size) {
  * Returns a per-training summary; it never throws for a rejected *scan*, only
  * for a request that could not be made at all.
  */
-export async function syncPending(syncUrl, { trainingId = null } = {}) {
+export async function syncPending(syncUrl, { trainingId = null, grant = null } = {}) {
     const pending = await pendingScans();
     const scans = trainingId === null ? pending : pending.filter((scan) => scan.training_id === trainingId);
 
@@ -66,7 +91,7 @@ export async function syncPending(syncUrl, { trainingId = null } = {}) {
 
     for (const [training, rows] of Object.entries(grouped)) {
         for (const batch of chunk(rows, BATCH_SIZE)) {
-            const results = await postBatch(syncUrl, Number(training), batch);
+            const results = await postBatch(syncUrl, Number(training), batch, grant);
 
             await applySyncResults(results);
 
@@ -87,7 +112,7 @@ export async function syncPending(syncUrl, { trainingId = null } = {}) {
     return summary;
 }
 
-async function postBatch(syncUrl, trainingId, batch) {
+async function postBatch(syncUrl, trainingId, batch, grant = null) {
     const response = await fetch(syncUrl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -96,6 +121,7 @@ async function postBatch(syncUrl, trainingId, batch) {
             Accept: 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
             'X-XSRF-TOKEN': csrfToken(),
+            ...grantHeader(grant),
         },
         body: JSON.stringify({
             training_id: trainingId,
@@ -111,9 +137,9 @@ async function postBatch(syncUrl, trainingId, batch) {
     });
 
     if (response.status === 419 || response.status === 401) {
-        // The session expired while the tablet was offline. Nothing is lost —
-        // the queue is untouched — but somebody has to sign in again.
-        throw new SyncError('Your session has expired. Sign in again on this device, then sync.', true);
+        // The credential died while the tablet was offline. Nothing is lost —
+        // the queue is untouched — but somebody has to prove themselves again.
+        throw new SyncError(expiredMessage(grant), true);
     }
 
     if (!response.ok) {
@@ -140,14 +166,18 @@ export class SyncError extends Error {
  * same bargain: this is the only moment the station needs a network before the
  * session starts.
  */
-export async function downloadRoster(rosterUrl) {
+export async function downloadRoster(rosterUrl, { grant = null } = {}) {
     const response = await fetch(rosterUrl, {
         credentials: 'same-origin',
-        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        headers: {
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            ...grantHeader(grant),
+        },
     });
 
     if (response.status === 419 || response.status === 401) {
-        throw new SyncError('Your session has expired. Sign in again to download a roster.', true);
+        throw new SyncError(expiredMessage(grant), true);
     }
 
     if (!response.ok) {

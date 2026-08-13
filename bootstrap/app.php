@@ -28,6 +28,22 @@ return Application::configure(basePath: dirname(__DIR__))
         // web server can reach this app. A public deployment must narrow this to
         // the actual proxy addresses, otherwise a client can spoof its own
         // scheme, host, and IP.
+        // The public scanning station carries its own credential — an encrypted
+        // grant in X-Scan-Grant, checked on every request — and is the one part
+        // of the app expected to POST from a page the service worker served
+        // hours ago, from a device that has been offline the whole time. Any
+        // CSRF token baked into that page is long stale by then, and a session
+        // cookie may well have expired, so requiring one would reject exactly
+        // the flush that the offline queue exists to protect.
+        //
+        // Safe because these routes are not cookie-authenticated at all: the
+        // grant is what authorises them, and an attacker's forged form cannot
+        // read one out of another origin's localStorage.
+        $middleware->validateCsrfTokens(except: [
+            'station/*/unlock',
+            'station/*/sync',
+        ]);
+
         $middleware->trustProxies(at: '*', headers: Request::HEADER_X_FORWARDED_FOR
             | Request::HEADER_X_FORWARDED_HOST
             | Request::HEADER_X_FORWARDED_PORT
