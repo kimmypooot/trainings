@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ExportController as AdminExportController;
 use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeController;
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
+use App\Http\Controllers\Admin\PhysicalOrRequestController as AdminPhysicalOrRequestController;
 use App\Http\Controllers\Admin\RequestQueueController as AdminRequestQueueController;
 use App\Http\Controllers\Admin\ScanLinkController as AdminScanLinkController;
 use App\Http\Controllers\Admin\ScannerController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PhysicalOrRequestController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QrCodeController;
 use App\Http\Controllers\RegistrationController;
@@ -161,6 +163,11 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('registrations.complete');
 
             // One decision applied to a roster selection.
+            // Moving a roster selection to another run — rescheduling and
+            // splitting are HRD's calls, so it sits with the same roles that
+            // create trainings rather than with everyone who can read a roster.
+            Route::post('/trainings/{training}/registrations/transfer', [AdminTrainingController::class, 'transfer'])
+                ->name('trainings.registrations.transfer');
             Route::post('/trainings/{training}/registrations/bulk', [AdminTrainingController::class, 'bulk'])
                 ->name('registrations.bulk');
 
@@ -234,6 +241,22 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('payments.review');
             Route::post('/refunds/{refundRequest}/review', [AdminPaymentController::class, 'reviewRefund'])
                 ->name('refunds.review');
+        });
+
+        /*
+         * Physical-OR delivery is HRD admin work, not money-handling — the
+         * training fee was settled long ago and the courier fee is verified
+         * against a GCash screenshot, not banked here. So this queue sits with
+         * the same roles that manage trainings, and the settings form lives
+         * with it (the GCash details are what participants are asked to pay).
+         */
+        Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
+            Route::get('/physical-or', [AdminPhysicalOrRequestController::class, 'index'])
+                ->name('physical-or.index');
+            Route::post('/physical-or/{physicalOrRequest}/review', [AdminPhysicalOrRequestController::class, 'review'])
+                ->name('physical-or.review');
+            Route::post('/physical-or/settings', [AdminPhysicalOrRequestController::class, 'updateSettings'])
+                ->name('physical-or.settings');
         });
 
         // Outbound mail is HRD's to send and everyone's to audit.
@@ -347,6 +370,25 @@ Route::middleware(['auth', EnsureProfileIsComplete::class])->group(function () {
     Route::post('/my/payments/{payment}/refund', [PaymentController::class, 'requestRefund'])
         ->name('payments.refund');
     Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->name('payments.proof');
+
+    /*
+     * Physical copies of official receipts. Participant-facing: filing a
+     * request, attaching the GCash proof, and cancelling while that is still
+     * possible. The proof route sits here rather than in the admin group
+     * because the participant who filed it can also open their own attachment;
+     * the controller makes the owner-or-officer call.
+     */
+    Route::get('/my/physical-or', [PhysicalOrRequestController::class, 'index'])
+        ->name('physical-or.index');
+    Route::post('/my/payments/{payment}/physical-or', [PhysicalOrRequestController::class, 'store'])
+        ->name('physical-or.store');
+    Route::post('/my/physical-or/{physicalOrRequest}/proof', [PhysicalOrRequestController::class, 'uploadProof'])
+        ->name('physical-or.proof-upload');
+    Route::post('/my/physical-or/{physicalOrRequest}/cancel', [PhysicalOrRequestController::class, 'cancel'])
+        ->name('physical-or.cancel');
+    Route::get('/physical-or/{physicalOrRequest}/proof', [PhysicalOrRequestController::class, 'proof'])
+        ->name('physical-or.proof');
+
     // Registered here rather than in the admin group because the participant
     // who filed the claim can also open their own attachment; the controller
     // makes the owner-or-officer call.

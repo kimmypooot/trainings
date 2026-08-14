@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Enums\AgencyRequestStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\PhysicalOrRequestStatus;
 use App\Enums\RefundStatus;
 use App\Enums\RegistrationStatus;
 use App\Enums\RequestStatus;
@@ -11,6 +12,7 @@ use App\Enums\Role;
 use App\Models\AgencyRequest;
 use App\Models\CancellationRequest;
 use App\Models\Payment;
+use App\Models\PhysicalOrRequest;
 use App\Models\RefundRequest;
 use App\Models\Registration;
 use App\Models\RegistrationOutput;
@@ -70,6 +72,12 @@ class PendingActionCounter
             )
             ->count();
 
+        // A physical-OR request waiting on the participant's GCash proof — the
+        // one participant move in that workflow that is genuinely outstanding.
+        $counts['physical-or'] = PhysicalOrRequest::where('user_id', $user->getKey())
+            ->where('status', PhysicalOrRequestStatus::RequestSubmitted)
+            ->count();
+
         return $counts;
     }
 
@@ -95,6 +103,14 @@ class PendingActionCounter
         // agency writes to the region, not to a field office.
         if (in_array($user->role, [Role::Admin, Role::SuperAdmin], true)) {
             $counts['admin-agency-requests'] = AgencyRequest::awaitingStaff()->count();
+        }
+
+        // The physical-OR queue is admin-only and not office-scoped (a receipt
+        // is mailed from the regional office, wherever the participant is).
+        if ($user->role->handlesPhysicalOrRequests()) {
+            $counts['admin-physical-or'] = PhysicalOrRequest::whereNotIn('status', [
+                PhysicalOrRequestStatus::Delivered->value, PhysicalOrRequestStatus::Rejected->value,
+            ])->count();
         }
 
         $officeId = $user->scopedFieldOfficeId();

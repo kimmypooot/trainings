@@ -37,7 +37,7 @@ watch(search, () => {
     <Head title="Manage Participants" />
 
     <AuthenticatedLayout title="Manage Participants" current="admin-participants">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="scopedTo" tone="info">
                 Showing participants assigned to <strong>{{ scopedTo }}</strong> only.
             </AppAlert>

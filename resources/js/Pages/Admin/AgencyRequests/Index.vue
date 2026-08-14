@@ -110,7 +110,7 @@ const submitReject = () =>
     <Head title="Agency Requests" />
 
     <AuthenticatedLayout title="Agency Requests" current="admin-agency-requests">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <div class="flex flex-wrap gap-2" role="tablist">
                 <button
                     v-for="tab in tabs"
@@ -210,7 +210,7 @@ const submitReject = () =>
                         <p v-if="request.completion_submitted" class="mt-2 text-sm text-csc-ink">
                             Documents submitted
                             <span v-if="request.payment_amount" class="text-csc-ink/55">
-                                · PHP {{ request.payment_amount }} declared
+                                · ₱{{ request.payment_amount }} declared
                             </span>
                             <span v-if="request.payment_verified_at" class="text-csc-ink/55">
                                 · verified {{ request.payment_verified_at }}

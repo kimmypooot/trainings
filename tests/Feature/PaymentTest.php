@@ -621,11 +621,11 @@ class PaymentTest extends TestCase
 
         $this->actingAs($this->officer(Role::CollectingOfficer))
             ->get('/admin/payments')
-            ->assertInertia(fn ($page) => $page->where('refunds.0.account_number', '1234567890'));
+            ->assertInertia(fn ($page) => $page->where('refunds.data.0.account_number', '1234567890'));
 
         $this->actingAs($this->officer(Role::Admin))
             ->get('/admin/payments')
-            ->assertInertia(fn ($page) => $page->where('refunds.0.account_number', '••••••7890'));
+            ->assertInertia(fn ($page) => $page->where('refunds.data.0.account_number', '••••••7890'));
 
         $this->assertNotNull($refund->request_code);
     }
@@ -699,6 +699,69 @@ class PaymentTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/Payments/Index')
                 ->has('payments.data', 1)
+            );
+    }
+
+    public function test_the_queue_carries_the_summary_counts_and_refund_pipeline(): void
+    {
+        $pending = Payment::factory()->create(['amount' => 1500]);
+        $verified = Payment::factory()->verified()->create(['amount' => 2000]);
+        Payment::factory()->rejected()->create(['amount' => 500]);
+        $this->claim($verified);
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                // The chips and summary count the whole queue, not the
+                // default "pending" filter the rows are narrowed to.
+                ->where('summary.pending.count', 1)
+                ->where('summary.pending.amount', 1500)
+                ->where('summary.verified.count', 1)
+                ->where('summary.verified.amount', 2000)
+                ->where('summary.rejected.count', 1)
+                ->where('summary.rejected.amount', 500)
+                ->where('summary.open_refunds.count', 1)
+                ->where('paymentCounts.pending', 1)
+                ->where('paymentCounts.verified', 1)
+                ->where('paymentCounts.rejected', 1)
+                ->where('refundCounts.for_review', 1)
+                // The refunds list is its own paginated pipeline, carrying the
+                // ordered stages the screen draws the timeline from.
+                ->has('refunds.data', 1)
+                ->where('refunds.data.0.status', 'for_review')
+                ->where('refunds.data.0.next_stage.value', 'processing')
+                ->where('refunds.data.0.can_act', true)
+                ->has('refundPipeline')
+            );
+    }
+
+    public function test_the_queue_honours_the_search_and_method_filters(): void
+    {
+        $target = Payment::factory()->create([
+            'amount' => 1000,
+            'payment_method' => PaymentMethod::Cash->value,
+            'or_number' => 'OR-SEARCH-1',
+        ]);
+        Payment::factory()->create([
+            'amount' => 900,
+            'payment_method' => PaymentMethod::Online->value,
+        ]);
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments?search=OR-SEARCH')
+            ->assertInertia(fn ($page) => $page
+                ->has('payments.data', 1)
+                ->where('payments.data.0.or_number', 'OR-SEARCH-1')
+                ->where('filters.search', 'OR-SEARCH')
+            );
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments?method=cash')
+            ->assertInertia(fn ($page) => $page
+                ->has('payments.data', 1)
+                ->where('payments.data.0.id', $target->getKey())
+                ->where('filters.method', 'cash')
             );
     }
 }

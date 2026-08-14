@@ -177,11 +177,19 @@ class ExportController extends Controller
     {
         abort_unless($request->user()->role->handlesPayments(), 403);
 
+        $status = $request->string('status')->toString();
+        $method = $request->string('method')->toString();
+        $search = $request->string('search')->toString();
+
         $query = Payment::with(['user.profile.fieldOffice', 'training', 'verifier'])
-            ->when(
-                $request->string('status')->toString(),
-                fn ($inner, $status) => $inner->where('status', $status)
-            );
+            ->when($status, fn ($inner, $s) => $inner->where('status', $s))
+            ->when($method, fn ($inner, $m) => $inner->where('payment_method', $m))
+            ->when($search, fn ($inner, $s) => $inner->where(function ($q) use ($s) {
+                $q->whereHas('user', fn ($user) => $user->where('name', 'like', "%{$s}%"))
+                    ->orWhere('or_number', 'like', "%{$s}%")
+                    ->orWhere('reference_number', 'like', "%{$s}%")
+                    ->orWhereHas('training', fn ($training) => $training->where('title', 'like', "%{$s}%"));
+            }));
 
         return SpreadsheetExport::download(
             'csc-tims-payments',

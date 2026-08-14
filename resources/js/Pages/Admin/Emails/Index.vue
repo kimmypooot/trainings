@@ -151,7 +151,7 @@ const deleteTemplate = (template) =>
     <Head title="Emails" />
 
     <AuthenticatedLayout title="Emails" current="admin-emails">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppCard
                 title="Send an Announcement"
                 subtitle="Goes to the selected participants by email and as an in-app notification."

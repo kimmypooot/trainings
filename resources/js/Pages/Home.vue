@@ -317,7 +317,7 @@ const money = (value) =>
                     </div>
                     <div v-if="selected.payment_required">
                         <dt class="text-csc-ink/60">Fee</dt>
-                        <dd class="mt-0.5 font-medium text-csc-ink">PHP {{ money(selected.payment_amount) }}</dd>
+                        <dd class="mt-0.5 font-medium text-csc-ink">₱{{ money(selected.payment_amount) }}</dd>
                     </div>
                     <div v-if="selected.category">
                         <dt class="text-csc-ink/60">Curriculum</dt>

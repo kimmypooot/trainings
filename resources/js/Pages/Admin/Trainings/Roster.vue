@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
@@ -8,7 +8,10 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
+import AppSelect from '@/Components/AppSelect.vue';
+import AppTextarea from '@/Components/AppTextarea.vue';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -17,6 +20,7 @@ const props = defineProps({
     scopedTo: { type: String, default: null },
     attendanceStatuses: { type: Array, default: () => [] },
     scanLinks: { type: Array, default: () => [] },
+    transferTargets: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -208,6 +212,104 @@ const pendingCount = computed(() => props.registrations.filter((r) => r.status =
 
 const restrictions = computed(() => props.registrations.filter((r) => r.food_restrictions));
 
+/* -------------------------------------------------------------------------- */
+/* Filtering, search, "not checked in today", sorting                          */
+/* -------------------------------------------------------------------------- */
+
+const query = ref('');
+const statusFilter = ref('all');
+const onlyNotCheckedInToday = ref(false);
+
+// The training day that is happening right now, if any. The "not checked in
+// today" view has nothing to say on a day the training is not running.
+const todayDay = computed(() => props.training.days.find((day) => day.is_today)?.day ?? null);
+
+const notCheckedInToday = (registration) =>
+    todayDay.value !== null &&
+    isMarkable(registration) &&
+    !(registration.attendance[todayDay.value]?.time_in);
+
+const statusCounts = computed(() => {
+    const counts = { all: props.registrations.length };
+
+    for (const registration of props.registrations) {
+        counts[registration.status] = (counts[registration.status] ?? 0) + 1;
+    }
+
+    return counts;
+});
+
+const notCheckedInCount = computed(
+    () => props.registrations.filter(notCheckedInToday).length
+);
+
+// Chips in display order. Statuses that never occur on this roster simply read
+// as zero, which is easier to reason about than a chip vanishing mid-session.
+const statusChips = ['pending', 'approved', 'completed', 'cancelled', 'waitlisted'];
+
+const sortKey = ref(null);
+const sortDir = ref('asc');
+
+function toggleSort(key) {
+    if (sortKey.value === key) {
+        sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortKey.value = key;
+        sortDir.value = 'asc';
+    }
+}
+
+const sortIndicator = (key) => {
+    if (sortKey.value !== key) {
+        return '';
+    }
+
+    return sortDir.value === 'asc' ? ' ↑' : ' ↓';
+};
+
+const filtered = computed(() => {
+    const needle = query.value.trim().toLowerCase();
+
+    let rows = props.registrations.filter((registration) => {
+        const matchesQuery =
+            !needle ||
+            `${registration.name} ${registration.email} ${registration.organization ?? ''}`
+                .toLowerCase()
+                .includes(needle);
+        const matchesStatus = statusFilter.value === 'all' || registration.status === statusFilter.value;
+        const matchesToday = !onlyNotCheckedInToday.value || notCheckedInToday(registration);
+
+        return matchesQuery && matchesStatus && matchesToday;
+    });
+
+    if (sortKey.value) {
+        const dir = sortDir.value === 'asc' ? 1 : -1;
+
+        rows = [...rows].sort((a, b) => {
+            const av = a[sortKey.value] ?? '';
+            const bv = b[sortKey.value] ?? '';
+
+            return (typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv))) * dir;
+        });
+    }
+
+    return rows;
+});
+
+const hasActiveFilters = computed(
+    () => Boolean(query.value.trim()) || statusFilter.value !== 'all' || onlyNotCheckedInToday.value
+);
+
+const clearFilters = () => {
+    query.value = '';
+    statusFilter.value = 'all';
+    onlyNotCheckedInToday.value = false;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Selection                                                                   */
+/* -------------------------------------------------------------------------- */
+
 /*
  * Selection.
  *
@@ -238,12 +340,17 @@ const toggle = (id) => {
     selected.value = next;
 };
 
+// Select-all acts on the rows currently in front of the operator, not on the
+// whole roster — checking one box and approving "all" when the roster was
+// filtered is a scope the server would reject anyway.
+const visibleSelectable = computed(() => filtered.value.filter((r) => selectable.value.includes(r)));
+
 const allSelected = computed(
-    () => selectable.value.length > 0 && selected.value.size === selectable.value.length
+    () => visibleSelectable.value.length > 0 && selected.value.size === visibleSelectable.value.length
 );
 
 const toggleAll = () => {
-    selected.value = allSelected.value ? new Set() : new Set(selectable.value.map((r) => r.id));
+    selected.value = allSelected.value ? new Set() : new Set(visibleSelectable.value.map((r) => r.id));
 };
 
 const selectedRows = computed(() => props.registrations.filter((r) => selected.value.has(r.id)));
@@ -287,13 +394,54 @@ const applyBulk = (action) => {
         onConfirm: (remarks) => sendBulk(action, remarks),
     });
 };
+
+/*
+ * Moving a selection to another run.
+ *
+ * Its own dialog rather than another bulk action: it needs a target training
+ * as well as a reason, and the server reports back per-participant which of
+ * them could not be moved.
+ */
+const transferring = ref(false);
+
+const transferForm = useForm({
+    target_training_id: '',
+    reason: '',
+    ids: [],
+});
+
+const startTransfer = () => {
+    transferForm.reset();
+    transferForm.clearErrors();
+    transferring.value = true;
+};
+
+const submitTransfer = () => {
+    transferForm.ids = [...selected.value];
+
+    transferForm.post(`/admin/trainings/${props.training.id}/registrations/transfer`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            transferring.value = false;
+            selected.value = new Set();
+            transferForm.reset();
+        },
+    });
+};
+
+// The attendance sheet is the same page in print — the interactive chrome
+// carries the print:hidden class and the sheet the print-only section shows.
+const printAttendanceSheet = () => window.print();
+
+// Evaluated once when the page loads; for a printout that is the right "now".
+const printedAt = new Date().toLocaleString();
 </script>
 
 <template>
     <Head :title="`Roster — ${training.title}`" />
 
     <AuthenticatedLayout title="Roster" current="admin-trainings">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <Link
                 href="/admin/trainings"
                 class="inline-flex items-center gap-1.5 text-sm font-medium text-csc-blue hover:text-csc-blue-deep"
@@ -304,7 +452,7 @@ const applyBulk = (action) => {
                 Manage Trainings
             </Link>
 
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-wrap gap-3 print:hidden">
                 <AppButton :href="`/admin/exports/trainings/${training.id}/roster`" variant="ghost" size="sm" icon="download">
                     Export Roster (CSV)
                 </AppButton>
@@ -316,6 +464,9 @@ const applyBulk = (action) => {
                 >
                     Export Roster (Excel)
                 </AppButton>
+                <AppButton variant="ghost" size="sm" icon="print" @click="printAttendanceSheet">
+                    Print Attendance Sheet
+                </AppButton>
             </div>
 
             <AppAlert v-for="message in errors" :key="message" tone="danger">{{ message }}</AppAlert>
@@ -324,7 +475,7 @@ const applyBulk = (action) => {
                 Showing participants from <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
 
-            <AppCard :title="training.title" :subtitle="`${training.starts_at} · ${training.venue}`">
+            <AppCard :title="training.title" :subtitle="`${training.starts_at} · ${training.venue}`" class="print:hidden">
                 <div class="grid grid-cols-2 gap-4 sm:grid-cols-6">
                     <div>
                         <p class="text-2xl font-bold text-warning">{{ pendingCount }}</p>
@@ -361,6 +512,7 @@ const applyBulk = (action) => {
             <AppCard
                 title="Scanning stations"
                 subtitle="Hand a door to someone without an account — a phone, a link and a code."
+                class="print:hidden"
             >
                 <!-- The one and only sighting of the code. -->
                 <div v-if="newStation" class="rounded-xl border border-success/40 bg-success-soft p-4">
@@ -482,7 +634,7 @@ const applyBulk = (action) => {
                 </p>
             </AppCard>
 
-            <AppAlert v-if="awaitingCertificates" tone="info" title="Certificates ready to issue">
+            <AppAlert v-if="awaitingCertificates" tone="info" title="Certificates ready to issue" class="print:hidden">
                 <p>
                     {{ awaitingCertificates }} completed participant(s) have no certificate yet.
                 </p>
@@ -490,7 +642,7 @@ const applyBulk = (action) => {
             </AppAlert>
 
             <!-- Catering needs this as a list, not buried per-row -->
-            <AppAlert v-if="restrictions.length" tone="warning" title="Food restrictions for catering">
+            <AppAlert v-if="restrictions.length" tone="warning" title="Food restrictions for catering" class="print:hidden">
                 <ul class="mt-1 space-y-1">
                     <li v-for="item in restrictions" :key="item.id">
                         <span class="font-medium">{{ item.name }}</span> — {{ item.food_restrictions }}
@@ -498,7 +650,7 @@ const applyBulk = (action) => {
                 </ul>
             </AppAlert>
 
-            <AppCard title="Participants" :padded="registrations.length > 0">
+            <AppCard title="Participants" :padded="registrations.length > 0" class="print:hidden">
                 <AppEmptyState
                     v-if="!registrations.length"
                     title="No one has registered yet"
@@ -507,6 +659,83 @@ const applyBulk = (action) => {
                 />
 
                 <template v-else>
+                <!--
+                    Client-side find and filter. The whole roster ships in the
+                    page, so the narrowing happens locally — the operator at the
+                    venue gets the answer without a round trip. Selection is not
+                    affected by the filters; choosing rows always means choosing
+                    rows in the roster.
+                -->
+                <div class="flex flex-col gap-3 border-b border-csc-line pb-4">
+                    <input
+                        v-model="query"
+                        type="search"
+                        :placeholder="`Find ${registrations.length} participant(s) by name, email or agency…`"
+                        aria-label="Find participants"
+                        class="w-full rounded-lg border border-csc-ink/20 bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                    />
+
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button
+                            v-for="chip in ['all', ...statusChips]"
+                            :key="chip"
+                            type="button"
+                            class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                statusFilter === chip
+                                    ? 'bg-csc-blue text-white shadow-sm'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink/70 hover:text-csc-ink'
+                            "
+                            @click="statusFilter = chip"
+                        >
+                            {{ chip === 'all' ? 'All' : chip }}
+                            <span
+                                class="ml-1 text-xs"
+                                :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                            >
+                                {{ statusCounts[chip] ?? 0 }}
+                            </span>
+                        </button>
+
+                        <button
+                            v-if="todayDay !== null"
+                            type="button"
+                            class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                onlyNotCheckedInToday
+                                    ? 'bg-warning text-white shadow-sm'
+                                    : 'bg-warning-soft text-warning-ink hover:text-csc-ink'
+                            "
+                            @click="onlyNotCheckedInToday = !onlyNotCheckedInToday"
+                        >
+                            Not checked in today
+                            <span
+                                class="ml-1 text-xs"
+                                :class="onlyNotCheckedInToday ? 'text-white/80' : 'text-warning/70'"
+                            >
+                                {{ notCheckedInCount }}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <AppEmptyState
+                    v-if="filtered.length === 0"
+                    title="No participants match"
+                    :description="
+                        hasActiveFilters
+                            ? 'Try another search, or clear the filters to see the full roster.'
+                            : 'The roster is empty.'
+                    "
+                    icon="users"
+                    class="pt-6"
+                >
+                    <template v-if="hasActiveFilters" #action>
+                        <AppButton size="sm" variant="ghost" @click="clearFilters">Clear filters</AppButton>
+                    </template>
+                </AppEmptyState>
+
+                <template v-if="filtered.length > 0">
                 <!--
                     The bulk bar sticks to the bottom of the viewport rather
                     than the top of the table: on a long roster the selection is
@@ -518,7 +747,7 @@ const applyBulk = (action) => {
                 -->
                 <div
                     v-if="selected.size"
-                    class="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-(--z-tabbar) -mx-5 flex flex-wrap items-center gap-3 border-t border-csc-line bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:bottom-0"
+                    class="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-(--z-tabbar) -mx-5 flex flex-wrap items-center gap-3 border-t border-csc-line bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:bottom-0 print:hidden"
                 >
                     <p class="text-sm font-medium text-csc-ink" role="status">
                         {{ selected.size }} selected
@@ -568,10 +797,19 @@ const applyBulk = (action) => {
                         >
                             Mark {{ selectedApproved }} Complete
                         </AppButton>
+                        <AppButton
+                            v-if="transferTargets.length"
+                            size="sm"
+                            variant="ghost"
+                            icon="calendar"
+                            @click="startTransfer"
+                        >
+                            Move to Another Training
+                        </AppButton>
                     </div>
                 </div>
 
-                <div class="-mx-5 overflow-x-auto sm:-mx-6">
+                <div class="-mx-5 hidden overflow-x-auto sm:-mx-6 md:block print:hidden">
                     <table class="w-full min-w-160 text-left text-sm">
                         <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
@@ -581,22 +819,54 @@ const applyBulk = (action) => {
                                         class="size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                         :checked="allSelected"
                                         :indeterminate="selected.size > 0 && !allSelected"
-                                        :disabled="!selectable.length"
+                                        :disabled="!visibleSelectable.length"
                                         :aria-label="allSelected ? 'Clear selection' : 'Select all actionable participants'"
                                         @change="toggleAll"
                                     />
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Participant</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Agency</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Field Office</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Status</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('name')"
+                                    >
+                                        Participant{{ sortIndicator('name') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('organization')"
+                                    >
+                                        Agency{{ sortIndicator('organization') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('field_office')"
+                                    >
+                                        Field Office{{ sortIndicator('field_office') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('status')"
+                                    >
+                                        Status{{ sortIndicator('status') }}
+                                    </button>
+                                </th>
                                 <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Attendance</th>
                                 <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
                             <tr
-                                v-for="registration in registrations"
+                                v-for="registration in filtered"
                                 :key="registration.id"
                                 :class="isSelected(registration.id) ? 'bg-csc-blue-tint/50' : ''"
                             >
@@ -741,8 +1011,191 @@ const applyBulk = (action) => {
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Mobile: the same participants as stacked cards -->
+                <ul class="space-y-3 md:hidden print:hidden">
+                    <li
+                        v-for="registration in filtered"
+                        :key="registration.id"
+                        class="rounded-xl border border-csc-line bg-white p-4"
+                        :class="isSelected(registration.id) ? 'border-csc-blue/50 bg-csc-blue-tint/30' : ''"
+                    >
+                        <div class="flex items-start gap-3">
+                            <input
+                                v-if="['pending', 'approved'].includes(registration.status)"
+                                type="checkbox"
+                                class="mt-0.5 size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                :checked="isSelected(registration.id)"
+                                :aria-label="`Select ${registration.name}`"
+                                @change="toggle(registration.id)"
+                            />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start justify-between gap-2">
+                                    <p class="text-sm font-semibold text-csc-ink">{{ registration.name }}</p>
+                                    <AppBadge :status="registration.status" />
+                                </div>
+                                <p class="mt-0.5 text-xs text-csc-ink/60">{{ registration.email }}</p>
+                                <p class="mt-1 text-xs text-csc-ink/70">
+                                    {{ registration.organization ?? '—' }}
+                                    <template v-if="registration.position"> · {{ registration.position }}</template>
+                                </p>
+                                <p v-if="registration.field_office" class="text-xs text-csc-ink/55">
+                                    {{ registration.field_office }}
+                                </p>
+                                <p v-if="registration.review_remarks" class="mt-1 text-xs text-csc-ink/55">
+                                    {{ registration.review_remarks }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div v-if="isMarkable(registration)" class="mt-3 border-t border-csc-line pt-3">
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                                <label v-for="day in training.days" :key="day.day" class="flex flex-col gap-0.5">
+                                    <span
+                                        class="text-[10px] font-semibold uppercase"
+                                        :class="day.is_today ? 'text-csc-red-ink' : 'text-csc-ink/50'"
+                                    >
+                                        {{ day.label }}
+                                    </span>
+                                    <select
+                                        class="rounded border border-csc-line bg-white px-1.5 py-1 text-xs text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                                        :value="registration.attendance[day.day]?.status ?? ''"
+                                        @change="setAttendance(registration, day.day, $event.target.value)"
+                                    >
+                                        <option value="">—</option>
+                                        <option
+                                            v-for="option in attendanceStatuses"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                </label>
+                            </div>
+                            <p v-if="training.duration_days > 1" class="mt-2 text-2xs text-csc-ink/55">
+                                {{ registration.credited_days }} of {{ training.duration_days }} days
+                            </p>
+                        </div>
+
+                        <div
+                            class="mt-3 flex flex-wrap items-center justify-end gap-x-3 gap-y-2 border-t border-csc-line pt-3"
+                        >
+                            <template v-if="registration.status === 'pending'">
+                                <button
+                                    type="button"
+                                    class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="decide(registration, 'approved')"
+                                >
+                                    Approve
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded text-xs font-semibold text-warning hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="decide(registration, 'waitlisted')"
+                                >
+                                    Waitlist
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="decide(registration, 'rejected')"
+                                >
+                                    Reject
+                                </button>
+                            </template>
+
+                            <AppButton
+                                v-else-if="registration.status === 'approved'"
+                                size="sm"
+                                variant="ghost"
+                                @click="markComplete(registration)"
+                            >
+                                {{ registration.can_complete ? 'Mark Complete' : 'Complete (Override)' }}
+                            </AppButton>
+
+                            <template v-else-if="registration.status === 'completed'">
+                                <span
+                                    v-if="registration.certificate_number"
+                                    class="font-mono text-2xs text-csc-ink/60"
+                                >
+                                    {{ registration.certificate_number }}
+                                </span>
+                                <span v-else-if="!registration.fee_cleared" class="text-2xs text-warning">
+                                    Fee outstanding
+                                </span>
+                                <AppButton
+                                    v-else
+                                    size="sm"
+                                    variant="ghost"
+                                    @click="releaseCertificate(registration.id)"
+                                >
+                                    Issue Certificate
+                                </AppButton>
+                            </template>
+
+                            <span v-else class="text-xs text-csc-ink/50">—</span>
+                        </div>
+                    </li>
+                </ul>
+                </template>
                 </template>
             </AppCard>
+
+            <!--
+                The printed attendance sheet. Everything interactive above is
+                print:hidden; this section only exists in the @media print
+                rendering and reflects the filters currently applied.
+            -->
+            <section class="hidden print:block">
+                <header class="mb-6 text-center">
+                    <p class="text-sm font-semibold">
+                        Republic of the Philippines · Civil Service Commission · Regional Office
+                    </p>
+                    <h1 class="mt-2 text-xl font-bold">{{ training.title }}</h1>
+                    <p class="mt-1 text-sm">
+                        {{ training.starts_at }} · {{ training.venue }} · {{ training.status_label }}
+                    </p>
+                </header>
+
+                <table class="w-full border-collapse text-xs">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">#</th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Participant</th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Agency</th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Field Office</th>
+                            <th
+                                v-for="day in training.days"
+                                :key="day.day"
+                                scope="col"
+                                class="border border-black px-2 py-1.5 text-center font-semibold"
+                            >
+                                {{ day.label }}
+                            </th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(registration, index) in filtered" :key="registration.id">
+                            <td class="border border-black px-2 py-1.5">{{ index + 1 }}</td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.name }}</td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.organization ?? '—' }}</td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.field_office ?? '—' }}</td>
+                            <td
+                                v-for="day in training.days"
+                                :key="day.day"
+                                class="border border-black px-2 py-1.5 text-center"
+                            >
+                                {{ registration.attendance[day.day]?.status_label ?? '—' }}
+                            </td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.status_label }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p class="mt-4 text-right text-[10px]">Printed {{ printedAt }}</p>
+            </section>
         </div>
 
         <AppPromptModal
@@ -757,5 +1210,45 @@ const applyBulk = (action) => {
             @confirm="confirmPrompt"
             @close="closePrompt"
         />
+
+        <AppModal
+            :open="transferring"
+            title="Move to another training"
+            :subtitle="`${selected.size} participant(s) selected. Their registration date, attendance and any payment move with them.`"
+            @close="transferring = false"
+        >
+            <form class="space-y-4" @submit.prevent="submitTransfer">
+                <AppSelect
+                    v-model="transferForm.target_training_id"
+                    label="Move to"
+                    :options="transferTargets"
+                    placeholder="Choose a training"
+                    :error="transferForm.errors.target_training_id"
+                    required
+                />
+
+                <AppTextarea
+                    v-model="transferForm.reason"
+                    label="Why are they being moved?"
+                    hint="Shown to every participant in the notification they receive."
+                    :error="transferForm.errors.reason"
+                    required
+                />
+
+                <p v-if="transferForm.errors.ids" class="text-xs font-medium text-csc-red-ink">
+                    {{ transferForm.errors.ids }}
+                </p>
+                <p v-if="transferForm.errors.transfer" class="text-xs font-medium text-csc-red-ink">
+                    {{ transferForm.errors.transfer }}
+                </p>
+
+                <div class="flex justify-end gap-2">
+                    <AppButton type="button" variant="ghost" @click="transferring = false">Cancel</AppButton>
+                    <AppButton type="submit" :processing="transferForm.processing">
+                        Move {{ selected.size }} Participant(s)
+                    </AppButton>
+                </div>
+            </form>
+        </AppModal>
     </AuthenticatedLayout>
 </template>

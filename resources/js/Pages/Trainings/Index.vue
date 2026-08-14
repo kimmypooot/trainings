@@ -15,7 +15,7 @@ defineProps({
     <Head title="Trainings" />
 
     <AuthenticatedLayout title="Trainings" current="trainings">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <p class="text-sm leading-relaxed text-csc-ink/70">
                 Programs offered by the Civil Service Commission. Slots are taken on a first-come basis.
             </p>

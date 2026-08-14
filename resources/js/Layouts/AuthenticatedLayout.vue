@@ -110,6 +110,13 @@ const navGroups = [
                 icon: 'card',
             },
             {
+                key: 'physical-or',
+                label: 'Physical OR',
+                href: '/my/physical-or',
+                roles: ['participant'],
+                icon: 'document',
+            },
+            {
                 key: 'training-requests',
                 label: 'Suggest a Training',
                 href: '/my/training-requests',
@@ -167,6 +174,13 @@ const navGroups = [
                 href: '/admin/payments',
                 roles: ['collecting-officer', 'admin', 'superadmin'],
                 icon: 'card',
+            },
+            {
+                key: 'admin-physical-or',
+                label: 'Physical OR',
+                href: '/admin/physical-or',
+                roles: ['admin', 'superadmin'],
+                icon: 'document',
             },
             {
                 key: 'admin-requests',

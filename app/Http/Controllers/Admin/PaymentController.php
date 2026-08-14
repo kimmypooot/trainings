@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\RefundStatus;
 use App\Http\Controllers\Controller;
@@ -11,6 +12,7 @@ use App\Support\PaymentService;
 use App\Support\RefundService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,26 +25,64 @@ class PaymentController extends Controller
 {
     public function index(Request $request): Response
     {
+        $status = $request->string('status')->toString();
+        $method = $request->string('method')->toString();
+        $search = $request->string('search')->toString();
+
         $payments = Payment::with(['user', 'training', 'verifier', 'collectingOfficer', 'registration'])
-            ->when(
-                $request->string('status')->toString() ?: PaymentStatus::Pending->value,
-                fn ($query, $status) => $query->where('status', $status)
-            )
+            // The verification queue defaults to the work in front of the
+            // officer; every other status has to be asked for.
+            ->when($status ?: PaymentStatus::Pending->value, fn ($query, $s) => $query->where('status', $s))
+            ->when($method, fn ($query, $m) => $query->where('payment_method', $m))
+            ->when($search, fn ($query, $s) => $query->where(function ($inner) use ($s) {
+                $inner->whereHas('user', fn ($user) => $user->where('name', 'like', "%{$s}%"))
+                    ->orWhere('or_number', 'like', "%{$s}%")
+                    ->orWhere('reference_number', 'like', "%{$s}%")
+                    ->orWhereHas('training', fn ($training) => $training->where('title', 'like', "%{$s}%"));
+            }))
             ->latest()
             ->paginate(25)
             ->withQueryString();
+
+        // The chips and the summary keep counting the whole queue while the
+        // rows below narrow — a chip whose count shrank as the officer typed
+        // would read as "work disappeared".
+        $paymentCounts = Payment::query()
+            ->select('status', DB::raw('count(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $summary = [
+            'pending' => $this->tally(Payment::where('status', PaymentStatus::Pending)),
+            'verified' => $this->tally(Payment::where('status', PaymentStatus::Verified)),
+            'rejected' => $this->tally(Payment::where('status', PaymentStatus::Rejected)),
+            // Everything still moving, not just the untouched ones — a claim
+            // parked at MSD is as much outstanding money as one nobody has
+            // looked at yet.
+            'open_refunds' => $this->tally(RefundRequest::whereNotIn('status', [
+                RefundStatus::Refunded->value, RefundStatus::Rejected->value,
+            ])),
+        ];
+
+        $refundStatus = $request->string('refund_status')->toString();
+
+        $refundCounts = RefundRequest::query()
+            ->select('status', DB::raw('count(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status');
 
         // Open claims first: a refund sitting mid-pipeline is work, a settled
         // one is history, and mixing them buries the former under the latter.
         $refunds = RefundRequest::with([
             'payment.user', 'payment.training', 'reviewer', 'statusLogs.actor',
         ])
+            ->when($refundStatus, fn ($query, $s) => $query->where('status', $s))
             ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', [
                 RefundStatus::Refunded->value, RefundStatus::Rejected->value,
             ])
             ->latest()
-            ->limit(100)
-            ->get();
+            ->paginate(10)
+            ->withQueryString();
 
         return Inertia::render('Admin/Payments/Index', [
             'payments' => $payments->through(fn (Payment $payment) => [
@@ -53,6 +93,7 @@ class PaymentController extends Controller
                 'method' => $payment->payment_method->label(),
                 'reference_number' => $payment->reference_number,
                 'payment_date' => $payment->payment_date->format('d M Y'),
+                'payment_date_ts' => $payment->payment_date->timestamp,
                 'status' => $payment->status->value,
                 'status_label' => $payment->status->label(),
                 'rejection_reason' => $payment->rejection_reason,
@@ -65,7 +106,17 @@ class PaymentController extends Controller
                 'charge_to' => $payment->registration?->charge_to?->label(),
                 'proof_url' => $payment->proof_path ? route('payments.proof', $payment) : null,
             ]),
-            'refunds' => $refunds->map(fn (RefundRequest $refund) => [
+            'paymentCounts' => $paymentCounts,
+            'summary' => $summary,
+            'filters' => [
+                'status' => $status,
+                'method' => $method,
+                'search' => $search,
+                'refund_status' => $refundStatus,
+            ],
+            'statuses' => PaymentStatus::options(),
+            'methods' => PaymentMethod::options(),
+            'refunds' => $refunds->through(fn (RefundRequest $refund) => [
                 'id' => $refund->id,
                 'request_code' => $refund->request_code,
                 'participant' => $refund->payment->user->name,
@@ -98,11 +149,28 @@ class PaymentController extends Controller
                     'actor' => $log->actor?->name ?? 'Participant',
                     'at' => $log->changed_at->format('d M Y, g:i A'),
                 ])->all(),
-            ])->all(),
-            'filters' => ['status' => $request->string('status')->toString()],
-            'statuses' => PaymentStatus::options(),
+            ]),
+            'refundCounts' => $refundCounts,
             'refundStatuses' => RefundStatus::options(),
+            // The ordered stages, so the screen can draw the pipeline without
+            // hardcoding a second copy of it.
+            'refundPipeline' => collect(RefundStatus::pipeline())
+                ->map(fn (RefundStatus $stage) => ['value' => $stage->value, 'label' => $stage->label()])
+                ->all(),
         ]);
+    }
+
+    /**
+     * Count and value of a payment or refund bucket, for the stats strip.
+     *
+     * @return array{count: int, amount: int|float}
+     */
+    private function tally($query): array
+    {
+        return [
+            'count' => (clone $query)->count(),
+            'amount' => (float) (clone $query)->sum('amount'),
+        ];
     }
 
     public function review(Request $request, Payment $payment): RedirectResponse

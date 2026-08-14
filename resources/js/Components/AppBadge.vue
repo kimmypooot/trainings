@@ -31,6 +31,16 @@ const props = defineProps({
                 'under_review',
                 'requirements_sent',
                 'confirmed',
+                // The physical-OR delivery pipeline. Same reasoning as the
+                // refund stages: the in-flight ones share the warning treatment
+                // because they are all "still waiting".
+                'request_submitted',
+                'payment_verification_pending',
+                'payment_verified',
+                'preparing',
+                'ready_for_shipment',
+                'shipped',
+                'delivered',
             ].includes(value),
     },
     label: { type: String, default: null },
@@ -119,6 +129,46 @@ const variants = {
         classes: 'bg-info-soft text-info',
         icon: 'M9 12.5l2 2 4-4',
         label: 'Confirmed',
+    },
+    // Physical-OR delivery stages. The long middle is all "still in flight",
+    // so those share the warning treatment; once money is verified the
+    // treatment turns informational, and the two terminal happy endings are
+    // success. The label carries the detail, which is the rule everywhere in
+    // this map too.
+    request_submitted: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M12 7v5l3 2',
+        label: 'Request Submitted',
+    },
+    payment_verification_pending: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M12 7v5l3 2',
+        label: 'Payment Verification Pending',
+    },
+    payment_verified: {
+        classes: 'bg-info-soft text-info',
+        icon: 'M9 12.5l2 2 4-4',
+        label: 'Payment Verified',
+    },
+    preparing: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M12 7v5l3 2',
+        label: 'Preparing Physical OR',
+    },
+    ready_for_shipment: {
+        classes: 'bg-info-soft text-info',
+        icon: 'M5 12h12m-4-4l4 4-4 4',
+        label: 'Ready for Shipment',
+    },
+    shipped: {
+        classes: 'bg-info-soft text-info',
+        icon: 'M5 12h12m-4-4l4 4-4 4',
+        label: 'Shipped',
+    },
+    delivered: {
+        classes: 'bg-success-soft text-success',
+        icon: 'M5 12.5l4.5 4.5L19 7.5',
+        label: 'Delivered',
     },
 };
 

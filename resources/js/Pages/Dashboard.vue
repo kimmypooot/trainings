@@ -137,7 +137,7 @@ const stats = computed(() => [
     <Head title="Dashboard" />
 
     <AuthenticatedLayout title="Dashboard" current="dashboard">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <!-- 1. Greeting + state -->
             <div>
                 <h2 class="text-xl font-semibold tracking-tight text-csc-blue sm:text-2xl">

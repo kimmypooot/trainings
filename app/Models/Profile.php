@@ -48,6 +48,27 @@ class Profile extends Model
     }
 
     /**
+     * Whether the participant lives outside Region VIII.
+     *
+     * The region field is free text ("REGION VIII", "VIII - EASTERN VISAYAS",
+     * "REGION XI", ...), so the check is a tolerant contains rather than an
+     * exact match. Fails open: a blank region is treated as outside, because
+     * the physical-OR option only ever matters to people who cannot collect
+     * the receipt in person — erring toward showing the option is the safe
+     * side.
+     */
+    public function isOutsideCscRegion(): bool
+    {
+        if (blank($this->region)) {
+            return true;
+        }
+
+        $region = mb_strtoupper((string) $this->region);
+
+        return ! str_contains($region, 'VIII') && ! str_contains($region, 'EASTERN VISAYAS');
+    }
+
+    /**
      * The middle name reduced to an initial, which is how names are rendered
      * on certificates and event lists even though the full name is stored.
      */

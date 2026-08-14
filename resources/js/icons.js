@@ -39,6 +39,7 @@ export const icons = {
     'map-pin': 'M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z',
     link: 'M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.2 1.2M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.2-1.2',
     phone: 'M4 5c0-.6.4-1 1-1h3l2 5-2.5 1.5a12 12 0 0 0 5 5L14 13l5 2v3c0 .6-.4 1-1 1h-1A15 15 0 0 1 4 6V5Z',
+    settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 4v2m0 12v2m8-8h-2M6 12H4m13.7-5.7-1.4 1.4M7.7 16.3l-1.4 1.4m0-11.4 1.4 1.4m8.6 8.6 1.4 1.4',
     analytics: 'M4 19V5m0 14h16M8 15V9m4 6v-3m4 3V7',
 
     // People
@@ -54,6 +55,7 @@ export const icons = {
     'eye-off': 'M4 20 20 4',
     plus: 'M12 5v14M5 12h14',
     download: 'M12 4v11m0 0 4-4m-4 4-4-4M5 19h14',
+    print: 'M7 8V3h10v5M7 18h10v3H7zM4 8h16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3v-4H7v4H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z',
     upload: 'M12 16V4m0 0L8 8m4-4 4 4M4 20h16',
     // Board plus clip, drawn as one path so it keeps the 1.8 stroke of the set.
     clipboard: 'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6.5A1.5 1.5 0 0 0 5 7.5v12A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 6H16',

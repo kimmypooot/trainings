@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\Curriculum;
+use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
 use App\Enums\RegistrationStatus;
 use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
@@ -26,9 +28,37 @@ class TrainingController extends Controller
 {
     public function index(Request $request): Response
     {
+        /*
+         * The Registered column is a fee breakdown, and the three payment
+         * buckets are a partition of the occupying registrations on *paid*
+         * trainings: paid = verified money, promissory = verified note, pending
+         * = everything else still holding a slot (proof awaiting verification
+         * or none uploaded yet). Free trainings register straight into the
+         * "free" bucket and cancelled registrations are counted apart from the
+         * rest, so Total = paid + promissory + pending never double-counts.
+         */
         $trainings = Training::query()
             ->withCount([
-                'registrations as active_count' => fn ($query) => $query->whereIn('status', RegistrationStatus::occupying()),
+                'registrations as paid_count' => fn ($query) => $query
+                    ->whereIn('status', RegistrationStatus::occupying())
+                    ->whereHas('payments', fn ($payment) => $payment
+                        ->where('status', PaymentStatus::Verified)
+                        ->whereNot('payment_method', PaymentMethod::Promissory)
+                    ),
+                'registrations as promissory_count' => fn ($query) => $query
+                    ->whereIn('status', RegistrationStatus::occupying())
+                    ->whereHas('payments', fn ($payment) => $payment
+                        ->where('status', PaymentStatus::Verified)
+                        ->where('payment_method', PaymentMethod::Promissory)
+                    ),
+                'registrations as pending_count' => fn ($query) => $query
+                    ->whereIn('status', RegistrationStatus::occupying())
+                    ->whereHas('training', fn ($training) => $training->where('payment_required', true))
+                    ->whereDoesntHave('payments', fn ($payment) => $payment->where('status', PaymentStatus::Verified)),
+                'registrations as free_count' => fn ($query) => $query
+                    ->whereIn('status', RegistrationStatus::occupying())
+                    ->whereHas('training', fn ($training) => $training->where('payment_required', false)),
+                'registrations as cancelled_count' => fn ($query) => $query->where('status', RegistrationStatus::Cancelled),
             ])
             ->when($request->string('status')->toString(), fn ($query, $status) => $query->where('status', $status))
             ->when($request->string('search')->toString(), fn ($query, $search) => $query->where(
@@ -43,11 +73,17 @@ class TrainingController extends Controller
                 'id' => $training->id,
                 'title' => $training->title,
                 'venue' => $training->venue,
-                'starts_at' => $training->starts_at->format('d M Y, g:i A'),
+                'starts_at' => $training->starts_at->format('d M Y'),
+                'ends_at' => $training->ends_at?->format('d M Y'),
+                'starts_time' => $training->starts_at->format('g:i A'),
                 'status' => $training->status->value,
-                'status_label' => $training->status->label(),
                 'capacity' => $training->capacity,
-                'registered' => $training->active_count,
+                'registered' => $training->paid_count + $training->promissory_count + $training->pending_count,
+                'paid' => $training->paid_count,
+                'promissory' => $training->promissory_count,
+                'pending' => $training->pending_count,
+                'free' => $training->free_count,
+                'cancelled' => $training->cancelled_count,
                 'roster_url' => route('admin.trainings.roster', $training),
                 'edit_url' => route('admin.trainings.edit', $training),
             ]),
@@ -55,11 +91,38 @@ class TrainingController extends Controller
                 'status' => $request->string('status')->toString(),
                 'search' => $request->string('search')->toString(),
             ],
-            'statuses' => array_map(
-                fn (TrainingStatus $status) => ['value' => $status->value, 'label' => $status->label()],
+            // The status tabs, with their live counts. Counts are global (not
+            // narrowed by the search box) so the tabs stay a stable map of the
+            // catalogue; "All" carries the region-wide total.
+            'tabs' => $this->statusTabs(),
+        ]);
+    }
+
+    /**
+     * Tab definitions for the Manage Trainings screen: All plus one per status,
+     * each carrying how many trainings it currently covers.
+     *
+     * @return array<int, array{value: string, label: string, count: int}>
+     */
+    private function statusTabs(): array
+    {
+        $counts = Training::query()
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->all();
+
+        return [
+            ['value' => '', 'label' => 'All', 'count' => array_sum($counts)],
+            ...array_map(
+                fn (TrainingStatus $status) => [
+                    'value' => $status->value,
+                    'label' => $status->label(),
+                    'count' => $counts[$status->value] ?? 0,
+                ],
                 TrainingStatus::cases()
             ),
-        ]);
+        ];
     }
 
     public function create(): Response
@@ -185,6 +248,17 @@ class TrainingController extends Controller
             ],
             'scopedTo' => $request->user()->fieldOffice?->name,
             'attendanceStatuses' => AttendanceStatus::options(),
+            // Where a selection can be moved to. Only open runs, and never this
+            // one — a transfer to the training you are already on is a misclick.
+            'transferTargets' => Training::visible()
+                ->whereKeyNot($training->getKey())
+                ->orderBy('starts_at')
+                ->get()
+                ->map(fn (Training $option) => [
+                    'value' => $option->id,
+                    'label' => $option->title.' — '.$option->starts_at->format('d M Y'),
+                ])
+                ->all(),
             // Live stations only. A revoked or expired link is not something an
             // operator can act on, and listing them would bury the one or two
             // links that actually open a door today.
@@ -205,6 +279,7 @@ class TrainingController extends Controller
             'registrations' => $registrations->map(fn (Registration $registration) => [
                 'id' => $registration->id,
                 'status' => $registration->status->value,
+                'status_label' => $registration->status->label(),
                 'name' => $registration->user->name,
                 'email' => $registration->user->email,
                 'organization' => $registration->user->profile?->organization_name,
@@ -212,6 +287,7 @@ class TrainingController extends Controller
                 'field_office' => $registration->user->profile?->fieldOffice?->name,
                 'food_restrictions' => $registration->user->profile?->food_restrictions_details,
                 'registered_at' => $registration->registered_at->format('d M Y'),
+                'registered_at_ts' => $registration->registered_at->timestamp,
                 'review_remarks' => $registration->review_remarks,
                 'attended' => $registration->attended_at !== null,
                 // Keyed by day number so the grid can look each cell up directly.
@@ -444,6 +520,55 @@ class TrainingController extends Controller
             'attended_at' => $registration->attended_at ?? $registration->training->starts_at,
             'review_remarks' => $remarks ?? $registration->review_remarks,
         ])->save();
+    }
+
+    /**
+     * Move a selection of the roster to another training.
+     *
+     * Ported from v1's `transfer-participants.php`. The usual cause is a run
+     * being rescheduled or split, where the alternative is cancelling and
+     * re-registering everyone — losing the original registration dates, the
+     * attendance recorded against them, and any payment attached.
+     */
+    public function transfer(Request $request, Training $training): RedirectResponse
+    {
+        $validated = $request->validate([
+            'target_training_id' => [
+                'required',
+                'integer',
+                // Never this one: a transfer onto the training you are already
+                // looking at is a misclick, not an intent.
+                Rule::notIn([$training->getKey()]),
+                Rule::exists('trainings', 'id'),
+            ],
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $result = RegistrationService::transfer(
+            $validated['ids'],
+            Training::findOrFail($validated['target_training_id']),
+            $request->user(),
+            $validated['reason'],
+            $request->user()->scopedFieldOfficeId(),
+        );
+
+        if ($result['moved'] === 0) {
+            return back()->withErrors([
+                'transfer' => 'Nobody could be moved. '.implode('; ', $result['skipped']),
+            ]);
+        }
+
+        // Reported rather than swallowed: "moved 12" when 3 were skipped is how
+        // a participant quietly stays on a training that no longer runs.
+        $message = "{$result['moved']} participant(s) moved.";
+
+        if ($result['skipped'] !== []) {
+            $message .= ' Skipped: '.implode('; ', $result['skipped']).'.';
+        }
+
+        return back()->with('success', $message);
     }
 
     /**

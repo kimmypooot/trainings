@@ -45,7 +45,7 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
     <Head title="Users & Roles" />
 
     <AuthenticatedLayout title="Users &amp; Roles" current="admin-users">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="error" tone="danger">{{ error }}</AppAlert>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

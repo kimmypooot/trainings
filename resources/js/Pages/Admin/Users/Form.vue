@@ -53,7 +53,7 @@ const submit = () => {
     <Head :title="isEdit ? 'Edit Staff Account' : 'New Staff Account'" />
 
     <AuthenticatedLayout :title="isEdit ? 'Edit Staff Account' : 'New Staff Account'" current="admin-users">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <AppAlert v-if="Object.keys(form.errors).length" tone="danger">
                 {{ form.errors.role ?? 'Please review the highlighted fields below.' }}
             </AppAlert>

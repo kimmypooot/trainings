@@ -82,7 +82,7 @@ const submit = () => {
     <Head :title="isEdit ? 'Edit Training' : 'New Training'" />
 
     <AuthenticatedLayout :title="isEdit ? 'Edit Training' : 'New Training'" current="admin-trainings">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <AppAlert v-if="Object.keys(form.errors).length" tone="danger">
                 Please review the highlighted fields below.
             </AppAlert>

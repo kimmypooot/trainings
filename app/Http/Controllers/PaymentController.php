@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Enums\PaymentMethod;
+use App\Enums\PhysicalOrRequestStatus;
 use App\Enums\RefundStatus;
 use App\Models\Payment;
+use App\Models\PhysicalOrRequest;
+use App\Models\PhysicalOrSetting;
 use App\Models\RefundRequest;
 use App\Models\Registration;
 use App\Support\RefundService;
@@ -28,7 +31,7 @@ class PaymentController extends Controller
 
     public function index(Request $request): Response
     {
-        $payments = Payment::with(['training', 'refundRequests.statusLogs'])
+        $payments = Payment::with(['training', 'refundRequests.statusLogs', 'physicalOrRequests.statusLogs'])
             ->where('user_id', $request->user()->getKey())
             ->latest()
             ->get();
@@ -39,6 +42,8 @@ class PaymentController extends Controller
             ->whereHas('training', fn ($query) => $query->where('payment_required', true))
             ->whereDoesntHave('payments')
             ->get();
+
+        $orSetting = PhysicalOrSetting::current();
 
         return Inertia::render('My/Payments', [
             'payments' => $payments->map(fn (Payment $payment) => [
@@ -53,6 +58,7 @@ class PaymentController extends Controller
                 'method' => $payment->payment_method->label(),
                 'reference_number' => $payment->reference_number,
                 'payment_date' => $payment->payment_date->format('d M Y'),
+                'or_number' => $payment->or_number,
                 'status' => $payment->status->value,
                 'status_label' => $payment->status->label(),
                 'rejection_reason' => $payment->rejection_reason,
@@ -63,6 +69,10 @@ class PaymentController extends Controller
                 // this page is almost always asking "what stage is it at", and
                 // only the stage track answers that.
                 'refund' => $this->refundPayload($payment->refundRequests->sortByDesc('created_at')->first()),
+                'can_request_physical_or' => $this->canRequestPhysicalOr($payment, $request),
+                // Same shape as the refund block: the participant wants the
+                // stage, not the label.
+                'physical_or' => $this->physicalOrPayload($payment->physicalOrRequests->sortByDesc('created_at')->first()),
                 'proof_url' => $payment->proof_path ? route('payments.proof', $payment) : null,
             ])->all(),
             'awaitingPayment' => $awaiting->map(fn (Registration $registration) => [
@@ -80,7 +90,65 @@ class PaymentController extends Controller
                 'accepts_promissory' => $registration->training->accepts_promissory,
             ])->all(),
             'methods' => PaymentMethod::options(),
+            // The GCash details the request modal renders. Configurable by
+            // Admin/Super Admin — see Admin\PhysicalOrRequestController.
+            'physical_or_settings' => [
+                'gcash_number' => $orSetting->gcash_number,
+                'account_name' => $orSetting->account_name,
+                'courier_fee' => $orSetting->courier_fee,
+                'instructions' => $orSetting->delivery_instructions,
+            ],
+            'physical_or_pipeline' => collect(PhysicalOrRequestStatus::pipeline())
+                ->map(fn (PhysicalOrRequestStatus $stage) => ['value' => $stage->value, 'label' => $stage->label()])
+                ->all(),
         ]);
+    }
+
+    /**
+     * A verified, receipted payment outside Region VIII can be mailed a
+     * physical copy — unless a delivery is already in flight or was completed.
+     */
+    private function canRequestPhysicalOr(Payment $payment, Request $request): bool
+    {
+        return $payment->status->isRefundable()
+            && filled($payment->or_number)
+            && ($request->user()->profile?->isOutsideCscRegion() ?? true)
+            && ! $payment->hasPendingPhysicalOrRequest()
+            && ! $payment->hasDeliveredPhysicalOrRequest();
+    }
+
+    /**
+     * A physical-OR request as the participant sees it: where it is, and how
+     * far along the pipeline that is.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function physicalOrPayload(?PhysicalOrRequest $request): ?array
+    {
+        if ($request === null) {
+            return null;
+        }
+
+        $reached = $request->statusLogs->pluck('to_status');
+
+        return [
+            'id' => $request->id,
+            'request_code' => $request->request_code,
+            'status' => $request->status->value,
+            'status_label' => $request->status->label(),
+            'message' => $request->status->participantMessage(),
+            'rejection_reason' => $request->rejection_reason,
+            'courier_name' => $request->courier_name,
+            'tracking_number' => $request->tracking_number,
+            'can_upload_proof' => $request->status === PhysicalOrRequestStatus::RequestSubmitted,
+            'stages' => $request->status === PhysicalOrRequestStatus::Rejected ? [] : array_map(
+                fn (PhysicalOrRequestStatus $stage) => [
+                    'label' => $stage->label(),
+                    'reached' => $reached->contains($stage),
+                ],
+                PhysicalOrRequestStatus::pipeline(),
+            ),
+        ];
     }
 
     /**

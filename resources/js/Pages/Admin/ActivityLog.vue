@@ -47,7 +47,7 @@ const toggle = (id) => {
     <Head title="Activity Log" />
 
     <AuthenticatedLayout title="Activity Log" current="admin-activity">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppCard
                 title="Audit Trail"
                 subtitle="Every decision recorded by the system, newest first. Read-only."

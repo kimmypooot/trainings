@@ -168,7 +168,7 @@ const convert = (id) => {
     <Head title="Requests" />
 
     <AuthenticatedLayout title="Requests" current="admin-requests">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="scopedTo" tone="info">
                 Showing requests from <strong>{{ scopedTo }}</strong> only.
             </AppAlert>

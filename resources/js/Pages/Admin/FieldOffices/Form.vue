@@ -48,7 +48,7 @@ const submit = () => {
         :title="isEdit ? 'Edit Field Office' : 'New Field Office'"
         current="admin-field-offices"
     >
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <AppAlert v-if="Object.keys(form.errors).length" tone="danger">
                 Please review the highlighted fields below.
             </AppAlert>

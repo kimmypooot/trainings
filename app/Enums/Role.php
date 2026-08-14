@@ -72,4 +72,15 @@ enum Role: string
     {
         return $this === self::CollectingOfficer || $this === self::SuperAdmin;
     }
+
+    /**
+     * Who manages the physical-OR request queue and its GCash/delivery
+     * settings. Delivery of receipts is HRD admin work — it is not a payment
+     * the collecting officer touches, so it deliberately shares the trainings
+     * roles rather than the financial() ones.
+     */
+    public function handlesPhysicalOrRequests(): bool
+    {
+        return $this === self::Admin || $this === self::SuperAdmin;
+    }
 }

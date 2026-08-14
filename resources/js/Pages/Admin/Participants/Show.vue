@@ -41,7 +41,7 @@ const employment = [
     <Head :title="participant.name ?? participant.email" />
 
     <AuthenticatedLayout title="Participant" current="admin-participants">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <Link
                 href="/admin/participants"
                 class="inline-flex items-center gap-1.5 text-sm font-medium text-csc-blue hover:text-csc-blue-deep"

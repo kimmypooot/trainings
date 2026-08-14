@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppBadge from '@/Components/AppBadge.vue';
@@ -18,6 +18,8 @@ const props = defineProps({
     payments: { type: Array, required: true },
     awaitingPayment: { type: Array, required: true },
     methods: { type: Array, required: true },
+    physical_or_settings: { type: Object, default: null },
+    physical_or_pipeline: { type: Array, default: () => [] },
 });
 
 const paying = ref(null);
@@ -109,13 +111,40 @@ const submitRefund = () =>
         preserveScroll: true,
         onSuccess: closeRefund,
     });
+
+// A physical copy of the official receipt: paid for with a GCash courier fee,
+// proved with a screenshot, then prepared and shipped by CSC. Optional for
+// everyone — this is the ask, the payment details, and the proof in one modal.
+const requestingOr = ref(null);
+const orForm = useForm({
+    proof: null,
+    notes: '',
+});
+
+const startPhysicalOr = (payment) => {
+    requestingOr.value = payment;
+    orForm.reset();
+    orForm.clearErrors();
+};
+
+const closePhysicalOr = () => {
+    requestingOr.value = null;
+    orForm.reset();
+};
+
+const submitPhysicalOr = () =>
+    orForm.post(`/my/payments/${requestingOr.value.id}/physical-or`, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: closePhysicalOr,
+    });
 </script>
 
 <template>
     <Head title="Payments" />
 
     <AuthenticatedLayout title="Payments" current="payments">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <!-- Owed -->
             <AppCard v-if="awaitingPayment.length" title="Awaiting Payment">
                 <ul class="space-y-3">
@@ -127,7 +156,7 @@ const submitRefund = () =>
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">{{ item.training.title }}</p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">PHP {{ money(item.amount) }}</p>
+                                <p class="mt-0.5 text-sm text-csc-ink/60">₱{{ money(item.amount) }}</p>
                                 <p class="text-xs text-csc-ink/55">
                                     {{ item.training.starts_at }}
                                     <span v-if="item.training.mode_label">· {{ item.training.mode_label }}</span>
@@ -241,7 +270,7 @@ const submitRefund = () =>
                                     </a>
                                 </p>
                                 <p class="mt-0.5 text-sm text-csc-ink/60">
-                                    PHP {{ money(payment.amount) }} · {{ payment.method }} ·
+                                    ₱{{ money(payment.amount) }} · {{ payment.method }} ·
                                     {{ payment.payment_date }}
                                 </p>
                                 <p v-if="payment.training.starts_at" class="text-xs text-csc-ink/55">
@@ -275,6 +304,14 @@ const submitRefund = () =>
                             >
                                 Request Refund
                             </AppButton>
+                            <AppButton
+                                v-if="payment.can_request_physical_or"
+                                size="sm"
+                                variant="ghost"
+                                @click="startPhysicalOr(payment)"
+                            >
+                                Request Physical OR
+                            </AppButton>
                         </div>
 
                         <!-- A claim in flight: where it is, and how far along. -->
@@ -285,7 +322,7 @@ const submitRefund = () =>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <p class="text-sm font-medium text-csc-ink">
                                     Refund {{ payment.refund.request_code }}
-                                    <span class="text-csc-ink/55">· PHP {{ money(payment.refund.amount) }}</span>
+                                    <span class="text-csc-ink/55">· ₱{{ money(payment.refund.amount) }}</span>
                                 </p>
                                 <AppBadge :status="payment.refund.status" />
                             </div>
@@ -323,6 +360,63 @@ const submitRefund = () =>
                                 </li>
                             </ol>
                         </div>
+
+                        <!-- A physical OR request in flight, rendered the same
+                             way as a refund claim: where it is, and how far
+                             along the delivery pipeline that is. -->
+                        <div
+                            v-if="payment.physical_or"
+                            class="mt-4 rounded-lg border border-csc-line bg-csc-mist/40 p-3"
+                        >
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-sm font-medium text-csc-ink">
+                                    Physical OR {{ payment.physical_or.request_code }}
+                                    <span v-if="payment.physical_or.courier_name" class="text-csc-ink/55">
+                                        · {{ payment.physical_or.courier_name }}
+                                        <template v-if="payment.physical_or.tracking_number">
+                                            {{ payment.physical_or.tracking_number }}
+                                        </template>
+                                    </span>
+                                </p>
+                                <AppBadge :status="payment.physical_or.status" />
+                            </div>
+
+                            <p class="mt-1.5 text-sm text-csc-ink/75">{{ payment.physical_or.message }}</p>
+
+                            <p
+                                v-if="payment.physical_or.rejection_reason"
+                                class="mt-1.5 text-sm text-csc-red-ink"
+                            >
+                                {{ payment.physical_or.rejection_reason }}
+                            </p>
+
+                            <ol
+                                v-if="payment.physical_or.stages.length"
+                                class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5"
+                            >
+                                <li
+                                    v-for="stage in payment.physical_or.stages"
+                                    :key="stage.label"
+                                    class="flex items-center gap-1.5 text-xs"
+                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink/40'"
+                                >
+                                    <AppIcon
+                                        :name="stage.reached ? 'check' : 'clock'"
+                                        class="size-3.5"
+                                        aria-hidden="true"
+                                    />
+                                    {{ stage.label }}
+                                </li>
+                            </ol>
+
+                            <Link
+                                v-if="payment.physical_or.can_upload_proof"
+                                href="/my/physical-or"
+                                class="mt-3 inline-block rounded text-xs font-semibold text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            >
+                                Upload courier fee proof
+                            </Link>
+                        </div>
                     </li>
                 </ul>
             </AppCard>
@@ -333,7 +427,7 @@ const submitRefund = () =>
             title="Request a refund"
             :subtitle="
                 refunding
-                    ? `PHP ${money(refunding.amount)} for “${refunding.training.title}”. CSC reviews the claim, then Management Services releases the transfer.`
+                    ? `₱${money(refunding.amount)} for “${refunding.training.title}”. CSC reviews the claim, then Management Services releases the transfer.`
                     : undefined
             "
             @close="closeRefund"
@@ -402,7 +496,7 @@ const submitRefund = () =>
             title="Return your official receipt"
             :subtitle="
                 refundConfirming
-                    ? `PHP ${money(refundConfirming.amount)} for “${refundConfirming.training.title}”.`
+                    ? `₱${money(refundConfirming.amount)} for “${refundConfirming.training.title}”.`
                     : undefined
             "
             @close="closeRefundConfirm"
@@ -417,6 +511,69 @@ const submitRefund = () =>
                 <AppButton type="button" variant="ghost" @click="closeRefundConfirm">Cancel</AppButton>
                 <AppButton type="button" icon="check" @click="confirmRefund">Continue</AppButton>
             </div>
+        </AppModal>
+
+        <!--
+            The physical OR request: delivery instructions and the GCash details
+            first, then the fee proof. Everything the participant sees here is
+            editable by Admin/Super Admin on the admin queue.
+        -->
+        <AppModal
+            :open="requestingOr !== null"
+            title="Request a physical official receipt"
+            :subtitle="
+                requestingOr
+                    ? `A hard copy of the OR for “${requestingOr.training.title}” will be shipped to you.`
+                    : undefined
+            "
+            @close="closePhysicalOr"
+        >
+            <form class="space-y-4" @submit.prevent="submitPhysicalOr">
+                <AppAlert tone="info">
+                    {{ physical_or_settings?.instructions ?? 'To have your official receipt delivered, please pay the courier fee to the GCash account below, then upload a screenshot of your transaction.' }}
+                </AppAlert>
+
+                <div class="rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm">
+                    <p class="font-medium text-csc-ink">Payment details</p>
+                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink/80">
+                        <div class="flex gap-2">
+                            <dt class="w-28 shrink-0 text-csc-ink/55">Courier fee</dt>
+                            <dd class="font-semibold text-csc-ink">₱{{ money(physical_or_settings?.courier_fee ?? 200) }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                            <dt class="w-28 shrink-0 text-csc-ink/55">GCash</dt>
+                            <dd class="font-mono font-semibold text-csc-ink">{{ physical_or_settings?.gcash_number }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                            <dt class="w-28 shrink-0 text-csc-ink/55">Account name</dt>
+                            <dd class="text-csc-ink">{{ physical_or_settings?.account_name }}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <AppFileField
+                    id="physical-or-proof"
+                    label="Screenshot of the GCash transaction"
+                    hint="Proof of the courier fee payment. PDF, JPG or PNG, up to 5 MB."
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    :error="orForm.errors.proof"
+                    @change="orForm.proof = $event"
+                />
+
+                <AppTextarea
+                    v-model="orForm.notes"
+                    label="Delivery notes"
+                    hint="Optional — anything the courier should know."
+                    :error="orForm.errors.notes"
+                />
+
+                <div class="flex justify-end gap-2">
+                    <AppButton type="button" variant="ghost" @click="closePhysicalOr">Cancel</AppButton>
+                    <AppButton type="submit" icon="check" :processing="orForm.processing">
+                        Submit request
+                    </AppButton>
+                </div>
+            </form>
         </AppModal>
     </AuthenticatedLayout>
 </template>

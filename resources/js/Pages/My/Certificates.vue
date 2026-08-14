@@ -16,7 +16,7 @@ defineProps({
     <Head title="Certificates" />
 
     <AuthenticatedLayout title="Certificates" current="certificates">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <p class="text-sm leading-relaxed text-csc-ink/70">
                 Certificates are issued by the Civil Service Commission after a training is completed. They appear
                 here once released.

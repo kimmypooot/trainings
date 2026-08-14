@@ -89,7 +89,7 @@ const cancel = () => {
     <Head :title="training.title" />
 
     <AuthenticatedLayout title="Training Details" current="trainings">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <Link
                 href="/trainings"
                 class="inline-flex items-center gap-1.5 text-sm font-medium text-csc-blue transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"

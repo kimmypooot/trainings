@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
+use App\Enums\PhysicalOrRequestStatus;
 use App\Enums\RefundStatus;
 use Database\Factories\PaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -67,6 +68,11 @@ class Payment extends Model
         return $this->hasMany(RefundRequest::class);
     }
 
+    public function physicalOrRequests(): HasMany
+    {
+        return $this->hasMany(PhysicalOrRequest::class);
+    }
+
     public function scopePending(Builder $query): Builder
     {
         return $query->where('status', PaymentStatus::Pending);
@@ -87,5 +93,22 @@ class Payment extends Model
     {
         return $this->refundRequests
             ->contains(fn (RefundRequest $request) => $request->status === RefundStatus::Refunded);
+    }
+
+    /**
+     * A physical-OR request anywhere in the pipeline blocks a second one — a
+     * receipt already being prepared or shipped is still one in flight.
+     */
+    public function hasPendingPhysicalOrRequest(): bool
+    {
+        return $this->physicalOrRequests
+            ->contains(fn (PhysicalOrRequest $request) => $request->status->isOpen());
+    }
+
+    /** A physical copy was already delivered for this payment. */
+    public function hasDeliveredPhysicalOrRequest(): bool
+    {
+        return $this->physicalOrRequests
+            ->contains(fn (PhysicalOrRequest $request) => $request->status === PhysicalOrRequestStatus::Delivered);
     }
 }

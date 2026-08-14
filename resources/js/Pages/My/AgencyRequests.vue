@@ -128,7 +128,7 @@ const submitCancel = () =>
     <Head title="Agency Requests" />
 
     <AuthenticatedLayout title="Agency Requests" current="agency-requests">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <AppCard
                 title="Request a Training for Your Agency"
                 subtitle="Ask CSC to conduct a training for your own staff. Attach your agency's letter of request."

@@ -50,7 +50,7 @@ const submit = () => form.put('/profile');
     <Head title="My Profile" />
 
     <AuthenticatedLayout title="My Profile" current="profile">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <!-- Identity summary -->
             <AppCard>
                 <div class="flex items-center gap-4">

@@ -49,7 +49,7 @@ const submit = () => form.post('/profile/complete');
     <div class="min-h-screen bg-csc-blue-tint">
         <!-- Header -->
         <header class="bg-csc-blue">
-            <div class="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
+            <div class="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-5 sm:px-6">
                 <AppLogo variant="light" size="md" />
                 <button
                     type="button"
@@ -61,7 +61,7 @@ const submit = () => form.post('/profile/complete');
             </div>
         </header>
 
-        <main class="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+        <main class="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
             <div class="mb-8">
                 <span class="flex items-center gap-2" aria-hidden="true">
                     <span class="inline-block h-1 w-12 bg-csc-blue" />

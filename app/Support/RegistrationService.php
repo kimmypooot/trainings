@@ -8,6 +8,7 @@ use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use App\Notifications\RegistrationReviewed;
+use App\Notifications\RegistrationTransferred;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -171,6 +172,144 @@ class RegistrationService
         );
 
         return $registration;
+    }
+
+    /**
+     * Move registrations to another training, ported from v1's
+     * `transfer-participants.php`.
+     *
+     * The commonest real cause is a run being rescheduled or split, and doing
+     * it by hand means cancelling and re-registering everyone — which loses the
+     * original registration date, the attendance already recorded against it,
+     * and any payment attached.
+     *
+     * The whole batch is checked against the target's capacity before anything
+     * moves, and each row is checked individually: a participant already
+     * registered for the target is skipped rather than failing the batch, since
+     * the point is usually to move whoever can be moved.
+     *
+     * Two of v1's behaviours are deliberately not carried over. It appended a
+     * transfer note to `remarks`, which in v2 would overwrite a reviewer's own
+     * remarks — activity_logs records the move properly now. And it offered a
+     * "reset payment" option that cleared `or_number` and `or_date`, destroying
+     * the receipt record for money that had actually been received; payments
+     * follow the registration instead.
+     *
+     * @param  array<int, int>  $registrationIds
+     * @return array{moved: int, skipped: array<int, string>}
+     */
+    public static function transfer(
+        array $registrationIds,
+        Training $target,
+        User $staff,
+        string $reason,
+        ?int $fieldOfficeId = null,
+    ): array {
+        return DB::transaction(function () use ($registrationIds, $target, $staff, $reason, $fieldOfficeId) {
+            $locked = Training::whereKey($target->getKey())->lockForUpdate()->firstOrFail();
+
+            if (! $locked->status->isOpenToParticipants()) {
+                throw ValidationException::withMessages([
+                    'target' => 'Participants can only be moved into a training that is open.',
+                ]);
+            }
+
+            /*
+             * Re-resolved rather than taken on trust, and scoped the same way
+             * the roster is: a selection posted from a page must not become a
+             * way to move a registration the staff member cannot even see.
+             */
+            $registrations = Registration::with(['user', 'training'])
+                ->whereIn('id', $registrationIds)
+                ->when($fieldOfficeId !== null, fn ($query) => $query->whereHas(
+                    'user.profile',
+                    fn ($profile) => $profile->where('field_office_id', $fieldOfficeId)
+                ))
+                ->lockForUpdate()
+                ->get();
+
+            // Everyone already holding a slot in the target, so a participant
+            // is never moved into a training they are already on.
+            $alreadyThere = Registration::where('training_id', $locked->getKey())
+                ->whereIn('user_id', $registrations->pluck('user_id'))
+                ->pluck('user_id')
+                ->all();
+
+            $remaining = $locked->capacity === null
+                ? PHP_INT_MAX
+                : max(0, $locked->capacity - Registration::where('training_id', $locked->getKey())
+                    ->whereIn('status', RegistrationStatus::occupying())
+                    ->count());
+
+            $moved = 0;
+            $skipped = [];
+
+            foreach ($registrations as $registration) {
+                $name = $registration->user->name;
+
+                if ($registration->training_id === $locked->getKey()) {
+                    $skipped[] = "{$name} (already on this training)";
+
+                    continue;
+                }
+
+                if (in_array($registration->user_id, $alreadyThere, true)) {
+                    $skipped[] = "{$name} (already registered for the target)";
+
+                    continue;
+                }
+
+                if (! $registration->status->isCancellable()) {
+                    $skipped[] = "{$name} ({$registration->status->label()})";
+
+                    continue;
+                }
+
+                // Counted as it goes rather than checked once up front: the
+                // batch may be larger than the room left, and stopping at the
+                // limit moves whoever fits instead of refusing everyone.
+                if ($registration->status->occupiesSlot() && $remaining <= 0) {
+                    $skipped[] = "{$name} (target is full)";
+
+                    continue;
+                }
+
+                $from = $registration->training;
+
+                $registration->forceFill(['training_id' => $locked->getKey()])->save();
+
+                // Payments belong to the registration, so they travel with it.
+                // The fee difference is recorded rather than silently absorbed
+                // — finance reconciles against it.
+                $registration->payments()->update(['training_id' => $locked->getKey()]);
+
+                if ($registration->status->occupiesSlot()) {
+                    $remaining--;
+                }
+
+                ActivityLogger::record(
+                    'registration.transferred',
+                    $registration,
+                    "{$name} moved from “{$from->title}” to “{$locked->title}”. Reason: {$reason}",
+                    [
+                        'from_training_id' => $from->getKey(),
+                        'to_training_id' => $locked->getKey(),
+                        'reason' => $reason,
+                        // Null when neither run charges; a non-zero value is
+                        // what finance needs to chase.
+                        'fee_difference' => (float) ($locked->payment_amount ?? 0)
+                            - (float) ($from->payment_amount ?? 0),
+                    ],
+                    $staff,
+                );
+
+                $registration->user->notify(new RegistrationTransferred($registration, $from, $reason));
+
+                $moved++;
+            }
+
+            return ['moved' => $moved, 'skipped' => $skipped];
+        });
     }
 
     /**

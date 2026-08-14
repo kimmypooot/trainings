@@ -2,12 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
+use App\Enums\RegistrationStatus;
 use App\Enums\Role;
 use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\Payment;
 use App\Models\Profile;
+use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\AttendanceService;
@@ -423,5 +428,94 @@ class AdminAreaTest extends TestCase
         $this->actingAs($this->staff(Role::SuperAdmin))
             ->get('/admin/trainings/create')
             ->assertOk();
+    }
+
+    private function registrationFor(Training $training, RegistrationStatus $status = RegistrationStatus::Approved): Registration
+    {
+        return Registration::factory()->create([
+            'user_id' => $this->participant()->getKey(),
+            'training_id' => $training->getKey(),
+            'status' => $status,
+        ]);
+    }
+
+    public function test_the_trainings_index_breaks_the_registered_column_down_by_fee_state(): void
+    {
+        $admin = $this->staff();
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+            'capacity' => 20,
+        ]);
+
+        Payment::factory()->verified()->create([
+            'registration_id' => $this->registrationFor($training)->getKey(),
+            'payment_method' => PaymentMethod::Online,
+        ]);
+
+        Payment::factory()->verified()->create([
+            'registration_id' => $this->registrationFor($training)->getKey(),
+            'payment_method' => PaymentMethod::Promissory,
+        ]);
+
+        // Proof uploaded but not yet verified.
+        Payment::factory()->create([
+            'registration_id' => $this->registrationFor($training)->getKey(),
+        ]);
+
+        // No payment at all — still a slot-holder, so it counts as pending.
+        $this->registrationFor($training);
+
+        // Cancelled is reported apart from the total.
+        $this->registrationFor($training, RegistrationStatus::Cancelled);
+
+        $this->actingAs($admin)->get('/admin/trainings')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainings.data.0.registered', 4)
+                ->where('trainings.data.0.paid', 1)
+                ->where('trainings.data.0.promissory', 1)
+                ->where('trainings.data.0.pending', 2)
+                ->where('trainings.data.0.free', 0)
+                ->where('trainings.data.0.cancelled', 1)
+            );
+    }
+
+    public function test_free_trainings_only_count_in_the_free_bucket(): void
+    {
+        $admin = $this->staff();
+        $training = Training::factory()->create(['payment_required' => false]);
+
+        $this->registrationFor($training);
+        $this->registrationFor($training);
+        $this->registrationFor($training, RegistrationStatus::Cancelled);
+
+        $this->actingAs($admin)->get('/admin/trainings')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainings.data.0.registered', 0)
+                ->where('trainings.data.0.paid', 0)
+                ->where('trainings.data.0.promissory', 0)
+                ->where('trainings.data.0.pending', 0)
+                ->where('trainings.data.0.free', 2)
+                ->where('trainings.data.0.cancelled', 1)
+            );
+    }
+
+    public function test_the_status_tabs_carry_the_catalogue_counts(): void
+    {
+        $admin = $this->staff();
+
+        Training::factory()->create(['status' => TrainingStatus::Draft]);
+        Training::factory()->create(['status' => TrainingStatus::Published]);
+        Training::factory()->create(['status' => TrainingStatus::Published]);
+
+        $this->actingAs($admin)->get('/admin/trainings')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('tabs.0.label', 'All')
+                ->where('tabs.0.count', 3)
+                ->where('tabs.1.value', 'draft')
+                ->where('tabs.1.count', 1)
+                ->where('tabs.2.value', 'published')
+                ->where('tabs.2.count', 2)
+            );
     }
 }

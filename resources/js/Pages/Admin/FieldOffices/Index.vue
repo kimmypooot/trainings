@@ -17,7 +17,7 @@ const toggle = (office) =>
     <Head title="Field Offices" />
 
     <AuthenticatedLayout title="Field Offices" current="admin-field-offices">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p class="text-sm leading-relaxed text-csc-ink/70">
                     Offices participants select on their profile. Deactivate rather than delete — existing
