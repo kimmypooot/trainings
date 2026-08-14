@@ -11,6 +11,7 @@ import AppTextarea from '@/Components/AppTextarea.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppFileField from '@/Components/AppFileField.vue';
 import AppModal from '@/Components/AppModal.vue';
 
 const props = defineProps({
@@ -372,36 +373,15 @@ const submitRefund = () =>
                     />
                 </fieldset>
 
-                <!--
-                    Hand-rolled rather than AppInput: that primitive binds a
-                    value, and a file input is the one control whose value the
-                    page is not allowed to set.
-                -->
-                <div>
-                    <label for="refund-proof" class="mb-1.5 block text-sm font-medium text-csc-ink">
-                        Proof of the original payment
-                        <span class="text-csc-red-ink" aria-hidden="true">*</span>
-                    </label>
-                    <input
-                        id="refund-proof"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        required
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink file:mr-3 file:rounded file:border-0 file:bg-csc-mist file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-csc-blue"
-                        :aria-invalid="refundForm.errors.proof ? 'true' : undefined"
-                        aria-describedby="refund-proof-hint"
-                        @change="refundForm.proof = $event.target.files[0]"
-                    />
-                    <p id="refund-proof-hint" class="mt-1.5 text-xs text-csc-ink/55">
-                        Your CSC official receipt or deposit slip. PDF, JPG or PNG, up to 5 MB.
-                    </p>
-                    <p
-                        v-if="refundForm.errors.proof"
-                        class="mt-1.5 text-xs font-medium text-csc-red-ink"
-                    >
-                        {{ refundForm.errors.proof }}
-                    </p>
-                </div>
+                <AppFileField
+                    id="refund-proof"
+                    label="Proof of the original payment"
+                    hint="Your CSC official receipt or deposit slip. PDF, JPG or PNG, up to 5 MB."
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    required
+                    :error="refundForm.errors.proof"
+                    @change="refundForm.proof = $event"
+                />
 
                 <div class="flex justify-end gap-2">
                     <AppButton type="button" variant="ghost" @click="closeRefund">Cancel</AppButton>

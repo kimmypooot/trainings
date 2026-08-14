@@ -18,6 +18,12 @@ const page = usePage();
 const user = computed(() => page.props.auth?.user ?? {});
 const role = computed(() => user.value.role ?? 'participant');
 const unread = computed(() => page.props.unreadNotifications ?? 0);
+const pendingActions = computed(() => page.props.pendingActions ?? {});
+
+// Notifications count comes from its own shared prop; every other badge is a
+// pending action fed to the sidebar by key (see PendingActionCounter).
+const countFor = (item) =>
+    item.key === 'notifications' ? unread.value : (pendingActions.value[item.key] ?? 0);
 
 const ALL_ROLES = [
     'participant',
@@ -105,10 +111,20 @@ const navGroups = [
             },
             {
                 key: 'training-requests',
-                label: 'Request a Training',
+                label: 'Suggest a Training',
                 href: '/my/training-requests',
                 roles: ['participant'],
                 icon: 'plus',
+            },
+            {
+                // Named for what it is, so it is not confused with the
+                // suggestion box above: this one is a formal request from an
+                // agency, with letters going both ways.
+                key: 'agency-requests',
+                label: 'Agency Requests',
+                href: '/my/agency-requests',
+                roles: ['participant'],
+                icon: 'document',
             },
         ],
     },
@@ -159,6 +175,13 @@ const navGroups = [
                 primary: true,
                 roles: STAFF_ROLES,
                 icon: 'document',
+            },
+            {
+                key: 'admin-agency-requests',
+                label: 'Agency Requests',
+                href: '/admin/agency-requests',
+                roles: ['admin', 'superadmin'],
+                icon: 'building',
             },
             {
                 key: 'admin-emails',
@@ -395,18 +418,18 @@ const confirmSignOut = () => {
                                 <AppIcon :name="item.icon" />
                                 <!-- Rail has no room for the count, so it shows a dot -->
                                 <span
-                                    v-if="item.key === 'notifications' && unread && collapsed"
+                                    v-if="countFor(item) && collapsed"
                                     class="absolute -top-0.5 -right-0.5 hidden size-2 rounded-full bg-danger ring-2 ring-csc-blue md:block"
                                     aria-hidden="true"
                                 />
                             </span>
                             <span :class="collapsed ? 'md:hidden' : ''">{{ item.label }}</span>
                             <span
-                                v-if="item.key === 'notifications' && unread"
+                                v-if="countFor(item)"
                                 class="ml-auto rounded-full bg-danger px-1.5 py-0.5 text-2xs font-semibold text-white"
                                 :class="collapsed ? 'md:hidden' : ''"
                             >
-                                {{ unread > 99 ? '99+' : unread }}
+                                {{ countFor(item) > 99 ? '99+' : countFor(item) }}
                             </span>
                         </Link>
                     </div>

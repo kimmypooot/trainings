@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\PendingActionCounter;
 use App\Support\VisitorCounter;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -42,6 +43,11 @@ class HandleInertiaRequests extends Middleware
                 ] : null,
             ],
             'unreadNotifications' => fn () => $request->user()?->unreadNotifications()->count() ?? 0,
+            // Sidebar badges: nav item key => items awaiting a decision for the
+            // signed-in role, scoped to a field office where one applies.
+            'pendingActions' => fn () => $request->user()
+                ? PendingActionCounter::for($request->user())
+                : [],
             'visitors' => fn () => $request->isMethod('GET') ? VisitorCounter::countOnce() : VisitorCounter::total(),
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

@@ -14,6 +14,7 @@ const props = defineProps({
     statuses: { type: Array, required: true },
     modes: { type: Array, required: true },
     levels: { type: Array, required: true },
+    curricula: { type: Array, required: true },
 });
 
 const isEdit = computed(() => props.training !== null);
@@ -104,10 +105,12 @@ const submit = () => {
                                 hint="Generated automatically if left blank."
                                 :error="form.errors.training_code"
                             />
-                            <AppInput
+                            <AppSelect
                                 v-model="form.category"
-                                label="Category"
-                                placeholder="Leadership, Technical, Values…"
+                                label="Curriculum"
+                                :options="curricula"
+                                placeholder="Not specified"
+                                hint="Technical, Leadership and Management, or Foundation."
                                 :error="form.errors.category"
                             />
                         </div>

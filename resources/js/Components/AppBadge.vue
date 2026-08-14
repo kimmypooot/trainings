@@ -27,6 +27,10 @@ const props = defineProps({
                 'forwarded_to_msd',
                 'for_release',
                 'refunded',
+                // The agency-request correspondence.
+                'under_review',
+                'requirements_sent',
+                'confirmed',
             ].includes(value),
     },
     label: { type: String, default: null },
@@ -97,6 +101,24 @@ const variants = {
         classes: 'bg-success-soft text-success',
         icon: 'M5 12.5l4.5 4.5L19 7.5',
         label: 'Refunded',
+    },
+    // Agency-request stages. Same reasoning as the refund pipeline: the ones
+    // still in flight share the warning treatment because they are all "still
+    // waiting", and the label carries which kind of waiting it is.
+    under_review: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M12 7v5l3 2',
+        label: 'Under HRD Review',
+    },
+    requirements_sent: {
+        classes: 'bg-info-soft text-info',
+        icon: 'M5 12h12m-4-4l4 4-4 4',
+        label: 'Requirements Sent',
+    },
+    confirmed: {
+        classes: 'bg-info-soft text-info',
+        icon: 'M9 12.5l2 2 4-4',
+        label: 'Confirmed',
     },
 };
 

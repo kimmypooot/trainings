@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ActivityLogController as AdminActivityLogController;
+use App\Http\Controllers\Admin\AgencyRequestController as AdminAgencyRequestController;
 use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AttendanceController as AdminAttendanceController;
 use App\Http\Controllers\Admin\CertificateController as AdminCertificateController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\Admin\ScannerController;
 use App\Http\Controllers\Admin\TrainingController as AdminTrainingController;
 use App\Http\Controllers\Admin\UndoController as AdminUndoController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\AgencyRequestController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
@@ -271,6 +273,26 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         Route::post('/requests/outputs/{output}', [AdminRequestQueueController::class, 'reviewOutput'])
             ->name('requests.outputs.review');
 
+        /*
+         * Agency requests are HRD correspondence, not a review queue — the
+         * officer writes letters back to an agency on CSC's behalf, so this
+         * sits with the same roles that own trainings.
+         */
+        Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
+            Route::get('/agency-requests', [AdminAgencyRequestController::class, 'index'])
+                ->name('agency-requests.index');
+            Route::post('/agency-requests/{agencyRequest}/assign', [AdminAgencyRequestController::class, 'assign'])
+                ->name('agency-requests.assign');
+            Route::post('/agency-requests/{agencyRequest}/notify-ord', [AdminAgencyRequestController::class, 'notifyOrd'])
+                ->name('agency-requests.notify-ord');
+            Route::post('/agency-requests/{agencyRequest}/requirements', [AdminAgencyRequestController::class, 'sendRequirements'])
+                ->name('agency-requests.requirements');
+            Route::post('/agency-requests/{agencyRequest}/verify-payment', [AdminAgencyRequestController::class, 'verifyPayment'])
+                ->name('agency-requests.verify-payment');
+            Route::post('/agency-requests/{agencyRequest}/reject', [AdminAgencyRequestController::class, 'reject'])
+                ->name('agency-requests.reject');
+        });
+
         Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
             Route::post('/requests/trainings/{trainingRequest}/convert', [AdminRequestQueueController::class, 'convertTrainingRequest'])
                 ->name('requests.trainings.convert');
@@ -330,6 +352,26 @@ Route::middleware(['auth', EnsureProfileIsComplete::class])->group(function () {
     // makes the owner-or-officer call.
     Route::get('/refunds/{refundRequest}/proof', [PaymentController::class, 'refundProof'])
         ->name('payments.refund-proof');
+
+    /*
+     * Agency requests: an agency formally asking CSC to run a training for its
+     * own staff, and the document exchange that follows. Distinct from the
+     * training-requests routes below, which are the suggestion box.
+     */
+    Route::get('/my/agency-requests', [AgencyRequestController::class, 'index'])
+        ->name('agency-requests.index');
+    Route::post('/my/agency-requests', [AgencyRequestController::class, 'store'])
+        ->name('agency-requests.store');
+    Route::post('/my/agency-requests/{agencyRequest}/confirmation', [AgencyRequestController::class, 'storeConfirmation'])
+        ->name('agency-requests.confirmation');
+    Route::post('/my/agency-requests/{agencyRequest}/completion', [AgencyRequestController::class, 'storeCompletion'])
+        ->name('agency-requests.completion');
+    Route::post('/my/agency-requests/{agencyRequest}/cancel', [AgencyRequestController::class, 'cancel'])
+        ->name('agency-requests.cancel');
+    // Owner-or-staff, decided in the controller: both sides of the
+    // correspondence need to read what the other sent.
+    Route::get('/agency-request-documents/{document}', [AgencyRequestController::class, 'download'])
+        ->name('agency-requests.documents.download');
 
     Route::get('/my/training-requests', [TrainingRequestController::class, 'index'])
         ->name('training-requests.index');

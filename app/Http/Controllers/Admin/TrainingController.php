@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\AttendanceStatus;
+use App\Enums\Curriculum;
 use App\Enums\RegistrationStatus;
 use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
@@ -83,6 +84,7 @@ class TrainingController extends Controller
             ),
             'modes' => TrainingMode::options(),
             'levels' => TrainingLevel::options(),
+            'curricula' => Curriculum::options(),
         ];
     }
 
@@ -456,7 +458,7 @@ class TrainingController extends Controller
                 Rule::unique('trainings', 'training_code')->ignore($training),
             ],
             'description' => ['nullable', 'string', 'max:5000'],
-            'category' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', Rule::enum(Curriculum::class)],
             'level' => ['nullable', Rule::enum(TrainingLevel::class)],
             'venue' => ['required', 'string', 'max:255'],
             'venue_details' => ['nullable', 'string', 'max:2000'],

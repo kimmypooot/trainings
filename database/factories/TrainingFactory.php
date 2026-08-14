@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\Curriculum;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Models\Training;
@@ -23,7 +24,7 @@ class TrainingFactory extends Factory
             'slug' => Str::slug($title).'-'.fake()->unique()->numberBetween(1, 99999),
             'training_code' => 'TRN-'.fake()->unique()->numberBetween(100000, 999999),
             'description' => fake()->paragraph(),
-            'category' => fake()->randomElement(['Leadership', 'Technical', 'Values', 'Orientation']),
+            'category' => fake()->randomElement(Curriculum::cases())->value,
             'venue' => fake()->city().' Convention Center',
             'mode' => TrainingMode::FaceToFace,
             'starts_at' => $starts,

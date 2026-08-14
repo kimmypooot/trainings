@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AgencyDocumentKind;
+use App\Enums\AgencyRequestStatus;
 use App\Enums\AttendanceStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
@@ -11,6 +13,7 @@ use App\Enums\RequestStatus;
 use App\Enums\Role;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
+use App\Models\AgencyRequest;
 use App\Models\Attendance;
 use App\Models\CancellationRequest;
 use App\Models\Certificate;
@@ -91,6 +94,7 @@ class SampleActivitySeeder extends Seeder
         }
 
         $this->trainingRequests();
+        $this->agencyRequests();
 
         $this->report($seed);
     }
@@ -110,25 +114,25 @@ class SampleActivitySeeder extends Seeder
         return [
             // Finished — the source of attendance and certificates.
             ['Records Management Seminar', 'Technical', -14, 2, TrainingStatus::Completed, 30, false],
-            ['Public Service Ethics Workshop', 'Values', -35, 1, TrainingStatus::Completed, 40, false],
-            ['Gender and Development Orientation', 'Orientation', -60, 1, TrainingStatus::Completed, 50, false],
+            ['Public Service Ethics Workshop', 'Foundation', -35, 1, TrainingStatus::Completed, 40, false],
+            ['Gender and Development Orientation', 'Foundation', -60, 1, TrainingStatus::Completed, 50, false],
             ['Strategic Performance Management System', 'Technical', -21, 3, TrainingStatus::Completed, 25, true],
 
             // Running right now — the QR scanner has something to check in.
             ['Basic Computer Literacy', 'Technical', 0, 3, TrainingStatus::Published, 25, false],
 
             // Upcoming — registrations awaiting review.
-            ['Leadership Development Program', 'Leadership', 21, 5, TrainingStatus::Published, 20, true],
-            ['Frontline Service Excellence', 'Values', 35, 2, TrainingStatus::Published, 45, false],
+            ['Leadership Development Program', 'Leadership and Management', 21, 5, TrainingStatus::Published, 20, true],
+            ['Frontline Service Excellence', 'Foundation', 35, 2, TrainingStatus::Published, 45, false],
             ['Data Privacy for Public Servants', 'Technical', 49, 1, TrainingStatus::Published, null, false],
-            ['Supervisory Development Course', 'Leadership', 70, 5, TrainingStatus::Published, 30, true],
+            ['Supervisory Development Course', 'Leadership and Management', 70, 5, TrainingStatus::Published, 30, true],
 
             // Not yet announced.
             ['Project Management Fundamentals', 'Technical', 90, 4, TrainingStatus::Draft, 30, false],
             ['Records Disposal and Archiving', 'Technical', 105, 2, TrainingStatus::Draft, 25, false],
 
             // Called off — participants keep a cancelled registration.
-            ['Disaster Preparedness Briefing', 'Orientation', 28, 1, TrainingStatus::Cancelled, 60, false],
+            ['Disaster Preparedness Briefing', 'Foundation', 28, 1, TrainingStatus::Cancelled, 60, false],
         ];
     }
 
@@ -386,11 +390,24 @@ class SampleActivitySeeder extends Seeder
             return;
         }
 
-        $status = fake()->randomElement([
-            ...array_fill(0, 6, PaymentStatus::Verified),
-            ...array_fill(0, 3, PaymentStatus::Pending),
-            PaymentStatus::Rejected,
-        ]);
+        /*
+         * The first three payments take one status each, and only then does it
+         * go random. The dataset exists so every screen has something on it,
+         * and leaving that to a weighted draw meant a run could — rarely, but
+         * it happened — produce no pending payment at all and leave the
+         * collecting officer's queue empty. Guaranteeing the coverage is the
+         * seeder's job; the tests should not be asserting a dice roll.
+         */
+        $status = match ($this->tally['payments'] ?? 0) {
+            0 => PaymentStatus::Verified,
+            1 => PaymentStatus::Pending,
+            2 => PaymentStatus::Rejected,
+            default => fake()->randomElement([
+                ...array_fill(0, 6, PaymentStatus::Verified),
+                ...array_fill(0, 3, PaymentStatus::Pending),
+                PaymentStatus::Rejected,
+            ]),
+        };
 
         $method = fake()->randomElement(PaymentMethod::cases());
         $paidOn = $registration->registered_at->copy()->addDays(fake()->numberBetween(1, 6));
@@ -551,10 +568,10 @@ class SampleActivitySeeder extends Seeder
     {
         $titles = [
             ['Basic Occupational Safety and Health', 'Technical', RequestStatus::Pending],
-            ['Customer Service for Frontline Staff', 'Values', RequestStatus::Pending],
+            ['Customer Service for Frontline Staff', 'Foundation', RequestStatus::Pending],
             ['Advanced Spreadsheet Skills', 'Technical', RequestStatus::Approved],
-            ['Conflict Resolution in the Workplace', 'Leadership', RequestStatus::Rejected],
-            ['Freedom of Information Orientation', 'Orientation', RequestStatus::Pending],
+            ['Conflict Resolution in the Workplace', 'Leadership and Management', RequestStatus::Rejected],
+            ['Freedom of Information Orientation', 'Foundation', RequestStatus::Pending],
         ];
 
         foreach ($titles as [$title, $category, $status]) {
@@ -583,6 +600,126 @@ class SampleActivitySeeder extends Seeder
             $request->forceFill(['created_at' => $submittedAt])->save();
 
             $this->count('training requests');
+        }
+    }
+
+    /**
+     * Agency requests spread across the correspondence.
+     *
+     * Written directly rather than through AgencyRequestService for the same
+     * reason as everything else here: the service uploads real files and fires
+     * notifications, and seeding needs neither. The documents are therefore
+     * metadata only — the rows exist and the screens render, but the downloads
+     * have no file behind them, exactly as with the seeded certificates.
+     */
+    private function agencyRequests(): void
+    {
+        $blueprint = [
+            ['Records Management for LGU Personnel', AgencyRequestStatus::Pending],
+            ['Basic Customer Service', AgencyRequestStatus::UnderReview],
+            ['Occupational Safety Orientation', AgencyRequestStatus::RequirementsSent],
+            ['Supervisory Skills for Middle Managers', AgencyRequestStatus::Confirmed],
+            ['Public Financial Management', AgencyRequestStatus::Completed],
+            ['Team Building Workshop', AgencyRequestStatus::Rejected],
+        ];
+
+        foreach ($blueprint as [$title, $status]) {
+            $requester = $this->participants->random();
+            $filedAt = now()->subDays(fake()->numberBetween(10, 90));
+            $officer = $this->staff->random();
+
+            $request = AgencyRequest::updateOrCreate(
+                ['training_title' => $title, 'requested_by' => $requester->getKey()],
+                [
+                    'request_code' => AgencyRequest::nextRequestCode(),
+                    'agency_name' => $requester->profile?->organization_name ?? 'Local Government Unit',
+                    'proposed_start' => $filedAt->copy()->addMonths(2)->toDateString(),
+                    'proposed_end' => $filedAt->copy()->addMonths(2)->addDays(2)->toDateString(),
+                    'proposed_venue' => fake()->randomElement([
+                        'Municipal Hall, Palo, Leyte',
+                        'Provincial Capitol, Tacloban City',
+                        'Agency Training Room',
+                    ]),
+                    'expected_participants' => fake()->numberBetween(15, 45),
+                    'status' => $status,
+                ]
+            );
+
+            $this->dressAgencyRequest($request, $status, $filedAt, $officer, $requester);
+
+            $this->count('agency requests');
+        }
+    }
+
+    /**
+     * Fill in the fields each stage implies, so no seeded request contradicts
+     * itself — a `confirmed` row with no confirmed dates would make the screens
+     * look broken rather than populated.
+     */
+    private function dressAgencyRequest(
+        AgencyRequest $request,
+        AgencyRequestStatus $status,
+        Carbon $filedAt,
+        User $officer,
+        User $requester,
+    ): void {
+        $attributes = ['created_at' => $filedAt];
+        $documents = [[AgencyDocumentKind::RequestLetter, $requester, $filedAt]];
+
+        if ($status !== AgencyRequestStatus::Pending) {
+            $attributes['assigned_to'] = $officer->getKey();
+            $attributes['assigned_at'] = $filedAt->copy()->addDays(2);
+            $attributes['ord_notified_at'] = $filedAt->copy()->addDay();
+        }
+
+        if ($status->hasReached(AgencyRequestStatus::RequirementsSent)) {
+            $attributes['requirements_text'] = 'Please return the signed confirmation form and confirm '
+                .'your final dates and venue. Payment is settled after the training has run.';
+            $attributes['requirements_sent_at'] = $filedAt->copy()->addDays(5);
+            $documents[] = [AgencyDocumentKind::ResponseLetter, $officer, $filedAt->copy()->addDays(5)];
+            $documents[] = [AgencyDocumentKind::BlankConfirmationForm, $officer, $filedAt->copy()->addDays(5)];
+        }
+
+        if ($status->hasReached(AgencyRequestStatus::Confirmed)) {
+            $attributes['confirmed_start'] = $request->proposed_start;
+            $attributes['confirmed_end'] = $request->proposed_end;
+            $attributes['confirmed_venue'] = $request->proposed_venue;
+            $attributes['confirmed_at'] = $filedAt->copy()->addDays(12);
+            $documents[] = [AgencyDocumentKind::SignedConfirmationForm, $requester, $filedAt->copy()->addDays(12)];
+        }
+
+        if ($status === AgencyRequestStatus::Completed) {
+            $attributes['completion_submitted_at'] = $filedAt->copy()->addDays(70);
+            $attributes['payment_amount'] = fake()->randomElement([12000, 18000, 25000]);
+            $attributes['payment_verified_by'] = $officer->getKey();
+            $attributes['payment_verified_at'] = $filedAt->copy()->addDays(75);
+            $attributes['closed_at'] = $filedAt->copy()->addDays(75);
+
+            foreach (AgencyDocumentKind::requiredForCompletion() as $kind) {
+                $documents[] = [$kind, $requester, $filedAt->copy()->addDays(70)];
+            }
+        }
+
+        if ($status === AgencyRequestStatus::Rejected) {
+            $attributes['rejection_reason'] = 'No facilitator is available for the proposed dates. '
+                .'Please resubmit for the next quarter.';
+            $attributes['closed_at'] = $filedAt->copy()->addDays(8);
+        }
+
+        $request->forceFill($attributes)->save();
+
+        $request->documents()->delete();
+
+        foreach ($documents as [$kind, $uploader, $at]) {
+            $request->documents()->create([
+                'kind' => $kind,
+                'file_path' => "agency-requests/{$request->getKey()}/seeded-{$kind->value}.pdf",
+                'original_filename' => Str::slug($kind->label()).'.pdf',
+                'file_size' => fake()->numberBetween(40_000, 900_000),
+                'mime_type' => 'application/pdf',
+                'uploaded_by' => $uploader->getKey(),
+                'created_at' => $at,
+            ]);
         }
     }
 

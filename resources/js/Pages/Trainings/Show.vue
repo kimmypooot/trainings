@@ -6,6 +6,7 @@ import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppFileField from '@/Components/AppFileField.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
@@ -307,33 +308,16 @@ const cancel = () => {
                             </span>
                         </label>
 
-                        <div v-if="eligibility.needs_supporting_document">
-                            <label
-                                for="supporting-document"
-                                class="mb-1.5 block text-sm font-medium text-csc-ink"
-                            >
-                                Proof of supervisory function
-                                <span class="text-csc-red-ink" aria-hidden="true">*</span>
-                            </label>
-                            <input
-                                id="supporting-document"
-                                type="file"
-                                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                required
-                                class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink file:mr-3 file:rounded file:border-0 file:bg-csc-mist file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-csc-blue"
-                                aria-describedby="supporting-document-hint"
-                                @change="registrationForm.supporting_document = $event.target.files[0]"
-                            />
-                            <p id="supporting-document-hint" class="mt-1.5 text-xs text-csc-ink/55">
-                                {{ eligibility.supporting_document_hint }}
-                            </p>
-                            <p
-                                v-if="registrationForm.errors.supporting_document"
-                                class="mt-1.5 text-xs font-medium text-csc-red-ink"
-                            >
-                                {{ registrationForm.errors.supporting_document }}
-                            </p>
-                        </div>
+                        <AppFileField
+                            v-if="eligibility.needs_supporting_document"
+                            id="supporting-document"
+                            label="Proof of supervisory function"
+                            :hint="eligibility.supporting_document_hint"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            required
+                            :error="registrationForm.errors.supporting_document"
+                            @change="registrationForm.supporting_document = $event"
+                        />
 
                         <div class="flex gap-2">
                             <AppButton
