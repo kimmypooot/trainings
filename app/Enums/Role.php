@@ -56,4 +56,20 @@ enum Role: string
     {
         return in_array($this, self::financial(), true);
     }
+
+    /**
+     * Narrower than financial(): who may read a refund payee's full bank
+     * account number.
+     *
+     * Everyone in financial() can open the refund queue, but only the cashier
+     * actually cuts the transfer. HRD reviews whether a claim is valid, which
+     * needs the amount and the reason and nothing else — so the account number
+     * reaches them masked. The distinction is worth keeping even though both
+     * roles are trusted: the number is on screen far longer than it is needed,
+     * usually in a shared office.
+     */
+    public function seesBankDetails(): bool
+    {
+        return $this === self::CollectingOfficer || $this === self::SuperAdmin;
+    }
 }

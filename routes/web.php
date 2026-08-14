@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ActivityLogController as AdminActivityLogController;
 use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AttendanceController as AdminAttendanceController;
 use App\Http\Controllers\Admin\CertificateController as AdminCertificateController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Admin\UndoController as AdminUndoController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\CertificateVerificationController;
@@ -27,8 +29,8 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QrCodeController;
 use App\Http\Controllers\RegistrationController;
-use App\Http\Controllers\ScanLinkController;
 use App\Http\Controllers\RegistrationOutputController;
+use App\Http\Controllers\ScanLinkController;
 use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\TrainingRequestController;
 use App\Http\Middleware\EnsureProfileIsComplete;
@@ -37,6 +39,32 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
+
+/*
+ * robots.txt and sitemap.xml come from routes rather than public/ so the
+ * Sitemap location always carries the configured APP_URL, whatever the
+ * environment (a static public/robots.txt would beat the route and hardcode a
+ * dev hostname into production crawls). robots.txt must therefore never be
+ * recreated as a file in public/.
+ */
+Route::get('/robots.txt', function () {
+    return response("User-agent: *\nDisallow:\n\nSitemap: ".url('/sitemap.xml')."\n")
+        ->header('Content-Type', 'text/plain');
+})->name('robots');
+
+Route::get('/sitemap.xml', function () {
+    $urls = array_map(fn (string $path) => url($path), [
+        '/',
+        '/login',
+        '/register',
+        '/forgot-password',
+        '/privacy-policy',
+        '/terms-of-service',
+    ]);
+
+    return response(view('sitemap', ['urls' => $urls]))
+        ->header('Content-Type', 'application/xml');
+})->name('sitemap');
 
 /*
  * Certificate verification is deliberately public and unauthenticated — the
@@ -90,6 +118,16 @@ Route::post('/login', [LoginController::class, 'store'])->name('login.store');
 
 Route::get('/register', [RegisterController::class, 'create'])->name('register');
 Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
+
+/*
+ * Password reset. The route names are the broker's defaults (password.request,
+ * password.email, password.reset, password.store), which is what lets
+ * sendResetLink generate the emailed URL without any extra wiring.
+ */
+Route::get('/forgot-password', [PasswordResetController::class, 'showForgotForm'])->name('password.request');
+Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->name('password.email');
+Route::get('/reset-password/{token}', [PasswordResetController::class, 'showResetForm'])->name('password.reset');
+Route::post('/reset-password', [PasswordResetController::class, 'reset'])->name('password.store');
 
 Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
 
@@ -180,6 +218,11 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
             Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
             Route::post('/users/{user}/toggle', [AdminUserController::class, 'toggle'])->name('users.toggle');
+
+            // The audit trail records what every other role did, so it sits
+            // behind the one role that is not itself reviewed through it.
+            // Read-only by design — no delete, no export.
+            Route::get('/activity', [AdminActivityLogController::class, 'index'])->name('activity');
         });
 
         // Money is the collecting officer's remit, shared with HRD leadership.
@@ -195,6 +238,11 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
             Route::get('/emails', [AdminEmailController::class, 'index'])->name('emails.index');
             Route::post('/emails', [AdminEmailController::class, 'store'])->name('emails.store');
+            Route::post('/emails/test', [AdminEmailController::class, 'test'])->name('emails.test');
+            Route::post('/emails/templates', [AdminEmailController::class, 'storeTemplate'])
+                ->name('emails.templates.store');
+            Route::delete('/emails/templates/{emailTemplate}', [AdminEmailController::class, 'destroyTemplate'])
+                ->name('emails.templates.destroy');
         });
 
         // Reference data is admin-managed.
@@ -264,6 +312,10 @@ Route::middleware(['auth', EnsureProfileIsComplete::class])->group(function () {
         ->name('registrations.store');
 
     Route::get('/my/registrations', [RegistrationController::class, 'index'])->name('registrations.index');
+    // Owner-or-staff, decided in the controller — the participant needs to
+    // re-read what they attached, and staff need it to review the claim.
+    Route::get('/registrations/{registration}/supporting-document', [RegistrationController::class, 'supportingDocument'])
+        ->name('registrations.supporting-document');
     Route::delete('/my/registrations/{registration}', [RegistrationController::class, 'destroy'])
         ->name('registrations.destroy');
 
@@ -273,6 +325,11 @@ Route::middleware(['auth', EnsureProfileIsComplete::class])->group(function () {
     Route::post('/my/payments/{payment}/refund', [PaymentController::class, 'requestRefund'])
         ->name('payments.refund');
     Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->name('payments.proof');
+    // Registered here rather than in the admin group because the participant
+    // who filed the claim can also open their own attachment; the controller
+    // makes the owner-or-officer call.
+    Route::get('/refunds/{refundRequest}/proof', [PaymentController::class, 'refundProof'])
+        ->name('payments.refund-proof');
 
     Route::get('/my/training-requests', [TrainingRequestController::class, 'index'])
         ->name('training-requests.index');

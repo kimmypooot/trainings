@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ChargeTo;
 use App\Enums\RegistrationStatus;
 use App\Enums\RequestStatus;
 use App\Enums\Role;
@@ -14,6 +15,8 @@ use App\Support\CancellationRequestService;
 use App\Support\RegistrationService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -66,7 +69,10 @@ class TrainingRegistrationTest extends TestCase
 
         $this->actingAs($user)
             ->from("/trainings/{$training->slug}")
-            ->post("/trainings/{$training->id}/register")
+            ->post("/trainings/{$training->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+            ])
             ->assertRedirect("/trainings/{$training->slug}")
             ->assertSessionHas('success');
 
@@ -74,9 +80,148 @@ class TrainingRegistrationTest extends TestCase
             'user_id' => $user->id,
             'training_id' => $training->id,
             'status' => RegistrationStatus::Pending->value,
+            'charge_to' => ChargeTo::Personal->value,
+            'needs_certificate' => true,
         ]);
 
         $this->assertSame(1, $training->fresh()->slotsRemaining());
+    }
+
+    public function test_registration_records_who_the_fee_is_billed_to(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create();
+
+        $this->actingAs($user)
+            ->post("/trainings/{$training->id}/register", [
+                'charge_to' => ChargeTo::Agency->value,
+                'needs_certificate' => false,
+            ])
+            ->assertSessionHas('success');
+
+        $registration = Registration::sole();
+
+        $this->assertSame(ChargeTo::Agency, $registration->charge_to);
+        $this->assertFalse($registration->needs_certificate);
+    }
+
+    public function test_registration_requires_who_the_fee_is_billed_to(): void
+    {
+        $training = Training::factory()->create();
+
+        $this->actingAs($this->participant())
+            ->post("/trainings/{$training->id}/register", ['needs_certificate' => true])
+            ->assertSessionHasErrors('charge_to');
+
+        $this->assertSame(0, Registration::count());
+    }
+
+    // --- Supervisory course eligibility ------------------------------------
+
+    private function supervisoryTraining(): Training
+    {
+        return Training::factory()->create(['is_supervisory' => true]);
+    }
+
+    private function participantAtGrade(string $grade): User
+    {
+        $user = $this->participant();
+        $user->profile->forceFill(['salary_grade' => $grade])->save();
+
+        return $user->fresh();
+    }
+
+    public function test_a_supervisory_course_turns_away_grades_below_the_floor(): void
+    {
+        $this->actingAs($this->participantAtGrade('SG 8'))
+            ->post("/trainings/{$this->supervisoryTraining()->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+            ])
+            ->assertSessionHasErrors('registration');
+
+        $this->assertSame(0, Registration::count());
+    }
+
+    public function test_a_supervisory_course_requires_proof_in_the_middle_band(): void
+    {
+        $this->actingAs($this->participantAtGrade('SG 14'))
+            ->post("/trainings/{$this->supervisoryTraining()->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+            ])
+            ->assertSessionHasErrors('supporting_document');
+
+        $this->assertSame(0, Registration::count());
+    }
+
+    public function test_proof_of_supervisory_function_is_stored_privately(): void
+    {
+        Storage::fake('local');
+
+        $user = $this->participantAtGrade('SG 14');
+
+        $this->actingAs($user)
+            ->post("/trainings/{$this->supervisoryTraining()->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+                'supporting_document' => UploadedFile::fake()->create('designation.pdf', 64, 'application/pdf'),
+            ])
+            ->assertSessionHas('success');
+
+        $registration = Registration::sole();
+
+        $this->assertNotNull($registration->supporting_document_path);
+        Storage::disk('local')->assertExists($registration->supporting_document_path);
+
+        // Never a public URL — the same rule as every other participant upload.
+        $this->actingAs($user)
+            ->get("/registrations/{$registration->id}/supporting-document")
+            ->assertOk();
+        $this->actingAs($this->participant())
+            ->get("/registrations/{$registration->id}/supporting-document")
+            ->assertForbidden();
+    }
+
+    public function test_a_supervisory_course_asks_nothing_extra_above_the_band(): void
+    {
+        $this->actingAs($this->participantAtGrade('SG 22'))
+            ->post("/trainings/{$this->supervisoryTraining()->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, Registration::count());
+    }
+
+    /**
+     * "Not Applicable" is a real choice for job-order staff. It must not read
+     * as grade zero, which would put them below the floor and lock them out
+     * with no way to see why.
+     */
+    public function test_an_unreadable_salary_grade_does_not_bar_a_participant(): void
+    {
+        $this->actingAs($this->participantAtGrade('Not Applicable'))
+            ->post("/trainings/{$this->supervisoryTraining()->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, Registration::count());
+    }
+
+    public function test_an_ordinary_training_imposes_no_supervisory_rule(): void
+    {
+        $this->actingAs($this->participantAtGrade('SG 5'))
+            ->post('/trainings/'.Training::factory()->create()->id.'/register', [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, Registration::count());
     }
 
     public function test_duplicate_registration_is_refused(): void

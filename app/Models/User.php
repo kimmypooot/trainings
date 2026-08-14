@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\Role;
+use App\Notifications\ResetPassword;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -42,6 +43,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'profile_completed_at' => 'datetime',
+            'last_login_at' => 'datetime',
             'password' => 'hashed',
             'role' => Role::class,
             'is_active' => 'boolean',
@@ -119,5 +121,17 @@ class User extends Authenticatable
     public function hasCompletedProfile(): bool
     {
         return $this->profile_completed_at !== null;
+    }
+
+    /**
+     * Send the password reset link through the app's branded notification.
+     *
+     * Called by the password broker during a reset request; the email address
+     * rides along so the reset page can be pre-filled without the visitor
+     * retyping it.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPassword($token, $this->email));
     }
 }

@@ -69,7 +69,7 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                     </select>
                 </div>
 
-                <AppButton href="/admin/users/create">New Staff Account</AppButton>
+                        <AppButton href="/admin/users/create" icon="plus">New Staff Account</AppButton>
             </div>
 
             <AppCard v-if="!users.data.length" :padded="false">
@@ -79,7 +79,7 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                     icon="users"
                 >
                     <template #action>
-                        <AppButton href="/admin/users/create">New Staff Account</AppButton>
+                <AppButton href="/admin/users/create" icon="plus">New Staff Account</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>

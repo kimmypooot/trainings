@@ -89,6 +89,20 @@ class CertificateService
             'generated_by' => $releasedBy->getKey(),
         ])->save();
 
+        // A certificate is the one artefact here that circulates outside CSC
+        // and cannot be recalled, so its issuance is worth a trail entry even
+        // though nothing about it ever changes afterwards.
+        ActivityLogger::record(
+            'certificate.released',
+            $certificate,
+            "Certificate {$certificate->certificate_number} issued to {$registration->user->name}.",
+            [
+                'training_id' => $registration->training_id,
+                'registration_id' => $registration->getKey(),
+            ],
+            $releasedBy,
+        );
+
         $registration->user->notify(new CertificateReleased($certificate));
 
         $certificate->forceFill(['email_sent_at' => now()])->save();

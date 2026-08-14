@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\ChargeTo;
 use App\Enums\RegistrationStatus;
 use App\Models\Registration;
 use App\Models\Training;
@@ -20,14 +21,34 @@ class RegistrationService
      * the same moment cannot both pass the capacity check — without the lock,
      * both read "1 slot left" before either writes.
      */
-    public static function register(User $user, Training $training): Registration
+    /**
+     * @param  array{charge_to?: ?ChargeTo, needs_certificate?: bool, supporting_document_path?: ?string}  $details
+     */
+    public static function register(User $user, Training $training, array $details = []): Registration
     {
-        return DB::transaction(function () use ($user, $training) {
+        return DB::transaction(function () use ($user, $training, $details) {
             $locked = Training::whereKey($training->getKey())->lockForUpdate()->firstOrFail();
 
             if (! $locked->status->isOpenToParticipants()) {
                 throw ValidationException::withMessages([
                     'registration' => 'This training is not open for registration.',
+                ]);
+            }
+
+            // Checked here rather than only in the controller: a supervisory
+            // course is the one training where being registered at all is a
+            // claim about the participant's job, and the service is the only
+            // path every caller shares.
+            if (SupervisoryEligibility::isBarred($locked, $user)) {
+                throw ValidationException::withMessages([
+                    'registration' => SupervisoryEligibility::barredMessage(),
+                ]);
+            }
+
+            if (SupervisoryEligibility::requiresSupportingDocument($locked, $user)
+                && blank($details['supporting_document_path'] ?? null)) {
+                throw ValidationException::withMessages([
+                    'supporting_document' => 'Proof of your supervisory function is required for this course.',
                 ]);
             }
 
@@ -63,6 +84,16 @@ class RegistrationService
             // Re-registering after a cancellation reuses the same row, which is
             // what keeps the unique constraint usable as the duplicate guard.
             // A fresh submission goes back to pending review.
+            $submitted = [
+                'charge_to' => $details['charge_to'] ?? null,
+                'needs_certificate' => $details['needs_certificate'] ?? true,
+                // Keep whatever was attached this time; a re-registration that
+                // omits the file falls back to the one already on record
+                // rather than silently dropping it.
+                'supporting_document_path' => $details['supporting_document_path']
+                    ?? $existing?->supporting_document_path,
+            ];
+
             if ($existing) {
                 $existing->forceFill([
                     'status' => RegistrationStatus::Pending,
@@ -71,17 +102,42 @@ class RegistrationService
                     'reviewed_by' => null,
                     'reviewed_at' => null,
                     'review_remarks' => null,
+                    ...$submitted,
                 ])->save();
+
+                ActivityLogger::record(
+                    'registration.reopened',
+                    $existing,
+                    "Re-registered for {$locked->title}.",
+                    ['training_id' => $locked->getKey()],
+                    $user,
+                );
 
                 return $existing;
             }
 
-            return Registration::create([
+            $registration = Registration::create([
                 'user_id' => $user->getKey(),
                 'training_id' => $locked->getKey(),
                 'status' => RegistrationStatus::Pending,
                 'registered_at' => now(),
+                ...$submitted,
             ]);
+
+            ActivityLogger::record(
+                'registration.created',
+                $registration,
+                "Registered for {$locked->title}.",
+                [
+                    'training_id' => $locked->getKey(),
+                    'charge_to' => $submitted['charge_to'] instanceof ChargeTo
+                        ? $submitted['charge_to']->value
+                        : $submitted['charge_to'],
+                ],
+                $user,
+            );
+
+            return $registration;
         });
     }
 
@@ -99,10 +155,20 @@ class RegistrationService
             ]);
         }
 
+        $from = $registration->status;
+
         $registration->forceFill([
             'status' => RegistrationStatus::Cancelled,
             'cancelled_at' => now(),
         ])->save();
+
+        ActivityLogger::recordTransition(
+            'registration.cancelled',
+            $registration,
+            $from,
+            RegistrationStatus::Cancelled,
+            'Registration cancelled, slot released.',
+        );
 
         return $registration;
     }
@@ -142,12 +208,24 @@ class RegistrationService
                 ]);
             }
 
+            $from = $registration->status;
+
             $registration->forceFill([
                 'status' => $decision,
                 'reviewed_by' => $reviewer->getKey(),
                 'reviewed_at' => now(),
                 'review_remarks' => $remarks,
             ])->save();
+
+            ActivityLogger::recordTransition(
+                "registration.{$decision->value}",
+                $registration,
+                $from,
+                $decision,
+                "Registration {$decision->label()} by {$reviewer->name}.",
+                ['remarks' => $remarks, 'training_id' => $training->getKey()],
+                $reviewer,
+            );
 
             return $registration;
         });

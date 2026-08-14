@@ -1,9 +1,9 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import AppLogo from '@/Components/AppLogo.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
+import AuthLayout from '@/Layouts/AuthLayout.vue';
 
 defineProps({
     googleEnabled: { type: Boolean, default: false },
@@ -19,6 +19,19 @@ const form = useForm({
     consent: false,
 });
 
+// Live password guidance mirrors the server rule exactly (Password::min(8)->letters()->numbers()),
+// so a field that reads green here can never bounce on submit.
+const passwordChecks = computed(() => [
+    { label: 'At least 8 characters', passed: form.password.length >= 8 },
+    { label: 'Contains a letter', passed: /[a-zA-Z]/.test(form.password) },
+    { label: 'Contains a number', passed: /\d/.test(form.password) },
+]);
+
+// Stays silent until both fields hold something, so the field reads calm at rest.
+const confirmationMatches = computed(
+    () => form.password_confirmation.length > 0 && form.password === form.password_confirmation
+);
+
 const submit = () => {
     form.post('/register', {
         onFinish: () => form.reset('password', 'password_confirmation'),
@@ -29,86 +42,16 @@ const submit = () => {
 <template>
     <Head title="Create your account" />
 
-    <div class="min-h-screen lg:grid lg:grid-cols-2">
-        <!-- Left: branding. Hidden below lg. -->
-        <aside class="relative hidden overflow-hidden lg:flex lg:min-h-screen lg:flex-col lg:justify-center">
-            <div
-                class="absolute inset-0 bg-cover bg-center"
-                style="background-image: url('/images/cscbg_facade.jpeg')"
-                aria-hidden="true"
-            />
-            <div
-                class="absolute inset-0"
-                style="
-                    background: linear-gradient(
-                        160deg,
-                        rgba(26, 31, 94, 0.93) 0%,
-                        rgba(42, 51, 143, 0.87) 55%,
-                        rgba(30, 37, 112, 0.95) 100%
-                    );
-                "
-                aria-hidden="true"
-            />
-            <svg class="pointer-events-none absolute inset-0 size-full opacity-[0.08]" aria-hidden="true">
-                <defs>
-                    <pattern id="register-pattern" width="64" height="64" patternUnits="userSpaceOnUse">
-                        <circle cx="32" cy="32" r="18" fill="none" stroke="white" stroke-width="1" />
-                        <path d="M0 32h64M32 0v64" stroke="white" stroke-width="0.5" />
-                    </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#register-pattern)" />
-            </svg>
-            <div
-                class="pointer-events-none absolute -bottom-24 -left-24 size-80 rounded-full bg-csc-red/20 blur-3xl"
-                aria-hidden="true"
-            />
+    <AuthLayout
+        headline="Create your CSC TIMS account"
+        tagline="One account lets you register for training programs, download your certificates, and check in to events with your own QR code."
+        :benefits="['Reserve a slot in CSC programs', 'Keep every certificate in one place', 'Check in to events with a personal QR code']"
+    >
+        <p class="inline-flex items-center gap-1.5 rounded-full bg-csc-blue-tint px-3 py-1 text-2xs font-semibold tracking-widest text-csc-blue uppercase">
+            Step 1 of 2 · Account details
+        </p>
 
-            <div class="relative px-12 py-16 xl:px-20">
-                <Link
-                    href="/"
-                    class="inline-block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
-                >
-                    <AppLogo variant="light" size="lg" />
-                    <span class="sr-only">Back to CSC TIMS home</span>
-                </Link>
-
-                <div class="mt-10 max-w-lg">
-                    <h1 class="text-4xl leading-tight font-semibold tracking-tight text-balance text-white xl:text-5xl">
-                        Create your CSC TIMS account
-                    </h1>
-
-                    <p class="mt-6 text-base leading-relaxed text-pretty text-white/75 xl:text-lg">
-                        One account lets you register for training programs, download your certificates, and check
-                        in to events with your own QR code.
-                    </p>
-
-                    <ul class="mt-8 space-y-3 text-sm text-white/75">
-                        <li v-for="benefit in ['Reserve a slot in CSC programs', 'Keep every certificate in one place', 'Check in to events with a personal QR code']" :key="benefit" class="flex items-start gap-3">
-                            <svg class="mt-0.5 size-5 shrink-0 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <path d="M5 12.5l4.5 4.5L19 7.5" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
-                            {{ benefit }}
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Mobile brand strip. Replaces the left panel below lg. -->
-        <div class="bg-csc-blue px-4 py-6 sm:px-6 lg:hidden">
-            <Link
-                href="/"
-                class="inline-block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
-            >
-                <AppLogo variant="light" size="md" />
-                <span class="sr-only">Back to CSC TIMS home</span>
-            </Link>
-        </div>
-
-        <!-- Right: form -->
-        <main class="flex items-center justify-center bg-white px-4 py-12 sm:px-6 lg:min-h-screen lg:px-12 lg:py-16">
-            <div class="w-full max-w-md">
-                <h2 class="text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">Create your account</h2>
+                <h2 class="mt-4 text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">Create your account</h2>
                 <p class="mt-2 text-sm text-csc-ink/70">
                     Register to sign up for trainings offered by the Civil Service Commission. We will ask for your
                     details on the next step.
@@ -175,62 +118,96 @@ const submit = () => {
                         :error="form.errors.email"
                         hint="Use an address you can access — certificates and event notices are sent here."
                         required
+                        autofocus
                     />
 
-                    <AppInput
-                        v-model="form.password"
-                        label="Password"
-                        :type="showPassword ? 'text' : 'password'"
-                        autocomplete="new-password"
-                        placeholder="••••••••"
-                        :error="form.errors.password"
-                        hint="At least 8 characters, including a letter and a number."
-                        required
-                    >
-                        <template #affix>
-                            <button
-                                type="button"
-                                class="rounded-md p-1.5 text-csc-ink/60 transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
-                                :aria-pressed="showPassword"
-                                @click="showPassword = !showPassword"
-                            >
-                                <span class="sr-only">{{ showPassword ? 'Hide password' : 'Show password' }}</span>
-                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                    <path v-if="showPassword" d="M4 20 20 4" stroke-linecap="round" />
-                                </svg>
-                            </button>
-                        </template>
-                    </AppInput>
+                    <div>
+                        <AppInput
+                            v-model="form.password"
+                            label="Password"
+                            :type="showPassword ? 'text' : 'password'"
+                            autocomplete="new-password"
+                            placeholder="••••••••"
+                            :error="form.errors.password"
+                            required
+                        >
+                            <template #affix>
+                                <button
+                                    type="button"
+                                    class="rounded-md p-1.5 text-csc-ink/60 transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
+                                    :aria-pressed="showPassword"
+                                    @click="showPassword = !showPassword"
+                                >
+                                    <span class="sr-only">{{ showPassword ? 'Hide password' : 'Show password' }}</span>
+                                    <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                        <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                        <path v-if="showPassword" d="M4 20 20 4" stroke-linecap="round" />
+                                    </svg>
+                                </button>
+                            </template>
+                        </AppInput>
 
-                    <AppInput
-                        v-model="form.password_confirmation"
-                        label="Confirm Password"
-                        :type="showConfirmation ? 'text' : 'password'"
-                        autocomplete="new-password"
-                        placeholder="••••••••"
-                        :error="form.errors.password_confirmation"
-                        required
-                    >
-                        <template #affix>
-                            <button
-                                type="button"
-                                class="rounded-md p-1.5 text-csc-ink/60 transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
-                                :aria-pressed="showConfirmation"
-                                @click="showConfirmation = !showConfirmation"
+                        <!-- Live requirement checks; hidden until the field has a first character -->
+                        <ul v-if="form.password.length > 0" class="mt-2 space-y-1.5" aria-live="polite">
+                            <li
+                                v-for="check in passwordChecks"
+                                :key="check.label"
+                                class="flex items-center gap-2 text-xs"
+                                :class="check.passed ? 'font-medium text-success' : 'text-csc-ink/55'"
                             >
-                                <span class="sr-only">
-                                    {{ showConfirmation ? 'Hide confirmation' : 'Show confirmation' }}
-                                </span>
-                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
-                                    <circle cx="12" cy="12" r="3" />
-                                    <path v-if="showConfirmation" d="M4 20 20 4" stroke-linecap="round" />
+                                <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path v-if="check.passed" d="M5 12.5l4.5 4.5L19 7.5" />
+                                    <circle v-else cx="12" cy="12" r="9" />
                                 </svg>
-                            </button>
-                        </template>
-                    </AppInput>
+                                {{ check.label }}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <AppInput
+                            v-model="form.password_confirmation"
+                            label="Confirm Password"
+                            :type="showConfirmation ? 'text' : 'password'"
+                            autocomplete="new-password"
+                            placeholder="••••••••"
+                            :error="form.errors.password_confirmation"
+                            required
+                        >
+                            <template #affix>
+                                <button
+                                    type="button"
+                                    class="rounded-md p-1.5 text-csc-ink/60 transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
+                                    :aria-pressed="showConfirmation"
+                                    @click="showConfirmation = !showConfirmation"
+                                >
+                                    <span class="sr-only">
+                                        {{ showConfirmation ? 'Hide confirmation' : 'Show confirmation' }}
+                                    </span>
+                                    <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                        <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                        <path v-if="showConfirmation" d="M4 20 20 4" stroke-linecap="round" />
+                                    </svg>
+                                </button>
+                            </template>
+                        </AppInput>
+
+                        <!-- Match indicator; appears once the confirmation field has a first character -->
+                        <p
+                            v-if="form.password_confirmation.length > 0"
+                            class="mt-2 flex items-center gap-2 text-xs font-medium"
+                            :class="confirmationMatches ? 'text-success' : 'text-csc-red-ink'"
+                            aria-live="polite"
+                        >
+                            <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path v-if="confirmationMatches" d="M5 12.5l4.5 4.5L19 7.5" />
+                                <path v-else d="M6 6l12 12M18 6L6 18" />
+                            </svg>
+                            {{ confirmationMatches ? 'Passwords match' : 'Passwords do not match' }}
+                        </p>
+                    </div>
 
                     <div>
                         <label class="flex items-start gap-3 text-sm text-csc-ink">
@@ -257,7 +234,7 @@ const submit = () => {
                         </p>
                     </div>
 
-                    <AppButton type="submit" size="lg" block :loading="form.processing">
+                    <AppButton type="submit" size="lg" block :loading="form.processing" icon="arrow-right">
                         {{ form.processing ? 'Creating account…' : 'Create account' }}
                     </AppButton>
                 </form>
@@ -268,7 +245,5 @@ const submit = () => {
                         Sign in
                     </Link>
                 </p>
-            </div>
-        </main>
-    </div>
+    </AuthLayout>
 </template>

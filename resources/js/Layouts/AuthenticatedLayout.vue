@@ -5,6 +5,9 @@ import AppLogo from '@/Components/AppLogo.vue';
 import AppAvatar from '@/Components/AppAvatar.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppToast from '@/Components/AppToast.vue';
+import AppModal from '@/Components/AppModal.vue';
+import AppButton from '@/Components/AppButton.vue';
+import AppAuthSplash from '@/Components/AppAuthSplash.vue';
 
 const props = defineProps({
     title: { type: String, required: true },
@@ -171,6 +174,13 @@ const navGroups = [
                 roles: ['superadmin'],
                 icon: 'users',
             },
+            {
+                key: 'admin-activity',
+                label: 'Activity Log',
+                href: '/admin/activity',
+                roles: ['superadmin'],
+                icon: 'shield',
+            },
         ],
     },
     {
@@ -283,7 +293,21 @@ onBeforeUnmount(() => {
     stopNavigateListener?.();
 });
 
-const signOut = () => router.post('/logout');
+// Sign-out is two steps on purpose: a confirm dialog, then the branded splash
+// while the session request is in flight. The splash lives in this layout so
+// it is up before the POST starts and the whole shell unmounts on arrival.
+const confirmingSignOut = ref(false);
+const signingOut = ref(false);
+
+const signOut = () => {
+    confirmingSignOut.value = true;
+};
+
+const confirmSignOut = () => {
+    confirmingSignOut.value = false;
+    signingOut.value = true;
+    router.post('/logout');
+};
 </script>
 
 <template>
@@ -554,5 +578,31 @@ const signOut = () => router.post('/logout');
                 </button>
             </div>
         </nav>
+
+        <!-- Logout confirmation modal — centered body, no header chrome -->
+        <AppModal
+            :open="confirmingSignOut"
+            size="sm"
+            :hide-header="true"
+            @close="confirmingSignOut = false"
+        >
+            <div class="text-center">
+                <span class="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-danger-soft text-danger">
+                    <AppIcon name="sign-out" size="lg" />
+                </span>
+                <h3 class="text-base font-semibold tracking-tight text-csc-blue">Sign out</h3>
+                <p class="mt-1 text-sm text-csc-ink/70">Are you sure you want to sign out of your account?</p>
+                <div class="mt-6 flex gap-3">
+                    <AppButton variant="ghost" block @click="confirmingSignOut = false">Cancel</AppButton>
+                    <AppButton variant="accent" block @click="confirmSignOut">Sign out</AppButton>
+                </div>
+            </div>
+        </AppModal>
+
+        <!-- Branded splash while the logout request is in flight -->
+        <AppAuthSplash :visible="signingOut">
+            <p class="mb-1 text-xl font-semibold text-csc-blue">Signing you out</p>
+            <p class="text-sm text-csc-ink/70">See you next time!</p>
+        </AppAuthSplash>
     </div>
 </template>

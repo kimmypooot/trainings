@@ -24,6 +24,12 @@ class CertificateController extends Controller
     {
         $awaiting = Registration::where('training_id', $training->getKey())
             ->where('status', RegistrationStatus::Completed)
+            // A participant who said at registration that they do not need a
+            // certificate is left out of the batch. Printing one anyway is
+            // wasted paper, and worse, it puts a document into circulation
+            // that nobody asked for. Individual release still works for them
+            // if they change their mind.
+            ->where('needs_certificate', true)
             ->whereDoesntHave('certificate', fn ($query) => $query->whereNotNull('generated_at'));
 
         // Counted separately so the flash message can say what the batch will

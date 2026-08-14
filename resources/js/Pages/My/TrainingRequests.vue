@@ -80,7 +80,7 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
                     </div>
 
                     <div class="flex justify-end">
-                        <AppButton type="submit" :loading="form.processing">Submit Request</AppButton>
+                        <AppButton type="submit" :loading="form.processing" icon="check">Submit Request</AppButton>
                     </div>
                 </form>
             </AppCard>

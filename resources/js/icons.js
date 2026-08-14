@@ -21,6 +21,7 @@ export const icons = {
     'chevron-right': 'M9 6l6 6-6 6',
     'chevron-down': 'm6 9 6 6 6-6',
     'arrow-left': 'M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-3',
+    'arrow-right': 'M15 10l4 4-4 4M19 14H10a5 5 0 0 0-5 5v1',
     'sign-out': 'M15 17l5-5-5-5M20 12H9M12 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6',
 
     // Objects in the domain

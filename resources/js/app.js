@@ -1,20 +1,19 @@
 import { createApp, h } from 'vue';
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
+import AppProgressBar from '@/Components/AppProgressBar.vue';
+import '@/analytics';
 
 createInertiaApp({
     title: (title) => `${title} - CSC TIMS`,
 
     /*
-     * The default bar is grey and starts instantly, which makes every fast
-     * local navigation flash. Brand colour, and a delay long enough that only
-     * genuinely slow visits announce themselves.
+     * No `progress` config: the built-in bar is grey and starts instantly,
+     * which makes every fast local navigation flash. AppProgressBar mounts
+     * beside the app instead — brand colour, a delay long enough that only
+     * genuinely slow visits announce themselves, and a danger flash on
+     * invalidated visits.
      */
-    progress: {
-        color: '#2a338f',
-        delay: 250,
-    },
-
     resolve: (name) =>
         resolvePageComponent(
             `./Pages/${name}.vue`,
@@ -22,7 +21,9 @@ createInertiaApp({
         ),
 
     setup({ el, App, props, plugin }) {
-        createApp({ render: () => h(App, props) })
+        // A fragment so the bar stays mounted across whole-page swaps — it is
+        // app chrome, not page chrome, and holds no world state of its own.
+        createApp({ render: () => [h(AppProgressBar), h(App, props)] })
             .use(plugin)
             .mount(el);
     },

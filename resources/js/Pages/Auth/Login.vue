@@ -1,9 +1,10 @@
 <script setup>
 import { ref } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import AppLogo from '@/Components/AppLogo.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
+import AppAuthSplash from '@/Components/AppAuthSplash.vue';
+import AuthLayout from '@/Layouts/AuthLayout.vue';
 
 defineProps({
     status: { type: String, default: null },
@@ -18,8 +19,22 @@ const form = useForm({
     remember: false,
 });
 
+// The branded splash shows while the POST is in flight and flips to a welcome
+// the moment the server accepts the session. Success redirects into the app, so
+// this page (and the splash) unmounts on arrival; only a failed login turns it
+// off by hand.
+const showPreload = ref(false);
+const welcome = ref(false);
+
 const submit = () => {
+    showPreload.value = true;
     form.post('/login', {
+        onSuccess: () => {
+            welcome.value = true;
+        },
+        onError: () => {
+            showPreload.value = false;
+        },
         onFinish: () => form.reset('password'),
     });
 };
@@ -28,76 +43,17 @@ const submit = () => {
 <template>
     <Head title="Sign in" />
 
-    <div class="min-h-screen lg:grid lg:grid-cols-2">
-        <!-- Left: branding. Hidden below lg. -->
-        <aside class="relative hidden overflow-hidden lg:flex lg:min-h-screen lg:flex-col lg:justify-center">
-            <div
-                class="absolute inset-0 bg-cover bg-center"
-                style="background-image: url('/images/cscbg_facade.jpeg')"
-                aria-hidden="true"
-            />
-            <div
-                class="absolute inset-0"
-                style="
-                    background: linear-gradient(
-                        160deg,
-                        rgba(26, 31, 94, 0.93) 0%,
-                        rgba(42, 51, 143, 0.87) 55%,
-                        rgba(30, 37, 112, 0.95) 100%
-                    );
-                "
-                aria-hidden="true"
-            />
-            <svg class="pointer-events-none absolute inset-0 size-full opacity-[0.08]" aria-hidden="true">
-                <defs>
-                    <pattern id="auth-pattern" width="64" height="64" patternUnits="userSpaceOnUse">
-                        <circle cx="32" cy="32" r="18" fill="none" stroke="white" stroke-width="1" />
-                        <path d="M0 32h64M32 0v64" stroke="white" stroke-width="0.5" />
-                    </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#auth-pattern)" />
-            </svg>
-            <div
-                class="pointer-events-none absolute -bottom-24 -left-24 size-80 rounded-full bg-csc-red/20 blur-3xl"
-                aria-hidden="true"
-            />
-
-            <div class="relative px-12 py-16 xl:px-20">
-                <Link href="/" class="inline-block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
-                    <AppLogo variant="light" size="lg" />
-                    <span class="sr-only">Back to CSC TIMS home</span>
-                </Link>
-
-                <div class="mt-10 max-w-lg">
-                    <h1 class="text-4xl leading-tight font-semibold tracking-tight text-balance text-white xl:text-5xl">
-                        Welcome back to CSC TIMS
-                    </h1>
-
-                    <p class="mt-6 text-base leading-relaxed text-pretty text-white/75 xl:text-lg">
-                        Register for training programs, download your certificates, and pull up your event QR
-                        code — all from one secure account.
-                    </p>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Mobile brand strip. Replaces the left panel below lg. -->
-        <div class="bg-csc-blue px-4 py-6 sm:px-6 lg:hidden">
-            <Link href="/" class="inline-block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
-                <AppLogo variant="light" size="md" />
-                <span class="sr-only">Back to CSC TIMS home</span>
-            </Link>
-        </div>
-
-        <!-- Right: form -->
-        <main class="flex items-center justify-center bg-white px-4 py-12 sm:px-6 lg:min-h-screen lg:px-12 lg:py-16">
-            <div class="w-full max-w-md">
-                <h2 class="text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
-                    Sign in to your account
-                </h2>
-                <p class="mt-2 text-sm text-csc-ink/70">
-                    Sign in to register for trainings and manage your records.
-                </p>
+    <AuthLayout
+        headline="Welcome back to CSC TIMS"
+        tagline="Register for training programs, download your certificates, and pull up your event QR code — all from one secure account."
+        :benefits="['Reserve a slot in CSC programs', 'Keep every certificate in one place', 'Check in to events with a personal QR code']"
+    >
+        <h2 class="text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
+            Sign in to your account
+        </h2>
+        <p class="mt-2 text-sm text-csc-ink/70">
+            Sign in to register for trainings and manage your records.
+        </p>
 
                 <p
                     v-if="status"
@@ -167,6 +123,7 @@ const submit = () => {
                         placeholder="juan.dela.cruz@csc.gov.ph"
                         :error="form.errors.email"
                         required
+                        autofocus
                     />
 
                     <AppInput
@@ -206,14 +163,14 @@ const submit = () => {
                         </label>
 
                         <a
-                            href="/#contact"
+                            href="/forgot-password"
                             class="rounded text-sm font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         >
                             Forgot password?
                         </a>
                     </div>
 
-                    <AppButton type="submit" size="lg" block :loading="form.processing">
+                    <AppButton type="submit" size="lg" block :loading="form.processing" icon="arrow-right">
                         {{ form.processing ? 'Signing in…' : 'Sign in' }}
                     </AppButton>
                 </form>
@@ -235,7 +192,27 @@ const submit = () => {
                         Privacy Policy </Link
                     >.
                 </p>
+    </AuthLayout>
+
+    <!-- Branded splash while the sign-in request is in flight -->
+    <AppAuthSplash :visible="showPreload">
+        <Transition
+            enter-active-class="transition-opacity duration-300 ease-out"
+            enter-from-class="opacity-0"
+            enter-to-class="opacity-100"
+            leave-active-class="transition-opacity duration-200 ease-in"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0"
+            mode="out-in"
+        >
+            <div v-if="welcome" key="welcome">
+                <p class="text-xl font-semibold text-csc-blue">Welcome back!</p>
+                <p class="mt-1 text-sm text-csc-ink/70">Taking you to your dashboard…</p>
             </div>
-        </main>
-    </div>
+            <div v-else key="loading">
+                <p class="text-xl font-semibold text-csc-blue">Signing you in</p>
+                <p class="mt-1 text-sm text-csc-ink/70">Please wait a moment…</p>
+            </div>
+        </Transition>
+    </AppAuthSplash>
 </template>

@@ -95,7 +95,7 @@ const regenerate = () => {
                 </p>
 
                 <div v-if="!confirmingReset" class="mt-4">
-                    <AppButton variant="ghost" size="sm" @click="confirmingReset = true">
+                    <AppButton variant="ghost" size="sm" icon="qr" @click="confirmingReset = true">
                         Issue a New Code
                     </AppButton>
                 </div>
@@ -107,7 +107,7 @@ const regenerate = () => {
                     <template #action>
                         <div class="flex gap-2">
                             <AppButton size="sm" variant="ghost" @click="confirmingReset = false">Cancel</AppButton>
-                            <AppButton size="sm" variant="accent" :loading="regenerating" @click="regenerate">
+                            <AppButton size="sm" variant="accent" :loading="regenerating" icon="qr" @click="regenerate">
                                 Replace
                             </AppButton>
                         </div>

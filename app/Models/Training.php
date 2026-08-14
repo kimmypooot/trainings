@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'title', 'slug', 'training_code', 'description', 'category', 'level', 'venue',
     'venue_details', 'meeting_link', 'mode', 'starts_at', 'ends_at', 'duration_days',
     'registration_opens_at', 'registration_closes_at', 'capacity', 'facilitator_name',
-    'facilitator_contact', 'objectives', 'prerequisites', 'target_participants',
+    'facilitator_contact', 'prerequisites', 'target_participants',
     'payment_required', 'payment_amount', 'accepts_promissory', 'is_supervisory',
     'status', 'created_by',
 ])]

@@ -150,7 +150,7 @@ const show = (name, propName) => {
                     icon="calendar"
                 >
                     <template #action>
-                        <AppButton href="/admin/trainings/create">Create Training</AppButton>
+                        <AppButton href="/admin/trainings/create" icon="plus">Create Training</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>

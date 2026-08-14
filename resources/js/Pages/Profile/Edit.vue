@@ -300,7 +300,7 @@ const submit = () => form.put('/profile');
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <AppButton href="/dashboard" variant="ghost" size="lg">Cancel</AppButton>
-                    <AppButton type="submit" size="lg" :loading="form.processing">
+                    <AppButton type="submit" size="lg" :loading="form.processing" icon="check">
                         {{ form.processing ? 'Saving…' : 'Save Changes' }}
                     </AppButton>
                 </div>

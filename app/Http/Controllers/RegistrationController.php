@@ -2,14 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ChargeTo;
 use App\Models\Registration;
 use App\Models\Training;
 use App\Support\CancellationRequestService;
 use App\Support\RegistrationService;
+use App\Support\SupervisoryEligibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RegistrationController extends Controller
 {
@@ -36,7 +41,19 @@ class RegistrationController extends Controller
                 'training' => [
                     'title' => $registration->training->title,
                     'venue' => $registration->training->venue,
+                    'venue_details' => $registration->training->venue_details,
                     'starts_at' => $registration->training->starts_at->format('d M Y, g:i A'),
+                    'ends_at' => $registration->training->ends_at?->format('d M Y, g:i A'),
+                    'mode' => $registration->training->mode->value,
+                    'mode_label' => $registration->training->mode->label(),
+                    'level_label' => $registration->training->level?->label(),
+                    'category' => $registration->training->category,
+                    'duration_days' => $registration->training->duration_days,
+                    'payment_required' => $registration->training->payment_required,
+                    'payment_amount' => $registration->training->payment_required
+                        ? $registration->training->payment_amount
+                        : null,
+                    'description' => $registration->training->description,
                     'is_past' => $registration->training->starts_at->isPast(),
                     'url' => route('trainings.show', $registration->training->slug),
                 ],
@@ -44,17 +61,51 @@ class RegistrationController extends Controller
         ]);
     }
 
+    /** Supporting documents are private, like every other participant upload. */
+    public const DISK = 'local';
+
     /**
      * Register for a training.
      */
     public function store(Request $request, Training $training): RedirectResponse
     {
-        RegistrationService::register($request->user(), $training);
+        $needsDocument = SupervisoryEligibility::requiresSupportingDocument($training, $request->user());
+
+        $validated = $request->validate([
+            'charge_to' => ['required', Rule::enum(ChargeTo::class)],
+            'needs_certificate' => ['required', 'boolean'],
+            'supporting_document' => [
+                $needsDocument ? 'required' : 'nullable',
+                'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx',
+            ],
+        ]);
+
+        RegistrationService::register($request->user(), $training, [
+            'charge_to' => ChargeTo::from($validated['charge_to']),
+            'needs_certificate' => $validated['needs_certificate'],
+            'supporting_document_path' => $request->file('supporting_document')
+                ?->store('supporting-documents', self::DISK),
+        ]);
 
         return back()->with(
             'success',
             "Your registration for {$training->title} has been submitted and is awaiting approval by CSC."
         );
+    }
+
+    /**
+     * The supporting document behind a registration — the participant who
+     * uploaded it, and the staff who decide on it.
+     */
+    public function supportingDocument(Request $request, Registration $registration): StreamedResponse
+    {
+        abort_unless($registration->supporting_document_path !== null, 404);
+
+        $isOwner = $registration->user_id === $request->user()->getKey();
+
+        abort_unless($isOwner || $request->user()->role->isStaff(), 403);
+
+        return Storage::disk(self::DISK)->download($registration->supporting_document_path);
     }
 
     /**

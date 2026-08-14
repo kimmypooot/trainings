@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\AttendanceStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
+use App\Enums\RefundStatus;
 use App\Enums\RegistrationStatus;
 use App\Enums\RequestStatus;
 use App\Enums\Role;
@@ -163,7 +164,6 @@ class SampleActivitySeeder extends Seeder
                 'capacity' => $capacity,
                 'facilitator_name' => mb_strtoupper(fake()->name()),
                 'facilitator_contact' => '09'.fake()->numerify('#########'),
-                'objectives' => "Equip participants with working knowledge of {$category} practice in the public service.",
                 'prerequisites' => fake()->boolean(40) ? 'None.' : 'Participants must have completed the orientation course.',
                 'target_participants' => 'Second-level personnel of national and local government agencies.',
                 'payment_required' => $paid,
@@ -425,36 +425,97 @@ class SampleActivitySeeder extends Seeder
 
     private function refund(Payment $payment): void
     {
-        $decision = fake()->randomElement([
-            RequestStatus::Pending,
-            RequestStatus::Approved,
-            RequestStatus::Rejected,
+        // Spread the demo data across the whole pipeline, not just its ends —
+        // the officer's queue is only worth looking at if something is sitting
+        // in the middle of it.
+        $stage = fake()->randomElement([
+            RefundStatus::ForReview,
+            RefundStatus::Processing,
+            RefundStatus::ForwardedToMsd,
+            RefundStatus::ForRelease,
+            RefundStatus::Refunded,
+            RefundStatus::Rejected,
         ]);
 
-        $reviewed = $decision !== RequestStatus::Pending;
+        $filedAt = $payment->verified_at?->copy()->addDays(2) ?? now();
+        $decidedAt = $filedAt->copy()->addDays(3);
+        $touched = $stage !== RefundStatus::ForReview;
 
-        RefundRequest::updateOrCreate(
+        $refund = RefundRequest::updateOrCreate(
             ['payment_id' => $payment->getKey()],
             [
+                'request_code' => RefundRequest::nextRequestCode(),
                 'amount' => $payment->amount,
                 'reason' => fake()->randomElement([
                     'The training was rescheduled and I can no longer attend.',
                     'Duplicate payment made for the same registration.',
                     'Agency withdrew the nomination after payment.',
                 ]),
-                'status' => $decision,
-                'reviewed_by' => $reviewed ? $this->staff->random()->getKey() : null,
-                'reviewed_at' => $reviewed ? $payment->verified_at?->copy()->addDays(3) : null,
-                'review_remarks' => $decision === RequestStatus::Rejected
+                'account_name' => $payment->user->name,
+                'bank_name' => fake()->randomElement([
+                    'Land Bank of the Philippines',
+                    'Development Bank of the Philippines',
+                    'Bank of the Philippine Islands',
+                ]),
+                'account_number' => (string) fake()->numerify('##########'),
+                'status' => $stage,
+                'reviewed_by' => $touched ? $this->staff->random()->getKey() : null,
+                'reviewed_at' => $touched ? $decidedAt : null,
+                'rejection_reason' => $stage === RefundStatus::Rejected
                     ? 'Request received after the refund window closed.'
                     : null,
-                'refunded_at' => $decision === RequestStatus::Approved
-                    ? $payment->verified_at?->copy()->addDays(5)
-                    : null,
+                'refunded_at' => $stage === RefundStatus::Refunded ? $decidedAt : null,
             ]
         );
 
+        $this->seedRefundTrail($refund, $stage, $filedAt);
+
         $this->count('refund requests');
+    }
+
+    /**
+     * Walk the log forward through every stage the request passed on its way
+     * to where it sits now, so the trail on screen matches the status.
+     */
+    private function seedRefundTrail(RefundRequest $refund, RefundStatus $stage, Carbon $filedAt): void
+    {
+        $refund->statusLogs()->delete();
+
+        $reached = [RefundStatus::ForReview];
+
+        if ($stage === RefundStatus::Rejected) {
+            // A decline can land at any point; keep the demo simple and have
+            // it happen straight out of review.
+            $reached[] = RefundStatus::Rejected;
+        } else {
+            foreach (RefundStatus::pipeline() as $step) {
+                if ($step === RefundStatus::ForReview) {
+                    continue;
+                }
+
+                $reached[] = $step;
+
+                if ($step === $stage) {
+                    break;
+                }
+            }
+        }
+
+        $at = $filedAt->copy();
+        $previous = null;
+
+        foreach ($reached as $step) {
+            $refund->statusLogs()->create([
+                'from_status' => $previous,
+                'to_status' => $step,
+                'notes' => $previous === null ? 'Request filed by participant.' : null,
+                'changed_by' => $previous === null ? null : $this->staff->random()->getKey(),
+                'changed_at' => $at->copy(),
+            ]);
+
+            $previous = $step;
+            $at->addDays(2);
+        }
     }
 
     /**

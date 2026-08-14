@@ -52,6 +52,16 @@ class TrainingRequestService
                 'review_remarks' => $remarks,
             ])->save();
 
+            ActivityLogger::recordTransition(
+                "training-request.{$decision->value}",
+                $locked,
+                RequestStatus::Pending,
+                $decision,
+                "Training request “{$locked->title}” {$decision->label()} by {$reviewer->name}.",
+                ['remarks' => $remarks],
+                $reviewer,
+            );
+
             return $locked;
         });
 
@@ -106,6 +116,14 @@ class TrainingRequestService
             ]);
 
             $locked->forceFill(['training_id' => $training->getKey()])->save();
+
+            ActivityLogger::record(
+                'training.created-from-request',
+                $training,
+                "Training “{$training->title}” created from request #{$locked->getKey()}.",
+                ['training_request_id' => $locked->getKey()],
+                $creator,
+            );
 
             return $training;
         });

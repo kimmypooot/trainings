@@ -19,6 +19,14 @@ const props = defineProps({
                 'completed',
                 'cancelled',
                 'processing',
+                'verified',
+                // The refund pipeline. It gets its own entries rather than
+                // being mapped onto pending/approved because the stage name is
+                // the whole point of the badge on that screen.
+                'for_review',
+                'forwarded_to_msd',
+                'for_release',
+                'refunded',
             ].includes(value),
     },
     label: { type: String, default: null },
@@ -60,6 +68,35 @@ const variants = {
         classes: 'bg-warning-soft text-warning',
         icon: 'M12 7v5l3 2',
         label: 'Processing',
+    },
+    verified: {
+        classes: 'bg-success-soft text-success',
+        icon: 'M5 12.5l4.5 4.5L19 7.5',
+        label: 'Verified',
+    },
+    // Refund stages. The three in-flight ones share the warning treatment —
+    // they are all "still waiting", and distinguishing them by colour would
+    // imply a severity difference that is not there. The label carries the
+    // detail, which is the rule everywhere else in this map too.
+    for_review: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M12 7v5l3 2',
+        label: 'For Review',
+    },
+    forwarded_to_msd: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M5 12h12m-4-4l4 4-4 4',
+        label: 'Forwarded to MSD',
+    },
+    for_release: {
+        classes: 'bg-info-soft text-info',
+        icon: 'M9 12.5l2 2 4-4',
+        label: 'For Release',
+    },
+    refunded: {
+        classes: 'bg-success-soft text-success',
+        icon: 'M5 12.5l4.5 4.5L19 7.5',
+        label: 'Refunded',
     },
 };
 

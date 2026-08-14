@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ChargeTo;
 use App\Enums\RegistrationStatus;
 use App\Models\Registration;
 use App\Models\Training;
+use App\Support\SupervisoryEligibility;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -82,7 +84,6 @@ class TrainingController extends Controller
                 'registration_opens_at' => $training->registration_opens_at?->format('d M Y, g:i A'),
                 'registration_closes_at' => $training->registration_closes_at?->format('d M Y, g:i A'),
                 'facilitator_name' => $training->facilitator_name,
-                'objectives' => $training->objectives,
                 'prerequisites' => $training->prerequisites,
                 'target_participants' => $training->target_participants,
                 'level_label' => $training->level?->label(),
@@ -102,6 +103,19 @@ class TrainingController extends Controller
                 // participant and the link, rather than a blanket "not yet".
                 'fee_settled' => $registration->hasSettledFee(),
             ] : null,
+            // What the registration form has to ask this particular
+            // participant. Resolved here because it depends on their salary
+            // grade, which the page has no business receiving.
+            'eligibility' => [
+                'barred' => SupervisoryEligibility::isBarred($training, $request->user()),
+                'barred_reason' => SupervisoryEligibility::barredMessage(),
+                'needs_supporting_document' => SupervisoryEligibility::requiresSupportingDocument(
+                    $training,
+                    $request->user(),
+                ),
+                'supporting_document_hint' => SupervisoryEligibility::documentHint(),
+            ],
+            'chargeOptions' => ChargeTo::options(),
         ]);
     }
 

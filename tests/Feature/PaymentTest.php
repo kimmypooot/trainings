@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
-use App\Enums\RequestStatus;
+use App\Enums\RefundStatus;
 use App\Enums\Role;
 use App\Models\Payment;
 use App\Models\Profile;
@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Notifications\PaymentReviewed;
 use App\Notifications\RefundReviewed;
 use App\Support\PaymentService;
+use App\Support\RefundService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
@@ -277,7 +278,104 @@ class PaymentTest extends TestCase
         $this->actingAs($this->participant())->get("/payments/{$payment->id}/proof")->assertForbidden();
     }
 
+    // --- Official receipts -------------------------------------------------
+
+    public function test_verifying_records_the_official_receipt_and_its_issuer(): void
+    {
+        $payment = Payment::factory()->create();
+        $officer = $this->officer();
+
+        $this->actingAs($officer)
+            ->post("/admin/payments/{$payment->id}/review", [
+                'decision' => PaymentStatus::Verified->value,
+                'or_number' => 'OR-2026-00417',
+                'or_date' => now()->toDateString(),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $payment = $payment->fresh();
+
+        $this->assertSame('OR-2026-00417', $payment->or_number);
+        $this->assertSame($officer->getKey(), $payment->collecting_officer_id);
+        $this->assertNotNull($payment->or_date);
+    }
+
+    /**
+     * The same OR number on two payments is a transcription slip or a
+     * duplicate, and both are worth catching while the officer still has the
+     * receipt in front of them.
+     */
+    public function test_an_official_receipt_number_cannot_be_reused(): void
+    {
+        $officer = $this->officer();
+        $first = Payment::factory()->create();
+        $second = Payment::factory()->create();
+
+        $this->actingAs($officer)->post("/admin/payments/{$first->id}/review", [
+            'decision' => PaymentStatus::Verified->value,
+            'or_number' => 'OR-2026-00417',
+        ]);
+
+        $this->actingAs($officer)
+            ->post("/admin/payments/{$second->id}/review", [
+                'decision' => PaymentStatus::Verified->value,
+                'or_number' => 'OR-2026-00417',
+            ])
+            ->assertSessionHasErrors('or_number');
+
+        $this->assertSame(PaymentStatus::Pending, $second->fresh()->status);
+    }
+
+    /**
+     * A promissory note is verified without a receipt — no money has arrived,
+     * so there is nothing to issue an OR against.
+     */
+    public function test_a_payment_can_be_verified_without_a_receipt(): void
+    {
+        $payment = Payment::factory()->create(['payment_method' => PaymentMethod::Promissory]);
+
+        $this->actingAs($this->officer())
+            ->post("/admin/payments/{$payment->id}/review", [
+                'decision' => PaymentStatus::Verified->value,
+            ])
+            ->assertSessionHas('success');
+
+        $payment = $payment->fresh();
+
+        $this->assertSame(PaymentStatus::Verified, $payment->status);
+        $this->assertNull($payment->or_number);
+        $this->assertNull($payment->collecting_officer_id);
+    }
+
     // --- Refunds ----------------------------------------------------------
+
+    /** The payee block every claim needs. */
+    private function payee(array $overrides = []): array
+    {
+        return array_merge([
+            'account_name' => 'Juan Dela Cruz',
+            'bank_name' => 'Land Bank of the Philippines',
+            'account_number' => '1234567890',
+        ], $overrides);
+    }
+
+    private function claim(Payment $payment, string $reason = 'The training was cancelled.', ?float $amount = null): RefundRequest
+    {
+        return RefundService::request($payment, $reason, $this->payee(), $amount);
+    }
+
+    /** Walk a claim forward to a given stage, the way officers would. */
+    private function advanceTo(RefundRequest $refund, RefundStatus $target): RefundRequest
+    {
+        $officer = $this->officer();
+
+        while ($refund->status !== $target && $refund->status->next() !== null) {
+            $refund = RefundService::advance($refund, $refund->status->next(), $officer);
+        }
+
+        return $refund;
+    }
 
     public function test_only_a_verified_payment_can_be_refunded(): void
     {
@@ -286,7 +384,7 @@ class PaymentTest extends TestCase
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('Only a verified payment');
 
-        PaymentService::requestRefund($payment, 'The training was cancelled.');
+        $this->claim($payment);
     }
 
     public function test_a_participant_can_claim_a_refund_on_a_verified_payment(): void
@@ -298,16 +396,39 @@ class PaymentTest extends TestCase
         ]);
 
         $this->actingAs($participant)
-            ->post("/my/payments/{$payment->id}/refund", [
+            ->post("/my/payments/{$payment->id}/refund", $this->payee([
                 'reason' => 'The training was cancelled by CSC.',
-            ])
+                'proof' => UploadedFile::fake()->create('receipt.pdf', 64, 'application/pdf'),
+            ]))
             ->assertRedirect()
             ->assertSessionHas('success');
 
         $refund = RefundRequest::sole();
 
         $this->assertSame('1500.00', $refund->amount);
-        $this->assertSame(RequestStatus::Pending, $refund->status);
+        $this->assertSame(RefundStatus::ForReview, $refund->status);
+        $this->assertSame('Land Bank of the Philippines', $refund->bank_name);
+        $this->assertNotNull($refund->proof_path);
+        // The code is what the participant quotes on follow-up, so it has to
+        // exist from the moment the claim does.
+        $this->assertMatchesRegularExpression('/^RFD-\d{4}-\d{3}$/', $refund->request_code);
+    }
+
+    public function test_a_claim_without_bank_details_is_refused(): void
+    {
+        $participant = $this->participant();
+        $payment = Payment::factory()->verified()->create([
+            'registration_id' => $this->paidRegistration($participant)->getKey(),
+            'user_id' => $participant->getKey(),
+        ]);
+
+        $this->actingAs($participant)
+            ->post("/my/payments/{$payment->id}/refund", [
+                'reason' => 'The training was cancelled by CSC.',
+            ])
+            ->assertSessionHasErrors(['account_name', 'bank_name', 'account_number', 'proof']);
+
+        $this->assertSame(0, RefundRequest::count());
     }
 
     public function test_a_refund_cannot_exceed_the_amount_paid(): void
@@ -317,71 +438,166 @@ class PaymentTest extends TestCase
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('cannot exceed the amount paid');
 
-        PaymentService::requestRefund($payment, 'A reason for the claim.', 5000);
+        $this->claim($payment, 'A reason for the claim.', 5000);
     }
 
     public function test_a_second_open_refund_is_refused(): void
     {
         $payment = Payment::factory()->verified()->create();
 
-        PaymentService::requestRefund($payment, 'First claim reason.');
+        $this->claim($payment, 'First claim reason.');
 
         $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('already awaiting review');
+        $this->expectExceptionMessage('already in progress');
 
-        PaymentService::requestRefund($payment->fresh(), 'Second claim reason.');
+        $this->claim($payment->fresh(), 'Second claim reason.');
+    }
+
+    /**
+     * The regression that motivated the rewrite: under the old three-status
+     * shape a claim that had left review was no longer "pending", so a second
+     * one could be filed against the same payment while the first sat at MSD.
+     */
+    public function test_a_claim_mid_pipeline_still_blocks_a_second_one(): void
+    {
+        $payment = Payment::factory()->verified()->create();
+
+        $this->advanceTo($this->claim($payment), RefundStatus::ForwardedToMsd);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('already in progress');
+
+        $this->claim($payment->fresh(), 'Second claim reason.');
     }
 
     public function test_an_already_refunded_payment_cannot_be_claimed_again(): void
     {
         $payment = Payment::factory()->verified()->create();
-        $officer = $this->officer();
 
-        $refund = PaymentService::requestRefund($payment, 'The training was cancelled.');
-        PaymentService::reviewRefund($refund, RequestStatus::Approved, $officer);
+        $this->advanceTo($this->claim($payment), RefundStatus::Refunded);
 
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('already been refunded');
 
-        PaymentService::requestRefund($payment->fresh(), 'Trying again.');
+        $this->claim($payment->fresh(), 'Trying again.');
     }
 
-    public function test_approving_a_refund_stamps_when_the_money_went_back(): void
+    public function test_a_refund_walks_the_pipeline_one_stage_at_a_time(): void
     {
-        $payment = Payment::factory()->verified()->create();
-        $refund = PaymentService::requestRefund($payment, 'The training was cancelled.');
+        $refund = $this->claim(Payment::factory()->verified()->create());
+        $officer = $this->officer();
+
+        foreach ([
+            RefundStatus::Processing,
+            RefundStatus::ForwardedToMsd,
+            RefundStatus::ForRelease,
+            RefundStatus::Refunded,
+        ] as $stage) {
+            $refund = RefundService::advance($refund, $stage, $officer);
+            $this->assertSame($stage, $refund->status);
+        }
+
+        $this->assertNotNull($refund->refunded_at);
+    }
+
+    public function test_a_stage_cannot_be_skipped(): void
+    {
+        $refund = $this->claim(Payment::factory()->verified()->create());
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('cannot move straight to');
+
+        RefundService::advance($refund, RefundStatus::Refunded, $this->officer());
+    }
+
+    public function test_a_settled_refund_cannot_be_moved_again(): void
+    {
+        $refund = $this->advanceTo(
+            $this->claim(Payment::factory()->verified()->create()),
+            RefundStatus::Refunded,
+        );
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('already Refunded');
+
+        RefundService::advance($refund, RefundStatus::Refunded, $this->officer());
+    }
+
+    public function test_every_transition_is_logged_with_its_actor(): void
+    {
+        $officer = $this->officer();
+        $refund = $this->claim(Payment::factory()->verified()->create());
+
+        RefundService::advance($refund, RefundStatus::Processing, $officer, 'Documents complete.');
+
+        $trail = $refund->fresh()->statusLogs;
+
+        $this->assertCount(2, $trail);
+        // The opening entry is the participant's, so it carries no staff actor.
+        $this->assertNull($trail[0]->changed_by);
+        $this->assertSame(RefundStatus::ForReview, $trail[0]->to_status);
+        $this->assertSame($officer->getKey(), $trail[1]->changed_by);
+        $this->assertSame(RefundStatus::ForReview, $trail[1]->from_status);
+        $this->assertSame(RefundStatus::Processing, $trail[1]->to_status);
+        $this->assertSame('Documents complete.', $trail[1]->notes);
+    }
+
+    public function test_an_officer_can_advance_a_refund_from_the_queue(): void
+    {
+        $refund = $this->claim(Payment::factory()->verified()->create());
 
         $this->actingAs($this->officer())
-            ->post("/admin/refunds/{$refund->id}/review", ['decision' => 'approved'])
+            ->post("/admin/refunds/{$refund->id}/review", [
+                'decision' => 'advance',
+                'target' => RefundStatus::Processing->value,
+            ])
             ->assertRedirect()
             ->assertSessionHas('success');
 
-        $this->assertSame(RequestStatus::Approved, $refund->fresh()->status);
-        $this->assertNotNull($refund->fresh()->refunded_at);
+        $this->assertSame(RefundStatus::Processing, $refund->fresh()->status);
     }
 
     public function test_declining_a_refund_requires_a_reason(): void
     {
-        $payment = Payment::factory()->verified()->create();
-        $refund = PaymentService::requestRefund($payment, 'A claim reason.');
+        $refund = $this->claim(Payment::factory()->verified()->create(), 'A claim reason.');
 
-        $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('Give a reason when declining');
+        $this->actingAs($this->officer())
+            ->post("/admin/refunds/{$refund->id}/review", ['decision' => 'reject'])
+            ->assertSessionHasErrors('rejection_reason');
 
-        PaymentService::reviewRefund($refund, RequestStatus::Rejected, $this->officer());
+        $this->assertSame(RefundStatus::ForReview, $refund->fresh()->status);
     }
 
     public function test_declining_a_refund_leaves_no_refunded_timestamp(): void
     {
-        $payment = Payment::factory()->verified()->create();
-        $refund = PaymentService::requestRefund($payment, 'A claim reason.');
+        $refund = $this->claim(Payment::factory()->verified()->create(), 'A claim reason.');
 
-        PaymentService::reviewRefund($refund, RequestStatus::Rejected, $this->officer(), 'Outside the refund window.');
+        RefundService::reject($refund, $this->officer(), 'Outside the refund window.');
 
-        $this->assertNull($refund->fresh()->refunded_at);
+        $refund = $refund->fresh();
+
+        $this->assertSame(RefundStatus::Rejected, $refund->status);
+        $this->assertNull($refund->refunded_at);
+        $this->assertSame('Outside the refund window.', $refund->rejection_reason);
     }
 
-    public function test_the_participant_is_notified_of_the_refund_decision(): void
+    /**
+     * MSD can bounce a claim HRD already passed, so declining has to stay
+     * reachable from the middle of the pipeline, not just its head.
+     */
+    public function test_a_refund_can_be_declined_mid_pipeline(): void
+    {
+        $refund = $this->advanceTo(
+            $this->claim(Payment::factory()->verified()->create()),
+            RefundStatus::ForwardedToMsd,
+        );
+
+        RefundService::reject($refund, $this->officer(), 'Account details did not match.');
+
+        $this->assertSame(RefundStatus::Rejected, $refund->fresh()->status);
+    }
+
+    public function test_the_participant_is_notified_at_every_stage(): void
     {
         Notification::fake();
 
@@ -390,11 +606,48 @@ class PaymentTest extends TestCase
             'registration_id' => $this->paidRegistration($participant)->getKey(),
             'user_id' => $participant->getKey(),
         ]);
-        $refund = PaymentService::requestRefund($payment, 'The training was cancelled.');
+        $refund = $this->claim($payment);
+        $officer = $this->officer();
 
-        PaymentService::reviewRefund($refund, RequestStatus::Approved, $this->officer());
+        RefundService::advance($refund, RefundStatus::Processing, $officer);
+        RefundService::advance($refund->fresh(), RefundStatus::ForwardedToMsd, $officer);
 
-        Notification::assertSentTo($participant, RefundReviewed::class);
+        Notification::assertSentToTimes($participant, RefundReviewed::class, 2);
+    }
+
+    public function test_the_account_number_is_masked_from_staff_who_do_not_handle_money(): void
+    {
+        $refund = $this->claim(Payment::factory()->verified()->create());
+
+        $this->actingAs($this->officer(Role::CollectingOfficer))
+            ->get('/admin/payments')
+            ->assertInertia(fn ($page) => $page->where('refunds.0.account_number', '1234567890'));
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->get('/admin/payments')
+            ->assertInertia(fn ($page) => $page->where('refunds.0.account_number', '••••••7890'));
+
+        $this->assertNotNull($refund->request_code);
+    }
+
+    public function test_refund_proof_is_reachable_by_its_owner_and_officers_only(): void
+    {
+        $participant = $this->participant();
+        $payment = Payment::factory()->verified()->create([
+            'registration_id' => $this->paidRegistration($participant)->getKey(),
+            'user_id' => $participant->getKey(),
+        ]);
+
+        $this->actingAs($participant)->post("/my/payments/{$payment->id}/refund", $this->payee([
+            'reason' => 'The training was cancelled by CSC.',
+            'proof' => UploadedFile::fake()->create('receipt.pdf', 64, 'application/pdf'),
+        ]));
+
+        $refund = RefundRequest::sole();
+
+        $this->actingAs($participant)->get("/refunds/{$refund->id}/proof")->assertOk();
+        $this->actingAs($this->officer())->get("/refunds/{$refund->id}/proof")->assertOk();
+        $this->actingAs($this->participant())->get("/refunds/{$refund->id}/proof")->assertForbidden();
     }
 
     // --- Screens ----------------------------------------------------------

@@ -23,7 +23,7 @@ const toggle = (office) =>
                     Offices participants select on their profile. Deactivate rather than delete — existing
                     profiles point at these records.
                 </p>
-                <AppButton href="/admin/field-offices/create">New Office</AppButton>
+                        <AppButton href="/admin/field-offices/create" icon="plus">New Office</AppButton>
             </div>
 
             <AppCard v-if="!offices.length" :padded="false">
@@ -33,7 +33,7 @@ const toggle = (office) =>
                     icon="building"
                 >
                     <template #action>
-                        <AppButton href="/admin/field-offices/create">New Office</AppButton>
+                <AppButton href="/admin/field-offices/create" icon="plus">New Office</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>

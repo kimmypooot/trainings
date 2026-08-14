@@ -37,6 +37,9 @@ class ReleaseCertificates implements ShouldQueue
             // fee is an expected, ordinary state, and letting it surface as a
             // logged exception per row would bury the real failures.
             ->feeCleared()
+            // Same opt-out the controller counts against, applied again here
+            // because the job is what actually mints the documents.
+            ->where('needs_certificate', true)
             ->when($this->fieldOfficeId !== null, fn ($query) => $query->whereHas(
                 'user.profile',
                 fn ($profile) => $profile->where('field_office_id', $this->fieldOfficeId)

@@ -33,12 +33,14 @@ class CertificateController extends Controller
             'awaitingRelease' => $awaiting->map(fn (Registration $registration) => [
                 'id' => $registration->id,
                 'title' => $registration->training->title,
+                'url' => route('trainings.show', $registration->training->slug),
                 'completed_at' => $registration->attended_at?->format('d M Y')
                     ?? $registration->training->ends_at->format('d M Y'),
             ])->values()->all(),
             'released' => $released->map(fn (Registration $registration) => [
                 'id' => $registration->certificate->id,
                 'title' => $registration->training->title,
+                'training_url' => route('trainings.show', $registration->training->slug),
                 'number' => $registration->certificate->certificate_number,
                 'issued_at' => $registration->certificate->generated_at->format('d M Y'),
                 'url' => route('certificates.download', $registration->certificate),

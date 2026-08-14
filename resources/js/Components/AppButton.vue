@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import AppIcon from '@/Components/AppIcon.vue';
+import { iconNames } from '@/icons';
 
 const props = defineProps({
     variant: {
@@ -20,6 +22,13 @@ const props = defineProps({
     block: { type: Boolean, default: false },
     // Use on blue backgrounds, where the filled-blue primary would disappear.
     onDark: { type: Boolean, default: false },
+    // A leading icon, by name from the icon registry. Hidden while loading so
+    // it never sits next to the spinner.
+    icon: {
+        type: String,
+        default: null,
+        validator: (value) => value === null || iconNames.includes(value),
+    },
 });
 
 const base =
@@ -53,6 +62,7 @@ const isDisabled = computed(() => props.disabled || props.loading);
 
 <template>
     <Link v-if="href && !isDisabled" :href="href" :class="classes">
+        <AppIcon v-if="icon" :name="icon" :size="size === 'lg' ? 'md' : 'sm'" class="shrink-0" />
         <slot />
     </Link>
 
@@ -67,6 +77,7 @@ const isDisabled = computed(() => props.disabled || props.loading);
             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.3" stroke-width="3" />
             <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
         </svg>
+        <AppIcon v-else-if="icon" :name="icon" :size="size === 'lg' ? 'md' : 'sm'" class="shrink-0" />
         <slot />
     </button>
 </template>

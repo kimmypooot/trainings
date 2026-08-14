@@ -36,7 +36,6 @@ const form = useForm({
     capacity: props.training?.capacity ?? '',
     facilitator_name: props.training?.facilitator_name ?? '',
     facilitator_contact: props.training?.facilitator_contact ?? '',
-    objectives: props.training?.objectives ?? '',
     prerequisites: props.training?.prerequisites ?? '',
     target_participants: props.training?.target_participants ?? '',
     payment_required: props.training?.payment_required ?? false,
@@ -235,12 +234,6 @@ const submit = () => {
                             :error="form.errors.target_participants"
                         />
                         <AppTextarea
-                            v-model="form.objectives"
-                            label="Objectives"
-                            rows="3"
-                            :error="form.errors.objectives"
-                        />
-                        <AppTextarea
                             v-model="form.prerequisites"
                             label="Prerequisites"
                             rows="3"
@@ -329,7 +322,7 @@ const submit = () => {
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <AppButton href="/admin/trainings" variant="ghost" size="lg">Cancel</AppButton>
-                    <AppButton type="submit" size="lg" :loading="form.processing">
+                    <AppButton type="submit" size="lg" :loading="form.processing" icon="check">
                         {{ isEdit ? 'Save Changes' : 'Create Training' }}
                     </AppButton>
                 </div>

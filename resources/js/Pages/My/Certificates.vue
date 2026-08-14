@@ -32,7 +32,14 @@ defineProps({
                         class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-csc-line bg-white p-4 sm:p-5"
                     >
                         <div class="min-w-0">
-                            <h3 class="text-sm font-semibold text-csc-blue">{{ certificate.title }}</h3>
+                            <h3 class="text-sm font-semibold text-csc-blue">
+                                <a
+                                    :href="certificate.training_url"
+                                    class="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                >
+                                    {{ certificate.title }}
+                                </a>
+                            </h3>
                             <p class="mt-1 text-xs text-csc-ink/60">
                                 No. {{ certificate.number }} · Issued {{ certificate.issued_at }}
                             </p>
@@ -43,7 +50,7 @@ defineProps({
                                 Public verification link
                             </a>
                         </div>
-                        <AppButton :href="certificate.url" size="sm">Download</AppButton>
+                        <AppButton :href="certificate.url" size="sm" icon="download">Download</AppButton>
                     </li>
                 </ul>
             </section>
@@ -58,7 +65,14 @@ defineProps({
                         class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-csc-line bg-white p-4 sm:p-5"
                     >
                         <div class="min-w-0">
-                            <h3 class="text-sm font-semibold text-csc-ink">{{ item.title }}</h3>
+                            <h3 class="text-sm font-semibold text-csc-ink">
+                                <a
+                                    :href="item.url"
+                                    class="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                >
+                                    {{ item.title }}
+                                </a>
+                            </h3>
                             <p class="mt-1 text-xs text-csc-ink/60">Completed {{ item.completed_at }}</p>
                         </div>
                         <AppBadge status="processing" label="Awaiting release" />
@@ -73,7 +87,7 @@ defineProps({
                     icon="certificate"
                 >
                     <template #action>
-                        <AppButton href="/trainings">Browse Trainings</AppButton>
+                        <AppButton href="/trainings" icon="calendar">Browse Trainings</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>

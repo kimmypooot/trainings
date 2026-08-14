@@ -41,4 +41,13 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
     ],
 
+    /*
+     * GA4 measurement id, opt-in per environment. When unset (the default) the
+     * landing page ships no analytics code at all; when set, the client still
+     * waits for the privacy-notice consent flag before loading gtag.
+     */
+    'ga4' => [
+        'measurement_id' => env('GA_MEASUREMENT_ID'),
+    ],
+
 ];

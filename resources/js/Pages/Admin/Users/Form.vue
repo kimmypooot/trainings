@@ -137,7 +137,7 @@ const submit = () => {
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <AppButton href="/admin/users" variant="ghost" size="lg">Cancel</AppButton>
-                    <AppButton type="submit" size="lg" :loading="form.processing">
+                    <AppButton type="submit" size="lg" :loading="form.processing" icon="check">
                         {{ isEdit ? 'Save Changes' : 'Create Account' }}
                     </AppButton>
                 </div>

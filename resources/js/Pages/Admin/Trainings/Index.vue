@@ -69,7 +69,7 @@ const tones = {
                     </select>
                 </div>
 
-                <AppButton href="/admin/trainings/create">New Training</AppButton>
+                <AppButton href="/admin/trainings/create" icon="plus">New Training</AppButton>
             </div>
 
             <AppCard v-if="!trainings.data.length" :padded="false">
@@ -79,7 +79,7 @@ const tones = {
                     icon="calendar"
                 >
                     <template #action>
-                        <AppButton href="/admin/trainings/create">Create Training</AppButton>
+                        <AppButton href="/admin/trainings/create" icon="plus">Create Training</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>

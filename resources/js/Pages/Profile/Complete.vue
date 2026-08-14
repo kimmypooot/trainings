@@ -339,7 +339,7 @@ const submit = () => form.post('/profile/complete');
                         {{ form.errors.consent }}
                     </p>
 
-                    <AppButton type="submit" size="lg" block class="mt-6" :loading="form.processing">
+                    <AppButton type="submit" size="lg" block class="mt-6" :loading="form.processing" icon="check">
                         {{ form.processing ? 'Saving…' : 'Save and continue' }}
                     </AppButton>
                 </div>

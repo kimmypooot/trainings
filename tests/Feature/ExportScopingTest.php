@@ -243,6 +243,92 @@ class ExportScopingTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('headline.registrations', 3));
     }
 
+    /**
+     * The demographic cuts are what CSC reports upward, and they are scoped
+     * like everything else — a field office reporting the region's intake as
+     * its own would be worse than not reporting at all.
+     */
+    public function test_demographic_breakdowns_are_scoped_to_the_office(): void
+    {
+        $training = Training::factory()->create();
+
+        foreach ([[$this->officeA, 'ALPHA ONE'], [$this->officeB, 'BRAVO ONE'], [$this->officeB, 'BRAVO TWO']] as [$office, $name]) {
+            Registration::factory()->approved()->create([
+                'user_id' => $this->participantIn($office, $name)->getKey(),
+                'training_id' => $training->getKey(),
+            ]);
+        }
+
+        // Inertia's `where` hands the closure a Collection, not the raw array.
+        $total = fn ($rows) => collect($rows)->sum('count');
+
+        $this->actingAs($this->staffFor($this->officeA))
+            ->get('/admin/analytics')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('demographics.sex', fn ($rows) => $total($rows) === 1)
+                ->where('demographics.positionLevel', fn ($rows) => $total($rows) === 1)
+                ->where('topAgencies', fn ($rows) => $total($rows) === 1)
+            );
+
+        $this->actingAs($this->staffFor(null, Role::Admin))
+            ->get('/admin/analytics')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('demographics.sex', fn ($rows) => $total($rows) === 3)
+                ->where('topAgencies', fn ($rows) => $total($rows) === 3)
+            );
+    }
+
+    /**
+     * Every cut counts the same registrations, so their totals must agree.
+     * A per-column GROUP BY would quietly drop rows with a blank field and
+     * leave two charts on the same page disagreeing about the intake.
+     */
+    public function test_every_demographic_cut_totals_the_same(): void
+    {
+        $training = Training::factory()->create();
+
+        foreach (['ALPHA ONE', 'ALPHA TWO', 'ALPHA THREE'] as $name) {
+            Registration::factory()->approved()->create([
+                'user_id' => $this->participantIn($this->officeA, $name)->getKey(),
+                'training_id' => $training->getKey(),
+            ]);
+        }
+
+        $this->actingAs($this->staffFor(null, Role::Admin))
+            ->get('/admin/analytics')
+            ->assertOk()
+            ->assertInertia(function ($page) {
+                $demographics = $page->toArray()['props']['demographics'];
+                $totals = array_map(
+                    fn ($rows) => array_sum(array_column($rows, 'count')),
+                    $demographics,
+                );
+
+                $this->assertSame([3], array_values(array_unique($totals)));
+            });
+    }
+
+    public function test_age_bands_keep_their_order_rather_than_sorting_by_size(): void
+    {
+        $training = Training::factory()->create();
+
+        Registration::factory()->approved()->create([
+            'user_id' => $this->participantIn($this->officeA, 'ALPHA ONE')->getKey(),
+            'training_id' => $training->getKey(),
+        ]);
+
+        $this->actingAs($this->staffFor(null, Role::Admin))
+            ->get('/admin/analytics')
+            ->assertOk()
+            ->assertInertia(function ($page) {
+                $labels = array_column($page->toArray()['props']['demographics']['ageBand'], 'label');
+
+                $this->assertSame(['18-25', '26-35', '36-45', '46-55', '56-65', 'Over 65'], $labels);
+            });
+    }
+
     public function test_analytics_hides_money_from_non_finance_roles(): void
     {
         Payment::factory()->verified()->create();

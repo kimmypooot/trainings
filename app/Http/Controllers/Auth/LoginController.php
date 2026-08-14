@@ -68,6 +68,12 @@ class LoginController extends Controller
         RateLimiter::clear($throttleKey);
         $request->session()->regenerate();
 
+        // A single column rather than a login row per sign-in. v1's activity
+        // log was mostly login/logout pairs, and that volume is exactly what
+        // buried the decisions worth auditing — this keeps the one part of it
+        // staff actually read, which is how a dormant account gets noticed.
+        $request->user()->forceFill(['last_login_at' => now()])->save();
+
         if ($request->user()->role->isStaff()) {
             return redirect()->intended(route('admin.dashboard'));
         }

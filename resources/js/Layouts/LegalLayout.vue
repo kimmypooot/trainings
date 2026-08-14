@@ -10,14 +10,24 @@ defineProps({
 <template>
     <PublicLayout current="legal">
         <section class="relative overflow-hidden text-white">
-            <div
-                class="absolute inset-0 bg-cover bg-center"
-                style="background-image: url('/images/cscbg_facade.jpeg')"
-                aria-hidden="true"
-            />
+            <picture class="absolute inset-0" aria-hidden="true">
+                <source srcset="/images/cscbg_facade.webp" type="image/webp" />
+                <img
+                    src="/images/cscbg_facade.jpeg"
+                    alt=""
+                    decoding="async"
+                    class="absolute inset-0 size-full object-cover"
+                />
+            </picture>
             <div
                 class="absolute inset-0"
-                style="background: linear-gradient(160deg, rgba(26, 31, 94, 0.94) 0%, rgba(30, 37, 112, 0.96) 100%)"
+                style="
+                    background: linear-gradient(
+                        160deg,
+                        color-mix(in srgb, var(--color-csc-blue-deep) 94%, transparent) 0%,
+                        color-mix(in srgb, var(--color-csc-blue-deep) 96%, transparent) 100%
+                    );
+                "
                 aria-hidden="true"
             />
 

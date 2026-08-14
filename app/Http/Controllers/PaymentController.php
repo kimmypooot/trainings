@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Enums\PaymentMethod;
+use App\Enums\RefundStatus;
 use App\Models\Payment;
+use App\Models\RefundRequest;
 use App\Models\Registration;
-use App\Support\PaymentService;
+use App\Support\RefundService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -26,7 +28,7 @@ class PaymentController extends Controller
 
     public function index(Request $request): Response
     {
-        $payments = Payment::with(['training', 'refundRequests'])
+        $payments = Payment::with(['training', 'refundRequests.statusLogs'])
             ->where('user_id', $request->user()->getKey())
             ->latest()
             ->get();
@@ -41,7 +43,12 @@ class PaymentController extends Controller
         return Inertia::render('My/Payments', [
             'payments' => $payments->map(fn (Payment $payment) => [
                 'id' => $payment->id,
-                'training' => $payment->training->title,
+                'training' => [
+                    'title' => $payment->training->title,
+                    'starts_at' => $payment->training->starts_at->format('d M Y, g:i A'),
+                    'mode_label' => $payment->training->mode->label(),
+                    'url' => route('trainings.show', $payment->training->slug),
+                ],
                 'amount' => $payment->amount,
                 'method' => $payment->payment_method->label(),
                 'reference_number' => $payment->reference_number,
@@ -52,12 +59,20 @@ class PaymentController extends Controller
                 'can_request_refund' => $payment->status->isRefundable()
                     && ! $payment->hasPendingRefund()
                     && ! $payment->hasBeenRefunded(),
-                'refund_status' => $payment->refundRequests->first()?->status->label(),
+                // The whole claim, not just its label — a participant checking
+                // this page is almost always asking "what stage is it at", and
+                // only the stage track answers that.
+                'refund' => $this->refundPayload($payment->refundRequests->sortByDesc('created_at')->first()),
                 'proof_url' => $payment->proof_path ? route('payments.proof', $payment) : null,
             ])->all(),
             'awaitingPayment' => $awaiting->map(fn (Registration $registration) => [
                 'registration_id' => $registration->id,
-                'training' => $registration->training->title,
+                'training' => [
+                    'title' => $registration->training->title,
+                    'starts_at' => $registration->training->starts_at->format('d M Y, g:i A'),
+                    'mode_label' => $registration->training->mode->label(),
+                    'url' => route('trainings.show', $registration->training->slug),
+                ],
                 'amount' => $registration->training->payment_amount,
                 // Whether a promissory note is on offer is set per training, so
                 // the method list has to be narrowed per row rather than once
@@ -66,6 +81,41 @@ class PaymentController extends Controller
             ])->all(),
             'methods' => PaymentMethod::options(),
         ]);
+    }
+
+    /**
+     * A refund claim as the participant sees it: where it is, and how far
+     * along the pipeline that is.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function refundPayload(?RefundRequest $refund): ?array
+    {
+        if ($refund === null) {
+            return null;
+        }
+
+        $reached = $refund->statusLogs->pluck('to_status');
+
+        return [
+            'id' => $refund->id,
+            'request_code' => $refund->request_code,
+            'amount' => $refund->amount,
+            'status' => $refund->status->value,
+            'status_label' => $refund->status->label(),
+            'message' => $refund->status->participantMessage(),
+            'rejection_reason' => $refund->rejection_reason,
+            'is_open' => $refund->status->isOpen(),
+            // A declined claim never reaches the later stages, so the track is
+            // suppressed entirely rather than shown as permanently stalled.
+            'stages' => $refund->status === RefundStatus::Rejected ? [] : array_map(
+                fn (RefundStatus $stage) => [
+                    'label' => $stage->label(),
+                    'reached' => $reached->contains($stage),
+                ],
+                RefundStatus::pipeline(),
+            ),
+        ];
     }
 
     public function store(Request $request, Registration $registration): RedirectResponse
@@ -114,6 +164,12 @@ class PaymentController extends Controller
         return back()->with('success', 'Your payment has been recorded and is awaiting verification.');
     }
 
+    /**
+     * File a refund claim.
+     *
+     * The bank details are mandatory: MSD disburses by transfer, and a claim
+     * without a payee is one HRD has to chase before it can move at all.
+     */
     public function requestRefund(Request $request, Payment $payment): RedirectResponse
     {
         abort_unless($payment->user_id === $request->user()->getKey(), 403);
@@ -121,15 +177,50 @@ class PaymentController extends Controller
         $validated = $request->validate([
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
             'amount' => ['nullable', 'numeric', 'min:0.01'],
+            'account_name' => ['required', 'string', 'max:255'],
+            'bank_name' => ['required', 'string', 'max:255'],
+            // Kept as a string, never an integer: leading zeros are significant
+            // and some banks use dashes.
+            'account_number' => ['required', 'string', 'max:64'],
+            'proof' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
         ]);
 
-        PaymentService::requestRefund(
+        RefundService::request(
             $payment,
             $validated['reason'],
+            [
+                'account_name' => $validated['account_name'],
+                'bank_name' => $validated['bank_name'],
+                'account_number' => $validated['account_number'],
+                'proof_path' => $request->file('proof')->store('refund-proofs', self::DISK),
+            ],
             isset($validated['amount']) ? (float) $validated['amount'] : null
         );
 
         return back()->with('success', 'Your refund request has been submitted.');
+    }
+
+    /**
+     * The proof attached to a refund claim. Same rule as payment proof — the
+     * participant who filed it and the officers who act on it, nobody else.
+     */
+    public function refundProof(Request $request, RefundRequest $refundRequest): StreamedResponse
+    {
+        abort_unless($refundRequest->proof_path !== null, 404);
+
+        $refundRequest->loadMissing('payment');
+
+        $isOwner = $refundRequest->payment->user_id === $request->user()->getKey();
+
+        abort_unless($isOwner || $request->user()->role->handlesPayments(), 403);
+
+        // Served inline rather than as an attachment: the officer who acts on
+        // the claim reviews the receipt on screen, not after opening a download.
+        return Storage::disk(self::DISK)->download(
+            $refundRequest->proof_path,
+            null,
+            ['Content-Disposition' => 'inline; filename="proof-of-payment"'],
+        );
     }
 
     /**
@@ -144,6 +235,13 @@ class PaymentController extends Controller
 
         abort_unless($isOwner || $request->user()->role->handlesPayments(), 403);
 
-        return Storage::disk(self::DISK)->download($payment->proof_path);
+        // Inline, not attachment: the collecting officer has to actually look
+        // at the uploaded proof before it is verified, and a download adds a
+        // step between seeing the row and seeing the document.
+        return Storage::disk(self::DISK)->download(
+            $payment->proof_path,
+            null,
+            ['Content-Disposition' => 'inline; filename="proof-of-payment"'],
+        );
     }
 }

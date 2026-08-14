@@ -27,6 +27,8 @@ export default defineConfig(({ mode }) => {
                 fonts: [
                     bunny('Poppins', {
                         // 400 body, 500 nav/UI, 600 headings, 700 hero title.
+                        // No lighter weights on purpose: thin Poppins text is
+                        // hard to read and we never use it.
                         weights: [400, 500, 600, 700],
                     }),
                 ],

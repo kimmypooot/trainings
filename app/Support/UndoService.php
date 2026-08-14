@@ -115,6 +115,18 @@ class UndoService
             $restored++;
         }
 
+        // Logged as its own action rather than by rewriting the entries it
+        // reverses. An undo is a thing that happened, and a trail that quietly
+        // erases decisions is worse than no trail — the fact that a reviewer
+        // took a decision back within seconds is itself worth keeping.
+        ActivityLogger::record(
+            'registration.undone',
+            null,
+            "Undid: {$entry['label']} ({$restored} registration(s) restored).",
+            ['label' => $entry['label'], 'restored' => $restored],
+            $actor,
+        );
+
         return ['label' => $entry['label'], 'count' => $restored];
     }
 }

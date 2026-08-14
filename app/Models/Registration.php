@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ChargeTo;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\RegistrationStatus;
@@ -15,7 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
-    'user_id', 'training_id', 'status', 'registered_at', 'cancelled_at', 'attended_at',
+    'user_id', 'training_id', 'status', 'charge_to', 'needs_certificate',
+    'supporting_document_path', 'registered_at', 'cancelled_at', 'attended_at',
     'reviewed_by', 'reviewed_at', 'review_remarks',
 ])]
 class Registration extends Model
@@ -27,6 +29,8 @@ class Registration extends Model
     {
         return [
             'status' => RegistrationStatus::class,
+            'charge_to' => ChargeTo::class,
+            'needs_certificate' => 'boolean',
             'registered_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'attended_at' => 'datetime',

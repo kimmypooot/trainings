@@ -305,13 +305,14 @@ const applyBulk = (action) => {
             </Link>
 
             <div class="flex flex-wrap gap-3">
-                <AppButton :href="`/admin/exports/trainings/${training.id}/roster`" variant="ghost" size="sm">
+                <AppButton :href="`/admin/exports/trainings/${training.id}/roster`" variant="ghost" size="sm" icon="download">
                     Export Roster (CSV)
                 </AppButton>
                 <AppButton
                     :href="`/admin/exports/trainings/${training.id}/roster?format=xlsx`"
                     variant="ghost"
                     size="sm"
+                    icon="download"
                 >
                     Export Roster (Excel)
                 </AppButton>
@@ -433,7 +434,7 @@ const applyBulk = (action) => {
                         />
                     </label>
 
-                    <AppButton size="sm" :disabled="issuing" @click="issueStation">
+                    <AppButton size="sm" icon="qr" :disabled="issuing" @click="issueStation">
                         {{ issuing ? 'Creating…' : stationIsTest ? 'Create practice station' : 'Create scanning station' }}
                     </AppButton>
                 </div>
@@ -472,7 +473,7 @@ const applyBulk = (action) => {
                             </p>
                         </div>
 
-                        <AppButton size="sm" variant="ghost" @click="revokeStation(link)">Revoke</AppButton>
+                        <AppButton size="sm" variant="ghost" icon="close" @click="revokeStation(link)">Revoke</AppButton>
                     </li>
                 </ul>
 
@@ -485,7 +486,7 @@ const applyBulk = (action) => {
                 <p>
                     {{ awaitingCertificates }} completed participant(s) have no certificate yet.
                 </p>
-                <AppButton class="mt-3" size="sm" @click="releaseAll">Issue All Certificates</AppButton>
+                <AppButton class="mt-3" size="sm" icon="certificate" @click="releaseAll">Issue All Certificates</AppButton>
             </AppAlert>
 
             <!-- Catering needs this as a list, not buried per-row -->
