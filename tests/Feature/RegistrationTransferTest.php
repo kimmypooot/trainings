@@ -204,7 +204,8 @@ class RegistrationTransferTest extends TestCase
         $this->assertSame($source->getKey(), $log->properties['from_training_id']);
         $this->assertSame($target->getKey(), $log->properties['to_training_id']);
         // Finance reconciles against this rather than discovering it later.
-        $this->assertSame(500.0, $log->properties['fee_difference']);
+        // Cast because the JSON round-trip narrows a whole float back to an int.
+        $this->assertSame(500.0, (float) $log->properties['fee_difference']);
     }
 
     public function test_the_participant_is_told_the_schedule_changed(): void
