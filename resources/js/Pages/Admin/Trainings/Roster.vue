@@ -184,6 +184,36 @@ const setAttendance = (registration, day, status) => {
 // Only a participant holding a place can be marked, matching AttendanceService.
 const isMarkable = (registration) => ['approved', 'completed'].includes(registration.status);
 
+/*
+ * The four statuses as a segmented control rather than a dropdown.
+ *
+ * A select costs three interactions to set one value — open, find, choose —
+ * and a roster of twelve people is twenty-four of them for a single day. These
+ * are one click each.
+ *
+ * The initial is never the only signal: every button carries the full word as
+ * its accessible name and tooltip, so the meaning survives greyscale, print and
+ * colour blindness.
+ */
+const attendanceChoices = computed(() =>
+    props.attendanceStatuses.map((option) => ({
+        ...option,
+        short: option.label.charAt(0).toUpperCase(),
+        active: {
+            present: 'bg-success text-white',
+            late: 'bg-warning text-white',
+            absent: 'bg-danger text-white',
+            excused: 'bg-info text-white',
+        }[option.value] ?? 'bg-csc-blue text-white',
+        idle: {
+            present: 'text-success hover:bg-success-soft',
+            late: 'text-warning hover:bg-warning-soft',
+            absent: 'text-danger hover:bg-danger-soft',
+            excused: 'text-info hover:bg-info-soft',
+        }[option.value] ?? 'text-csc-ink/60 hover:bg-csc-blue-tint',
+    }))
+);
+
 const releaseCertificate = (id) =>
     router.post(`/admin/registrations/${id}/certificate`, {}, { preserveScroll: true });
 
@@ -280,6 +310,45 @@ const docFilter = ref('all');
 // The training day that is happening right now, if any. The "not checked in
 // today" view has nothing to say on a day the training is not running.
 const todayDay = computed(() => props.training.days.find((day) => day.is_today)?.day ?? null);
+
+/*
+ * Attendance is taken one day at a time.
+ *
+ * The column used to render a control per training day, so a five-day run put
+ * five dropdowns in every row and the sheet grew taller the longer the course.
+ * That laid the grid out as "one person, every day", which is the retrospective
+ * case. At the venue the job is the opposite — one day, every person — so the
+ * page picks a day and the rows carry a single control for it.
+ *
+ * Lands where the work is: today while the run is on, the last day that has
+ * actually happened once it is over — which is where a correction starts — and
+ * day one for a training that has not begun, since nothing else has happened
+ * yet to look at.
+ */
+const activeDay = ref(
+    todayDay.value ??
+        props.training.days.filter((day) => day.is_past).at(-1)?.day ??
+        props.training.days[0]?.day ??
+        1
+);
+
+const activeDayLabel = computed(
+    () => props.training.days.find((day) => day.day === activeDay.value)?.label ?? ''
+);
+
+/*
+ * The whole per-participant grid, for fixing a day that is not the one on
+ * screen. Occasional work, so it opens on demand rather than living in a column.
+ *
+ * Held as an id and looked up on every render rather than captured as an
+ * object: marking a day reloads the props, and a captured row would keep
+ * showing the state it had when the dialog opened.
+ */
+const correcting = ref(null);
+
+const correctingRow = computed(
+    () => props.registrations.find((registration) => registration.id === correcting.value) ?? null
+);
 
 const notCheckedInToday = (registration) =>
     todayDay.value !== null &&
@@ -1026,6 +1095,42 @@ const printedAt = new Date().toLocaleString();
                     </div>
 
                     <!--
+                        Which day the attendance column is editing. Only worth
+                        showing on a multi-day run — a one-day course has no
+                        choice to make.
+                    -->
+                    <div
+                        v-if="training.days.length > 1"
+                        class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3 print:hidden"
+                    >
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink/60 uppercase">
+                            Marking
+                        </span>
+                        <button
+                            v-for="day in training.days"
+                            :key="day.day"
+                            type="button"
+                            class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                activeDay === day.day
+                                    ? 'bg-csc-blue text-white shadow-sm'
+                                    : 'bg-csc-blue-tint text-csc-blue hover:bg-csc-blue-tint/70'
+                            "
+                            :aria-pressed="activeDay === day.day"
+                            @click="activeDay = day.day"
+                        >
+                            Day {{ day.day }}
+                            <span
+                                class="ml-1 text-xs"
+                                :class="activeDay === day.day ? 'text-white/75' : 'text-csc-blue/60'"
+                            >
+                                {{ day.label }}
+                            </span>
+                            <span v-if="day.is_today" class="ml-1 text-2xs font-semibold uppercase">· today</span>
+                        </button>
+                    </div>
+
+                    <!--
                         The supervisory-document lifecycle, on supervisory
                         trainings only. Filters the same local roster; the count
                         is per-status for the whole page.
@@ -1210,7 +1315,15 @@ const printedAt = new Date().toLocaleString();
                                         Document{{ sortIndicator('supervisory_document.status_label') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Attendance</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    Attendance
+                                    <span
+                                        v-if="training.days.length > 1"
+                                        class="ml-1 font-normal text-csc-ink/50 normal-case"
+                                    >
+                                        · {{ activeDayLabel }}
+                                    </span>
+                                </th>
                                 <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Action</th>
                             </tr>
                         </thead>
@@ -1303,42 +1416,49 @@ const printedAt = new Date().toLocaleString();
                                     <span v-else class="text-xs text-csc-ink/50">—</span>
                                 </td>
                                 <td class="px-5 py-3.5">
-                                    <div v-if="isMarkable(registration)" class="flex flex-wrap gap-1.5">
-                                        <label
-                                            v-for="day in training.days"
-                                            :key="day.day"
-                                            class="flex flex-col gap-0.5"
+                                    <template v-if="isMarkable(registration)">
+                                        <div
+                                            class="inline-flex overflow-hidden rounded-lg border border-csc-line"
+                                            role="group"
+                                            :aria-label="`Attendance for ${registration.name} on ${activeDayLabel}`"
                                         >
-                                            <span
-                                                class="text-[10px] font-semibold uppercase"
-                                                :class="day.is_today ? 'text-csc-red-ink' : 'text-csc-ink/50'"
+                                            <button
+                                                v-for="option in attendanceChoices"
+                                                :key="option.value"
+                                                type="button"
+                                                class="border-r border-csc-line px-2.5 py-1.5 text-xs font-semibold transition-colors duration-150 last:border-r-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-csc-blue"
+                                                :class="
+                                                    registration.attendance[activeDay]?.status === option.value
+                                                        ? option.active
+                                                        : `bg-white ${option.idle}`
+                                                "
+                                                :aria-pressed="registration.attendance[activeDay]?.status === option.value"
+                                                :title="option.label"
+                                                @click="setAttendance(registration, activeDay, option.value)"
                                             >
-                                                {{ day.label }}
-                                            </span>
-                                            <select
-                                                class="rounded border border-csc-line bg-white px-1.5 py-1 text-xs text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                                                :value="registration.attendance[day.day]?.status ?? ''"
-                                                @change="setAttendance(registration, day.day, $event.target.value)"
-                                            >
-                                                <option value="">—</option>
-                                                <option
-                                                    v-for="option in attendanceStatuses"
-                                                    :key="option.value"
-                                                    :value="option.value"
-                                                >
-                                                    {{ option.label }}
-                                                </option>
-                                            </select>
-                                        </label>
-                                    </div>
-                                    <span v-else class="text-xs text-csc-ink/50">—</span>
+                                                <span aria-hidden="true">{{ option.short }}</span>
+                                                <span class="sr-only">{{ option.label }}</span>
+                                            </button>
+                                        </div>
 
-                                    <p
-                                        v-if="isMarkable(registration) && training.duration_days > 1"
-                                        class="mt-1 text-2xs text-csc-ink/55"
-                                    >
-                                        {{ registration.credited_days }} of {{ training.duration_days }} days
-                                    </p>
+                                        <!--
+                                            The running total doubles as the way
+                                            into the other days — correcting one
+                                            is occasional, so it opens on demand
+                                            rather than occupying the column.
+                                        -->
+                                        <button
+                                            v-if="training.duration_days > 1"
+                                            type="button"
+                                            class="mt-1 block rounded text-2xs text-csc-ink/55 hover:text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            @click="correcting = registration.id"
+                                        >
+                                            {{ registration.credited_days }} of {{ training.duration_days }} days ·
+                                            all days
+                                        </button>
+                                    </template>
+
+                                    <span v-else class="text-xs text-csc-ink/50">—</span>
                                 </td>
                                 <td class="px-5 py-3.5 text-right whitespace-nowrap">
                                     <template v-if="registration.status === 'pending'">
@@ -1519,33 +1639,40 @@ const printedAt = new Date().toLocaleString();
                         </div>
 
                         <div v-if="isMarkable(registration)" class="mt-3 border-t border-csc-line pt-3">
-                            <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-                                <label v-for="day in training.days" :key="day.day" class="flex flex-col gap-0.5">
-                                    <span
-                                        class="text-[10px] font-semibold uppercase"
-                                        :class="day.is_today ? 'text-csc-red-ink' : 'text-csc-ink/50'"
-                                    >
-                                        {{ day.label }}
-                                    </span>
-                                    <select
-                                        class="rounded border border-csc-line bg-white px-1.5 py-1 text-xs text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                                        :value="registration.attendance[day.day]?.status ?? ''"
-                                        @change="setAttendance(registration, day.day, $event.target.value)"
-                                    >
-                                        <option value="">—</option>
-                                        <option
-                                            v-for="option in attendanceStatuses"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </label>
-                            </div>
-                            <p v-if="training.duration_days > 1" class="mt-2 text-2xs text-csc-ink/55">
-                                {{ registration.credited_days }} of {{ training.duration_days }} days
+                            <p class="mb-1.5 text-2xs font-semibold tracking-wide text-csc-ink/50 uppercase">
+                                Attendance · {{ activeDayLabel }}
                             </p>
+                            <div
+                                class="inline-flex overflow-hidden rounded-lg border border-csc-line"
+                                role="group"
+                                :aria-label="`Attendance for ${registration.name} on ${activeDayLabel}`"
+                            >
+                                <button
+                                    v-for="option in attendanceChoices"
+                                    :key="option.value"
+                                    type="button"
+                                    class="border-r border-csc-line px-3 py-2 text-xs font-semibold transition-colors duration-150 last:border-r-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-csc-blue"
+                                    :class="
+                                        registration.attendance[activeDay]?.status === option.value
+                                            ? option.active
+                                            : `bg-white ${option.idle}`
+                                    "
+                                    :aria-pressed="registration.attendance[activeDay]?.status === option.value"
+                                    :title="option.label"
+                                    @click="setAttendance(registration, activeDay, option.value)"
+                                >
+                                    <span aria-hidden="true">{{ option.short }}</span>
+                                    <span class="sr-only">{{ option.label }}</span>
+                                </button>
+                            </div>
+                            <button
+                                v-if="training.duration_days > 1"
+                                type="button"
+                                class="mt-2 block rounded text-2xs text-csc-ink/55 hover:text-csc-blue hover:underline"
+                                @click="correcting = registration.id"
+                            >
+                                {{ registration.credited_days }} of {{ training.duration_days }} days · all days
+                            </button>
                         </div>
 
                         <div
@@ -1719,6 +1846,62 @@ const printedAt = new Date().toLocaleString();
                     </AppButton>
                 </div>
             </form>
+        </AppModal>
+
+        <!--
+            The full day-by-day grid for one participant. This is the axis the
+            column used to be laid out on — one person, every day — kept for the
+            case it actually serves: correcting a day that has already passed.
+        -->
+        <AppModal
+            :open="correctingRow !== null"
+            title="Attendance across every day"
+            :subtitle="
+                correctingRow
+                    ? `${correctingRow.name} — ${correctingRow.credited_days} of ${training.duration_days} days credited.`
+                    : ''
+            "
+            @close="correcting = null"
+        >
+            <ul v-if="correctingRow" class="divide-y divide-csc-line">
+                <li
+                    v-for="day in training.days"
+                    :key="day.day"
+                    class="flex flex-wrap items-center justify-between gap-3 py-3"
+                >
+                    <div>
+                        <p class="text-sm font-medium text-csc-ink">
+                            Day {{ day.day }}
+                            <span class="ml-1 text-xs font-normal text-csc-ink/60">{{ day.label }}</span>
+                        </p>
+                        <p v-if="day.is_today" class="text-2xs font-semibold text-csc-blue uppercase">Today</p>
+                    </div>
+
+                    <div class="inline-flex overflow-hidden rounded-lg border border-csc-line" role="group">
+                        <button
+                            v-for="option in attendanceChoices"
+                            :key="option.value"
+                            type="button"
+                            class="border-r border-csc-line px-2.5 py-1.5 text-xs font-semibold transition-colors duration-150 last:border-r-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                correctingRow.attendance[day.day]?.status === option.value
+                                    ? option.active
+                                    : `bg-white ${option.idle}`
+                            "
+                            :aria-pressed="correctingRow.attendance[day.day]?.status === option.value"
+                            :title="option.label"
+                            @click="setAttendance(correctingRow, day.day, option.value)"
+                        >
+                            <span aria-hidden="true">{{ option.short }}</span>
+                            <span class="sr-only">{{ option.label }}</span>
+                        </button>
+                    </div>
+                </li>
+            </ul>
+
+            <template #footer>
+                <AppButton size="sm" variant="ghost" @click="correcting = null">Done</AppButton>
+            </template>
         </AppModal>
 
         <AppModal
