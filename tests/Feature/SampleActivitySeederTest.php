@@ -46,6 +46,25 @@ class SampleActivitySeederTest extends TestCase
         $this->assertGreaterThan(0, Training::where('starts_at', '>', now())->count());
     }
 
+    /**
+     * SupervisoryEligibility gates a whole branch of the app — a salary-grade
+     * bar and a designation-document upload — off trainings.is_supervisory.
+     * Nothing seeded used to set that flag, so the branch was unreachable in
+     * demo data and the badge never appeared anywhere. It must stay reachable.
+     */
+    public function test_a_supervisory_course_is_seeded_and_still_open(): void
+    {
+        $supervisory = Training::where('is_supervisory', true)->get();
+
+        $this->assertNotEmpty($supervisory, 'No supervisory training was seeded.');
+
+        $this->assertTrue(
+            $supervisory->contains(fn (Training $training) => $training->status === TrainingStatus::Published
+                && $training->starts_at->isFuture()),
+            'No supervisory training is upcoming, so the registration path cannot be demonstrated.'
+        );
+    }
+
     public function test_a_training_is_running_today_so_the_scanner_has_work(): void
     {
         $running = Training::where('status', TrainingStatus::Published)

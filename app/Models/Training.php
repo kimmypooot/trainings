@@ -72,6 +72,22 @@ class Training extends Model
         return $query->where('starts_at', '>=', now());
     }
 
+    /**
+     * Everything that has not finished yet, including a run already in progress.
+     *
+     * upcoming() drops a multi-day program the moment its first morning starts,
+     * which is wrong for any public listing: a three-day course should stay
+     * announced while it is actually being delivered. A null ends_at means a
+     * single-day run, so starts_at is the end for that purpose.
+     */
+    public function scopeNotEnded(Builder $query): Builder
+    {
+        return $query->where(function (Builder $query) {
+            $query->where('ends_at', '>=', now())
+                ->orWhere(fn (Builder $q) => $q->whereNull('ends_at')->where('starts_at', '>=', now()));
+        });
+    }
+
     public function isFull(): bool
     {
         if ($this->capacity === null) {

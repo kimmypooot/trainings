@@ -35,6 +35,7 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PhysicalOrRequestController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProfilePhotoController;
+use App\Http\Controllers\ProgramController;
 use App\Http\Controllers\QrCodeController;
 use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\RegistrationOutputController;
@@ -51,6 +52,14 @@ use Inertia\Inertia;
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
 /*
+ * The public training catalogue. Deliberately outside every auth group: the
+ * Commission's programs are public information, and an agency deciding whom to
+ * nominate should not have to create an account to read what is on offer.
+ * /trainings is the signed-in equivalent and stays gated.
+ */
+Route::get('/programs', [ProgramController::class, 'index'])->name('programs');
+
+/*
  * robots.txt and sitemap.xml come from routes rather than public/ so the
  * Sitemap location always carries the configured APP_URL, whatever the
  * environment (a static public/robots.txt would beat the route and hardcode a
@@ -65,6 +74,7 @@ Route::get('/robots.txt', function () {
 Route::get('/sitemap.xml', function () {
     $urls = array_map(fn (string $path) => url($path), [
         '/',
+        '/programs',
         '/login',
         '/register',
         '/forgot-password',

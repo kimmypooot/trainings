@@ -50,40 +50,118 @@ class PublicPagesTest extends TestCase
         }
     }
 
-    public function test_home_lists_upcoming_registrable_programs(): void
+    /**
+     * The landing page is a catalogue of what the office is offering, not a
+     * list of what an anonymous visitor could join this second.
+     *
+     * So a run that is full, not yet open for registration, past its deadline,
+     * or already under way still gets listed — each one labelled with where it
+     * sits in its lifecycle. Only a draft (never published) and a finished run
+     * are genuinely absent. The earlier version of this test asserted the
+     * opposite, and that strictness was the bug: most of the office's calendar
+     * never reached the public page at all.
+     */
+    public function test_home_lists_every_unfinished_published_program_with_its_status(): void
     {
         Training::factory()->create([
             'title' => 'Leadership Essentials',
-            'starts_at' => now()->addDays(7),
+            'starts_at' => now()->addDays(30),
             'registration_opens_at' => now()->subDay(),
-            'registration_closes_at' => now()->addDays(3),
+            'registration_closes_at' => now()->addDays(20),
         ]);
 
-        // A run whose registration window has already closed must not appear.
-        Training::factory()->closed()->create(['title' => 'Too Late to Register']);
+        // Past its deadline, but the run itself has not happened yet: still
+        // announced, and honest about why nobody can sign up.
+        Training::factory()->closed()->create([
+            'title' => 'Too Late to Register',
+            'starts_at' => now()->addDays(10),
+        ]);
 
         // Drafts are not visible to participants.
         Training::factory()->draft()->create(['title' => 'Hidden Draft']);
 
-        // A fully booked capped run has nothing left to offer on the landing page.
         Training::factory()->full()->create([
             'title' => 'No Slots Left',
             'starts_at' => now()->addDays(5),
         ]);
 
-        // Past runs are not upcoming, even with a still-open window.
+        // Announced ahead of its registration window opening — the case the old
+        // query dropped silently.
+        Training::factory()->create([
+            'title' => 'Opens Later',
+            'starts_at' => now()->addDays(60),
+            'registration_opens_at' => now()->addDays(20),
+        ]);
+
+        // Under way: started this morning, runs for another two days.
+        Training::factory()->create([
+            'title' => 'Halfway Through',
+            'starts_at' => now()->subHours(3),
+            'ends_at' => now()->addDays(2),
+        ]);
+
+        // Genuinely over, so genuinely gone.
         Training::factory()->create([
             'title' => 'Already Ran',
-            'starts_at' => now()->subDay(),
+            'starts_at' => now()->subDays(5),
+            'ends_at' => now()->subDays(4),
         ]);
+
+        $response = $this->get('/')->assertOk();
+
+        $listed = collect($response->viewData('page')['props']['upcomingTrainings'])
+            ->keyBy('title');
+
+        $this->assertEqualsCanonicalizing([
+            'Halfway Through',
+            'No Slots Left',
+            'Too Late to Register',
+            'Leadership Essentials',
+            'Opens Later',
+        ], $listed->keys()->all());
+
+        $this->assertSame('ongoing', $listed['Halfway Through']['status']);
+        $this->assertSame('full', $listed['No Slots Left']['status']);
+        $this->assertSame('closed', $listed['Too Late to Register']['status']);
+        $this->assertSame('open', $listed['Leadership Essentials']['status']);
+        $this->assertSame('opening', $listed['Opens Later']['status']);
+
+        // Only the genuinely joinable one invites a visitor to sign in.
+        $this->assertSame(
+            ['Leadership Essentials'],
+            $listed->filter(fn (array $t) => $t['is_registrable'])->keys()->all()
+        );
+
+        $this->assertSame(30, $listed['Leadership Essentials']['slots_remaining']);
+    }
+
+    /** A deadline inside the next week earns the one bit of urgency the card has. */
+    public function test_home_flags_a_program_whose_registration_closes_within_a_week(): void
+    {
+        Training::factory()->create([
+            'title' => 'Closing Soon',
+            'starts_at' => now()->addDays(14),
+            'registration_closes_at' => now()->addDays(3),
+        ]);
+
+        $response = $this->get('/')->assertOk();
+        $listed = $response->viewData('page')['props']['upcomingTrainings'][0];
+
+        $this->assertSame('closing-soon', $listed['status']);
+        // Still joinable — "closing soon" is a hint, not a different permission.
+        $this->assertTrue($listed['is_registrable']);
+    }
+
+    /** The list is capped so the section stays two tidy rows of three. */
+    public function test_home_caps_the_program_list(): void
+    {
+        Training::factory()->count(9)->create(['starts_at' => now()->addDays(30)]);
 
         $this->get('/')
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Home')
-                ->has('upcomingTrainings', 1)
-                ->where('upcomingTrainings.0.title', 'Leadership Essentials')
-                ->where('upcomingTrainings.0.slots_remaining', 30)
+                ->has('upcomingTrainings', 6)
             );
     }
 

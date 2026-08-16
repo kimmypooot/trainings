@@ -7,6 +7,7 @@ use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Models\Training;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -28,9 +29,17 @@ class TrainingFactory extends Factory
             'venue' => fake()->city().' Convention Center',
             'mode' => TrainingMode::FaceToFace,
             'starts_at' => $starts,
-            'ends_at' => (clone $starts)->modify('+6 hours'),
+            /*
+             * Derived lazily from whatever starts_at ends up being, not from
+             * the $starts drawn above. A test that overrides only starts_at
+             * used to keep a random ends_at from a different date entirely —
+             * harmless while nothing read ends_at, but wrong the moment a query
+             * filters on it (Training::notEnded()), and wrong in a way that
+             * made the test flaky rather than red.
+             */
+            'ends_at' => fn (array $attributes) => Carbon::parse($attributes['starts_at'])->addHours(6),
             'duration_days' => 1,
-            'registration_closes_at' => (clone $starts)->modify('-2 days'),
+            'registration_closes_at' => fn (array $attributes) => Carbon::parse($attributes['starts_at'])->subDays(2),
             'capacity' => 30,
             'payment_required' => false,
             'status' => TrainingStatus::Published,
@@ -58,6 +67,13 @@ class TrainingFactory extends Factory
         return $this->state(fn () => [
             'starts_at' => now()->startOfDay()->addHours(8),
             'ends_at' => now()->startOfDay()->addHours(17),
+            /*
+             * Stated outright rather than left to the default. The default
+             * deadline is two days before the run, which for a run starting
+             * today is two days ago — a shut door, and the exact opposite of
+             * what this state promises above.
+             */
+            'registration_closes_at' => now()->endOfDay(),
         ]);
     }
 
