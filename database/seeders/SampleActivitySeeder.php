@@ -366,14 +366,36 @@ class SampleActivitySeeder extends Seeder
             ]
         );
 
-        // Counters are not mass-assignable, so a little history is forced on.
-        $verifications = fake()->numberBetween(0, 6);
+        /*
+         * Verification history, and the counter derived from it.
+         *
+         * Seeding the count on its own used to leave the certificate page
+         * contradicting itself — "3 public verifications" above a panel saying
+         * nobody had ever looked it up. CertificateService::recordVerification()
+         * writes the row and bumps the counter together, so the only faithful
+         * way to seed it is to write the rows and count them.
+         */
+        // times() rather than range(): range(1, 0) counts *down* and yields
+        // [1, 0], so a certificate meant to have no lookups would quietly get
+        // one and never appear as un-verified in the data.
+        $lookups = Collection::times(
+            fake()->numberBetween(0, 6),
+            fn () => $issuedAt->copy()->addDays(fake()->numberBetween(1, 40))
+        )->sort()->values();
+
+        $lookups->each(fn ($at) => $certificate->verifications()->create([
+            'verified_at' => $at,
+            'ip_address' => fake()->ipv4(),
+            'user_agent' => fake()->userAgent(),
+        ]));
+
+        // Downloads have no history table — the counter is all there is.
         $downloads = fake()->numberBetween(0, 4);
 
         $certificate->forceFill([
-            'verification_count' => $verifications,
+            'verification_count' => $lookups->count(),
             'download_count' => $downloads,
-            'last_verified_at' => $verifications ? $issuedAt->copy()->addDays(fake()->numberBetween(1, 40)) : null,
+            'last_verified_at' => $lookups->last(),
             'last_downloaded_at' => $downloads ? $issuedAt->copy()->addDays(fake()->numberBetween(1, 30)) : null,
         ])->save();
 
