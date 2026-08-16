@@ -45,7 +45,12 @@ class DashboardController extends Controller
                 'title' => $next->training->title,
                 'schedule' => $next->training->starts_at->diffForHumans(),
                 'date' => $next->training->starts_at->format('d M Y, g:i A'),
+                'ends_at' => $next->training->ends_at?->format('d M Y, g:i A'),
                 'venue' => $next->training->venue,
+                'mode_label' => $next->training->mode->label(),
+                'payment_amount' => $next->training->payment_required
+                    ? $next->training->payment_amount
+                    : null,
                 'status' => $next->status->value,
                 'url' => route('trainings.show', $next->training->slug),
             ] : null,

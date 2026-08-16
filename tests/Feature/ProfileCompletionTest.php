@@ -4,9 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\FieldOffice;
 use App\Models\User;
+use App\Notifications\VerifyEmail;
 use App\Support\ProfileOptions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -32,7 +33,7 @@ class ProfileCompletionTest extends TestCase
             'salary_grade' => 'SG 14',
             'organization_name' => 'Department of Education',
             'sector' => 'National Government Agency',
-            'region' => 'Region VIII',
+            'region' => 'Region VIII (Eastern Visayas)',
             'province' => 'Leyte',
             'city_municipality' => 'Palo',
             'field_office_id' => FieldOffice::where('code', 'lfoi')->value('id'),
@@ -48,6 +49,8 @@ class ProfileCompletionTest extends TestCase
 
     public function test_registration_sends_the_new_user_to_the_profile_form(): void
     {
+        Notification::fake();
+
         $this->post('/register', [
             'email' => 'juan@example.com',
             'password' => 'sikreto123',
@@ -55,9 +58,13 @@ class ProfileCompletionTest extends TestCase
             'consent' => true,
         ])->assertRedirect('/profile/complete');
 
-        // Registration counts as verification — there is no separate email
-        // verification step in this system, and the badge depends on it.
-        $this->assertNotNull(DB::table('users')->where('email', 'juan@example.com')->value('email_verified_at'));
+        // The account starts unverified: the system stays locked until the
+        // emailed link is clicked, and the link itself goes out when the
+        // profile completes the registration — not at account creation.
+        $user = User::where('email', 'juan@example.com')->first();
+        $this->assertNotNull($user);
+        $this->assertNull($user->email_verified_at);
+        Notification::assertNotSentTo($user, VerifyEmail::class);
     }
 
     public function test_profile_form_renders_with_its_option_lists(): void
@@ -69,6 +76,7 @@ class ProfileCompletionTest extends TestCase
                 ->component('Profile/Complete')
                 ->has('options.sectors')
                 ->has('options.fieldOffices')
+                ->has('geography')
                 ->where('options.yesNo', ProfileOptions::yesNo())
             );
     }
@@ -109,6 +117,11 @@ class ProfileCompletionTest extends TestCase
         $this->assertSame('PALO, LEYTE', $profile->organization_address);
         $this->assertSame('NO PORK', $profile->food_restrictions_details);
 
+        // Place names keep the canonical proper-case PSGC spelling.
+        $this->assertSame('Region VIII (Eastern Visayas)', $profile->region);
+        $this->assertSame('Leyte', $profile->province);
+        $this->assertSame('Palo', $profile->city_municipality);
+
         $this->actingAs($user)->get('/dashboard')->assertOk();
     }
 
@@ -144,6 +157,42 @@ class ProfileCompletionTest extends TestCase
             ->assertSessionHasErrors(['sector', 'field_office_id']);
     }
 
+    public function test_geography_reflects_the_latest_psgc_with_the_negros_island_region(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/profile/complete')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('geography', 18)
+                // Regions are sorted alphabetically in the committed dataset;
+                // NIR is the newest PSGC region (RA 12000) and must be there.
+                ->where('geography.4.name', 'Negros Island Region (NIR)')
+                ->where('geography.4.provinces.0.name', 'City of Bacolod')
+                ->where('geography.4.provinces.1.name', 'Negros Occidental')
+                ->where('geography.4.provinces.2.name', 'Negros Oriental')
+                ->where('geography.4.provinces.3.name', 'Siquijor')
+            );
+    }
+
+    public function test_place_names_must_come_from_the_psgc_reference(): void
+    {
+        $user = User::factory()->create(['profile_completed_at' => null]);
+
+        // A province that does not belong to the chosen region, and a made-up
+        // city, must both be rejected — the pickers and the validation share
+        // the same PSGC reference.
+        $this->actingAs($user)
+            ->from('/profile/complete')
+            ->post('/profile/complete', $this->validProfile([
+                'region' => 'Region VIII (Eastern Visayas)',
+                'province' => 'Cebu',
+                'city_municipality' => 'Not A Place',
+            ]))
+            ->assertRedirect('/profile/complete')
+            ->assertSessionHasErrors(['province', 'city_municipality']);
+
+        $this->assertFalse($user->refresh()->hasCompletedProfile());
+    }
+
     public function test_food_restrictions_are_optional_free_text(): void
     {
         $user = User::factory()->create(['profile_completed_at' => null]);
@@ -176,24 +225,17 @@ class ProfileCompletionTest extends TestCase
         $this->assertSame('JUAN D. DELA CRUZ JR.', $user->name);
     }
 
-    public function test_optional_v2_fields_are_stored(): void
+    public function test_mobile_number_must_be_a_valid_ph_format(): void
     {
         $user = User::factory()->create(['profile_completed_at' => null]);
 
         $this->actingAs($user)
-            ->post('/profile/complete', $this->validProfile([
-                'agency_unit' => 'human resource division',
-                'home_address' => 'tacloban city',
-            ]))
-            ->assertRedirect('/dashboard');
+            ->from('/profile/complete')
+            ->post('/profile/complete', $this->validProfile(['mobile_number' => '12345']))
+            ->assertRedirect('/profile/complete')
+            ->assertSessionHasErrors('mobile_number');
 
-        $profile = $user->refresh()->profile;
-
-        $this->assertSame('HUMAN RESOURCE DIVISION', $profile->agency_unit);
-        $this->assertSame('TACLOBAN CITY', $profile->home_address);
-        $this->assertSame('REGION VIII', $profile->region);
-        $this->assertSame('LEYTE', $profile->province);
-        $this->assertSame('PALO', $profile->city_municipality);
+        $this->assertFalse($user->refresh()->hasCompletedProfile());
     }
 
     public function test_consent_is_mandatory(): void

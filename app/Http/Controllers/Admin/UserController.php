@@ -41,6 +41,13 @@ class UserController extends Controller
                 'role_label' => $user->role->label(),
                 'field_office' => $user->fieldOffice?->name,
                 'is_active' => $user->is_active,
+                'is_collecting_officer' => $user->is_collecting_officer,
+                // Accounts left on the retired collecting-officer role. The
+                // migration gave them the designation so nothing broke, but it
+                // could not know which office they belong to — so they are
+                // called out here for a superadmin to give a real role and, if
+                // they are field office, an office to be scoped to.
+                'needs_reassignment' => $user->role === Role::CollectingOfficer,
                 'is_self' => $user->id === $request->user()->id,
                 'edit_url' => route('admin.users.edit', $user),
             ]),
@@ -63,12 +70,13 @@ class UserController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'role' => ['required', Rule::in(array_map(fn (Role $role) => $role->value, Role::staff()))],
+            'role' => ['required', Rule::in(self::assignableRoles())],
             'field_office_id' => [
                 'nullable',
                 Rule::requiredIf($request->input('role') === Role::FieldOffice->value),
                 Rule::exists('field_offices', 'id'),
             ],
+            'is_collecting_officer' => ['boolean'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ], [
             'field_office_id.required' => 'A field office account must be assigned to an office.',
@@ -86,6 +94,7 @@ class UserController extends Controller
         $user->role = Role::from($validated['role']);
         $user->field_office_id = $this->officeFor($validated);
         $user->is_active = true;
+        $user->is_collecting_officer = $validated['is_collecting_officer'] ?? false;
         $user->email_verified_at = now();
         // Staff do not fill in a participant profile.
         $user->profile_completed_at = now();
@@ -108,6 +117,7 @@ class UserController extends Controller
                 'role' => $user->role->value,
                 'field_office_id' => $user->field_office_id,
                 'is_active' => $user->is_active,
+                'is_collecting_officer' => $user->is_collecting_officer,
             ],
             'roles' => self::roleOptions(),
             'fieldOffices' => FieldOffice::options(),
@@ -121,13 +131,16 @@ class UserController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'role' => ['required', Rule::in(array_map(fn (Role $role) => $role->value, Role::staff()))],
+            'role' => ['required', Rule::in(self::assignableRoles())],
             'field_office_id' => [
                 'nullable',
                 Rule::requiredIf($request->input('role') === Role::FieldOffice->value),
                 Rule::exists('field_offices', 'id'),
             ],
             'is_active' => ['boolean'],
+            // The collecting-officer designation, assignable by a superadmin
+            // on top of whatever role the person holds.
+            'is_collecting_officer' => ['boolean'],
             // Optional: only set when the administrator wants to reset it.
             'password' => ['nullable', 'confirmed', Password::min(8)->letters()->numbers()],
         ], [
@@ -150,6 +163,7 @@ class UserController extends Controller
         $user->role = Role::from($validated['role']);
         $user->field_office_id = $this->officeFor($validated);
         $user->is_active = $validated['is_active'] ?? true;
+        $user->is_collecting_officer = $validated['is_collecting_officer'] ?? false;
 
         if (filled($validated['password'] ?? null)) {
             $user->password = $validated['password'];
@@ -246,7 +260,33 @@ class UserController extends Controller
     {
         return array_map(
             fn (Role $role) => ['value' => $role->value, 'label' => $role->label()],
-            Role::staff()
+            self::assignable()
         );
+    }
+
+    /**
+     * The staff roles a superadmin may actually hand out.
+     *
+     * Collecting officer is retired as a role: it is a designation now,
+     * assignable alongside whatever job the person actually holds. The enum
+     * case survives so accounts still carrying it keep casting — and so the
+     * Users screen can flag them for reassignment — but it can no longer be
+     * chosen. Enforced in validation as well as in the dropdown, or the
+     * dropdown is just a suggestion.
+     *
+     * @return array<int, Role>
+     */
+    private static function assignable(): array
+    {
+        return array_values(array_filter(
+            Role::staff(),
+            fn (Role $role) => $role !== Role::CollectingOfficer
+        ));
+    }
+
+    /** @return array<int, string> */
+    private static function assignableRoles(): array
+    {
+        return array_map(fn (Role $role) => $role->value, self::assignable());
     }
 }

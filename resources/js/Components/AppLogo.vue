@@ -28,7 +28,7 @@ const subSize = computed(() => ({ sm: 'text-[10px]', md: 'text-2xs', lg: 'text-x
 <template>
     <span class="inline-flex items-center gap-3">
         <img
-            src="/images/csc-logo.png"
+            src="/images/csc-logo-256.png"
             alt=""
             :class="markSize"
             class="w-auto shrink-0 object-contain"

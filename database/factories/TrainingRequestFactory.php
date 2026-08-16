@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\Curriculum;
 use App\Enums\RequestStatus;
 use App\Models\TrainingRequest;
 use App\Models\User;
@@ -18,7 +19,7 @@ class TrainingRequestFactory extends Factory
             'requested_by' => User::factory(),
             'title' => rtrim(fake()->sentence(4), '.'),
             'justification' => fake()->paragraph(),
-            'category' => 'Leadership',
+            'category' => Curriculum::LeadershipAndManagement->value,
             'expected_participants' => 25,
             'preferred_start' => now()->addMonths(2)->toDateString(),
             'preferred_end' => now()->addMonths(2)->addDays(2)->toDateString(),

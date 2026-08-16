@@ -22,6 +22,7 @@ const form = useForm({
     role: props.staffUser?.role ?? 'admin',
     field_office_id: props.staffUser?.field_office_id ?? '',
     is_active: props.staffUser?.is_active ?? true,
+    is_collecting_officer: props.staffUser?.is_collecting_officer ?? false,
     password: '',
     password_confirmation: '',
 });
@@ -53,7 +54,7 @@ const submit = () => {
     <Head :title="isEdit ? 'Edit Staff Account' : 'New Staff Account'" />
 
     <AuthenticatedLayout :title="isEdit ? 'Edit Staff Account' : 'New Staff Account'" current="admin-users">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <AppAlert v-if="Object.keys(form.errors).length" tone="danger">
                 {{ form.errors.role ?? 'Please review the highlighted fields below.' }}
             </AppAlert>
@@ -122,6 +123,23 @@ const submit = () => {
                     </div>
                 </AppCard>
 
+                <AppCard
+                    title="Designations"
+                    subtitle="Duties assigned on top of the role, not instead of it."
+                >
+                    <label class="flex items-start gap-3 text-sm text-csc-ink">
+                        <input
+                            v-model="form.is_collecting_officer"
+                            type="checkbox"
+                            class="mt-0.5 size-4 shrink-0 rounded border-csc-line accent-csc-blue"
+                        />
+                        <span class="leading-relaxed">
+                            Collecting officer — may accept payments, issue official receipts and settle
+                            refunds. A field office account keeps its own office scoping while doing so.
+                        </span>
+                    </label>
+                </AppCard>
+
                 <AppCard v-if="isEdit" title="Status">
                     <label class="flex items-start gap-3 text-sm text-csc-ink">
                         <input
@@ -137,7 +155,7 @@ const submit = () => {
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <AppButton href="/admin/users" variant="ghost" size="lg">Cancel</AppButton>
-                    <AppButton type="submit" size="lg" :loading="form.processing">
+                    <AppButton type="submit" size="lg" :loading="form.processing" icon="check">
                         {{ isEdit ? 'Save Changes' : 'Create Account' }}
                     </AppButton>
                 </div>

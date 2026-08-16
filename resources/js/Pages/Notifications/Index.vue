@@ -19,7 +19,7 @@ const markAllRead = () => router.post('/notifications/read');
     <Head title="Notifications" />
 
     <AuthenticatedLayout title="Notifications" current="notifications">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <div v-if="hasUnread" class="flex justify-end">
                 <AppButton variant="ghost" size="sm" @click="markAllRead">Mark All as Read</AppButton>
             </div>

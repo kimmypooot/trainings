@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureSiteIsAvailable;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,6 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            // The maintenance gate runs before Inertia shares its props, so a
+            // site down for maintenance does not count visitors or build a page
+            // payload for a user who will only see the 503 page. It is appended
+            // (not prepended) because it needs the session middleware to have
+            // already run before it reads the signed-in user.
+            EnsureSiteIsAvailable::class,
             HandleInertiaRequests::class,
         ]);
 

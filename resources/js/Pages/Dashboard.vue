@@ -17,6 +17,12 @@ const props = defineProps({
     profile: { type: Object, required: true },
 });
 
+const money = (value) =>
+    Number(value).toLocaleString('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
 const greeting = computed(() => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -131,7 +137,7 @@ const stats = computed(() => [
     <Head title="Dashboard" />
 
     <AuthenticatedLayout title="Dashboard" current="dashboard">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <!-- 1. Greeting + state -->
             <div>
                 <h2 class="text-xl font-semibold tracking-tight text-csc-blue sm:text-2xl">
@@ -166,12 +172,23 @@ const stats = computed(() => [
                     <div>
                         <dt class="text-white/60">Date</dt>
                         <dd class="mt-0.5 font-medium text-white">{{ nextTraining.date }}</dd>
+                        <dd v-if="nextTraining.ends_at" class="mt-0.5 text-xs text-white/60">
+                            Ends {{ nextTraining.ends_at }}
+                        </dd>
+                    </div>
+                    <div v-if="nextTraining.mode_label">
+                        <dt class="text-white/60">Mode</dt>
+                        <dd class="mt-0.5 font-medium text-white">{{ nextTraining.mode_label }}</dd>
+                    </div>
+                    <div v-if="nextTraining.payment_amount !== null">
+                        <dt class="text-white/60">Training fee</dt>
+                        <dd class="mt-0.5 font-medium text-white">PHP {{ money(nextTraining.payment_amount) }}</dd>
                     </div>
                 </dl>
 
                 <template #footer>
                     <div class="flex flex-col gap-2 sm:flex-row">
-                        <AppButton :href="nextTraining.url" size="sm" on-dark>View Details</AppButton>
+                        <AppButton :href="nextTraining.url" size="sm" on-dark icon="arrow-right">View Details</AppButton>
                         <AppButton href="/my/qr" size="sm" variant="ghost" on-dark>Show QR Code</AppButton>
                     </div>
                 </template>
@@ -184,7 +201,7 @@ const stats = computed(() => [
                     icon="calendar"
                 >
                     <template #action>
-                        <AppButton href="/trainings" size="md">Browse Trainings</AppButton>
+                        <AppButton href="/trainings" size="md" icon="calendar">Browse Trainings</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>

@@ -45,7 +45,7 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
     <Head title="Users & Roles" />
 
     <AuthenticatedLayout title="Users &amp; Roles" current="admin-users">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="error" tone="danger">{{ error }}</AppAlert>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -69,7 +69,7 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                     </select>
                 </div>
 
-                <AppButton href="/admin/users/create">New Staff Account</AppButton>
+                        <AppButton href="/admin/users/create" icon="plus">New Staff Account</AppButton>
             </div>
 
             <AppCard v-if="!users.data.length" :padded="false">
@@ -79,7 +79,7 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                     icon="users"
                 >
                     <template #action>
-                        <AppButton href="/admin/users/create">New Staff Account</AppButton>
+                <AppButton href="/admin/users/create" icon="plus">New Staff Account</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>
@@ -111,6 +111,21 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                                     <span class="rounded-full bg-csc-blue-tint px-2.5 py-1 text-xs font-semibold text-csc-blue">
                                         {{ user.role_label }}
                                     </span>
+                                    <p
+                                        v-if="user.is_collecting_officer"
+                                        class="mt-1 text-2xs font-medium text-csc-ink/60"
+                                    >
+                                        Collecting officer
+                                    </p>
+                                    <!--
+                                        Left on the retired collecting-officer
+                                        role. They can still take payments, but
+                                        they have no office to be scoped to
+                                        until someone gives them a real role.
+                                    -->
+                                    <p v-if="user.needs_reassignment" class="mt-1 text-2xs font-medium text-warning">
+                                        Needs reassignment
+                                    </p>
                                 </td>
                                 <td class="px-5 py-3.5 text-xs text-csc-ink/70">{{ user.field_office ?? '—' }}</td>
                                 <td class="px-5 py-3.5">

@@ -4,6 +4,7 @@ import { Head } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
+import AppBarList from '@/Components/AppBarList.vue';
 import AppButton from '@/Components/AppButton.vue';
 
 const props = defineProps({
@@ -14,16 +15,16 @@ const props = defineProps({
     byFieldOffice: { type: Array, required: true },
     attendance: { type: Object, required: true },
     payments: { type: Object, default: null },
+    demographics: { type: Object, required: true },
+    topAgencies: { type: Array, required: true },
     scopedTo: { type: String, default: null },
 });
 
-// Bars are drawn as widths against the largest value, so an empty dataset must
-// not divide by zero.
-const peak = (rows, key = 'count') => Math.max(1, ...rows.map((row) => row[key]));
-
-const monthPeak = computed(() => peak(props.registrationsByMonth));
-const categoryPeak = computed(() => peak(props.byCategory));
-const officePeak = computed(() => peak(props.byFieldOffice));
+// The month strip is drawn as columns rather than rows, so it keeps its own
+// peak; every other breakdown uses AppBarList, which works its own out.
+const monthPeak = computed(() =>
+    Math.max(1, ...props.registrationsByMonth.map((row) => row.count))
+);
 
 const tiles = computed(() => [
     { label: 'Trainings', value: props.headline.trainings },
@@ -37,7 +38,7 @@ const tiles = computed(() => [
     <Head title="Analytics" />
 
     <AuthenticatedLayout title="Analytics" current="admin-analytics">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="scopedTo" tone="info">
                 Figures cover <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
@@ -99,44 +100,73 @@ const tiles = computed(() => [
                 </AppCard>
 
                 <AppCard title="By Category">
-                    <p v-if="!byCategory.length" class="text-sm text-csc-ink/60">No registrations yet.</p>
-
-                    <ul v-else class="space-y-2">
-                        <li
-                            v-for="row in byCategory"
-                            :key="row.label"
-                            class="grid grid-cols-[8rem_1fr_2.5rem] items-center gap-3"
-                        >
-                            <span class="truncate text-xs text-csc-ink/60">{{ row.label }}</span>
-                            <span class="h-2.5 rounded-full bg-csc-blue-tint">
-                                <span
-                                    class="block h-full rounded-full bg-csc-blue"
-                                    :style="{ width: `${(row.count / categoryPeak) * 100}%` }"
-                                />
-                            </span>
-                            <span class="text-right text-xs font-medium text-csc-ink">{{ row.count }}</span>
-                        </li>
-                    </ul>
+                    <AppBarList :rows="byCategory" empty-text="No registrations yet." />
                 </AppCard>
             </div>
 
             <AppCard v-if="byFieldOffice.length" title="By Field Office">
-                <ul class="space-y-2">
-                    <li
-                        v-for="row in byFieldOffice"
-                        :key="row.label"
-                        class="grid grid-cols-[10rem_1fr_2.5rem] items-center gap-3"
-                    >
-                        <span class="truncate text-xs text-csc-ink/60">{{ row.label }}</span>
-                        <span class="h-2.5 rounded-full bg-csc-blue-tint">
-                            <span
-                                class="block h-full rounded-full bg-csc-blue"
-                                :style="{ width: `${(row.count / officePeak) * 100}%` }"
-                            />
-                        </span>
-                        <span class="text-right text-xs font-medium text-csc-ink">{{ row.count }}</span>
-                    </li>
-                </ul>
+                <AppBarList :rows="byFieldOffice" label-width="10rem" />
+            </AppCard>
+
+            <!--
+                Who is being trained. These are the cuts CSC reports upward, so
+                they sit together rather than being scattered among the
+                operational figures above.
+            -->
+            <AppCard
+                title="Participant Profile"
+                subtitle="Counted per registration — one person attending three trainings counts three times."
+            >
+                <div class="grid gap-6 sm:grid-cols-2">
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Sex</h3>
+                        <AppBarList :rows="demographics.sex" label-width="7rem" />
+                    </div>
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Age Band</h3>
+                        <AppBarList :rows="demographics.ageBand" label-width="7rem" />
+                    </div>
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Position Level</h3>
+                        <AppBarList :rows="demographics.positionLevel" label-width="11rem" />
+                    </div>
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Nature of Appointment</h3>
+                        <AppBarList :rows="demographics.employmentStatus" label-width="11rem" />
+                    </div>
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Sector</h3>
+                        <AppBarList :rows="demographics.sector" label-width="11rem" />
+                    </div>
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Charged To</h3>
+                        <AppBarList :rows="demographics.chargeTo" label-width="7rem" />
+                    </div>
+                </div>
+            </AppCard>
+
+            <AppCard
+                title="Where Participants Come From"
+                subtitle="Their own region and province, not the field office they are assigned to."
+            >
+                <div class="grid gap-6 sm:grid-cols-2">
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Region</h3>
+                        <AppBarList :rows="demographics.region" label-width="13rem" />
+                    </div>
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Province</h3>
+                        <AppBarList :rows="demographics.province" label-width="11rem" />
+                    </div>
+                </div>
+            </AppCard>
+
+            <AppCard
+                v-if="topAgencies.length"
+                title="Top Agencies"
+                subtitle="The ten sending the most participants."
+            >
+                <AppBarList :rows="topAgencies" label-width="14rem" />
             </AppCard>
 
             <AppCard v-if="payments" title="Payments">
@@ -160,16 +190,16 @@ const tiles = computed(() => [
 
             <AppCard title="Exports" subtitle="Downloads honour the same field-office scoping as these figures.">
                 <div class="flex flex-wrap gap-3">
-                    <AppButton href="/admin/exports/participants" variant="ghost" size="sm">
+                    <AppButton href="/admin/exports/participants" variant="ghost" size="sm" icon="download" external>
                         Participants (CSV)
                     </AppButton>
-                    <AppButton href="/admin/exports/participants?format=xlsx" variant="ghost" size="sm">
+                    <AppButton href="/admin/exports/participants?format=xlsx" variant="ghost" size="sm" icon="download" external>
                         Participants (Excel)
                     </AppButton>
-                    <AppButton href="/admin/exports/registrations" variant="ghost" size="sm">
+                    <AppButton href="/admin/exports/registrations" variant="ghost" size="sm" icon="download" external>
                         Registrations (CSV)
                     </AppButton>
-                    <AppButton v-if="payments" href="/admin/exports/payments" variant="ghost" size="sm">
+                    <AppButton v-if="payments" href="/admin/exports/payments" variant="ghost" size="sm" icon="download" external>
                         Payments (CSV)
                     </AppButton>
                 </div>

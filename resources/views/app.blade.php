@@ -16,12 +16,46 @@
         <link rel="icon" href="{{ asset('images/favicon-192.png') }}" type="image/png" sizes="192x192">
         <link rel="apple-touch-icon" href="{{ asset('images/apple-touch-icon.png') }}">
 
+        {{--
+            The landing-page hero photo is the largest paint above the fold, so
+            the browser should fetch it before it has finished parsing CSS —
+            otherwise a CSS background discovered late delays first paint. WebP
+            is the format every modern browser will pick from the <picture> in
+            Home.vue; the JPEG stays as the fallback, not the preload.
+        --}}
+        <link rel="preload" href="{{ asset('images/cscbg_facade.webp') }}" as="image" fetchpriority="high">
+
+        {{--
+            Organisation-level schema, served in the initial HTML (not injected
+            by the client-side Inertia head) so a crawler that never executes
+            JavaScript still sees it. A <script> in a Vue client template is
+            ignored by the compiler, which is why this lives here and not in
+            Home.vue.
+
+            The schema.org context key is spelled as a concatenation rather
+            than written out. Blade compiles the template *source*, so a
+            literal '@context' is matched as the @context directive even inside
+            a PHP string — it compiled to a raw `<?php $__contextArgs = [] ...`
+            that was emitted into the JSON on every page. Splitting the "@"
+            off leaves nothing for the directive pattern to match.
+        --}}
+        <script type="application/ld+json">
+            {!! json_encode([
+                '@'.'context' => 'https://schema.org',
+                '@type' => 'GovernmentOrganization',
+                'name' => 'Civil Service Commission Regional Office VIII',
+                'alternateName' => 'CSC RO VIII',
+                'url' => url('/'),
+                'logo' => url('/images/csc-logo-512.png'),
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) !!}
+        </script>
+
         @fonts
 
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @inertiaHead
     </head>
-    <body class="min-h-screen bg-white font-sans text-csc-ink antialiased">
+    <body class="min-h-screen bg-white font-sans text-csc-ink antialiased" @if ($gaId = config('services.ga4.measurement_id')) data-ga-measurement-id="{{ $gaId }}" @endif>
         @inertia
     </body>
 </html>

@@ -11,9 +11,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'first_name', 'middle_name', 'last_name', 'suffix', 'date_of_birth', 'sex',
     'is_pwd', 'civil_status', 'mobile_number', 'position_title', 'salary_grade',
-    'organization_name', 'agency_unit', 'sector', 'region', 'province',
+    'organization_name', 'sector', 'region', 'province',
     'city_municipality', 'field_office_id', 'position_level', 'employment_status',
-    'organization_address', 'home_address', 'food_restrictions_details', 'consented_at',
+    'organization_address', 'food_restrictions_details', 'consented_at',
 ])]
 class Profile extends Model
 {
@@ -45,6 +45,27 @@ class Profile extends Model
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);
+    }
+
+    /**
+     * Whether the participant lives outside Region VIII.
+     *
+     * The region field holds the canonical PSGC name ("Region VIII (Eastern
+     * Visayas)", "Region XI (Davao Region)", ...), so the check is a tolerant
+     * contains rather than an exact match. Fails open: a blank region is
+     * treated as outside, because the physical-OR option only ever matters to
+     * people who cannot collect the receipt in person — erring toward showing
+     * the option is the safe side.
+     */
+    public function isOutsideCscRegion(): bool
+    {
+        if (blank($this->region)) {
+            return true;
+        }
+
+        $region = mb_strtoupper((string) $this->region);
+
+        return ! str_contains($region, 'VIII') && ! str_contains($region, 'EASTERN VISAYAS');
     }
 
     /**

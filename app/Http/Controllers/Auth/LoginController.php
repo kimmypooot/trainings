@@ -28,7 +28,7 @@ class LoginController extends Controller
     /**
      * Handle a login attempt.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): Response|RedirectResponse
     {
         $credentials = $request->validate([
             'email' => ['required', 'string', 'email'],
@@ -65,8 +65,36 @@ class LoginController extends Controller
             ])->onlyInput('email');
         }
 
+        // An unverified email blocks the sign-in — but only once the profile
+        // exists. Right after registration the participant has no profile yet
+        // and is sent to the gate form instead, so the verification deadline is
+        // "before you can use the system", not "before you can finish signing
+        // up". Rendered directly (not a redirect + flash) because the browser
+        // drops the X-Inertia header when following the 302 back to this same
+        // page, which would consume the one-shot flash and leave the "Email Not
+        // Verified" card invisible. The POST's own response carries the email.
+        if (! $request->user()->hasVerifiedEmail() && $request->user()->hasCompletedProfile()) {
+            $unverifiedEmail = $request->user()->email;
+
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return Inertia::render('Auth/Login', [
+                'status' => null,
+                'googleEnabled' => (bool) config('services.google.client_id'),
+                'unverified_email' => $unverifiedEmail,
+            ]);
+        }
+
         RateLimiter::clear($throttleKey);
         $request->session()->regenerate();
+
+        // A single column rather than a login row per sign-in. v1's activity
+        // log was mostly login/logout pairs, and that volume is exactly what
+        // buried the decisions worth auditing — this keeps the one part of it
+        // staff actually read, which is how a dormant account gets noticed.
+        $request->user()->forceFill(['last_login_at' => now()])->save();
 
         if ($request->user()->role->isStaff()) {
             return redirect()->intended(route('admin.dashboard'));

@@ -11,7 +11,7 @@ const props = defineProps({
 const nav = [
     { key: 'home', label: 'Home', href: '/' },
     { key: 'about', label: 'About', href: '/#about' },
-    { key: 'programs', label: 'Programs', href: '/#programs' },
+    { key: 'programs', label: 'Programs', href: '/#upcoming' },
     { key: 'contact', label: 'Contact', href: '/#contact' },
 ];
 
@@ -53,6 +53,10 @@ const aboutGovphLinks = [
 const page = usePage();
 const visitorCount = computed(() => page.props.visitors ?? 0);
 
+// Signed-in staff pass straight through maintenance mode, so without this they
+// see a working public site and conclude the switch is broken.
+const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
+
 const scrolled = ref(false);
 const menuOpen = ref(false);
 
@@ -70,11 +74,32 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
 
 <template>
     <div class="flex min-h-screen flex-col bg-white">
-        <header
-            class="sticky top-0 z-50 border-b bg-white transition-shadow duration-200"
-            :class="scrolled ? 'border-csc-line shadow-sm' : 'border-transparent'"
+        <a
+            href="#main"
+            class="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-(--z-skip-link) focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-csc-blue"
         >
-            <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+            Skip to content
+        </a>
+
+        <header class="sticky top-0 z-50">
+            <!-- GOVPH-style official ribbon above the navigation bar -->
+            <div class="bg-csc-blue-deep">
+                <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1 sm:px-6 lg:px-8">
+                    <p class="text-2xs font-medium tracking-widest text-white/70 uppercase">
+                        Republic of the Philippines
+                    </p>
+                    <p class="hidden text-2xs font-medium tracking-widest text-white/70 uppercase sm:block">
+                        Civil Service Commission
+                    </p>
+                </div>
+            </div>
+
+            <!-- Frosted glass once content scrolls under the navigation bar -->
+            <div
+                class="border-b bg-white supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-md transition-shadow duration-200"
+                :class="scrolled ? 'border-csc-line shadow-sm' : 'border-transparent'"
+            >
+                <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2 sm:px-6 lg:px-8">
                 <Link href="/" class="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-csc-blue">
                     <AppLogo size="md" />
                     <span class="sr-only">CSC TIMS home</span>
@@ -120,6 +145,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                         <path v-else d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
                     </svg>
                 </button>
+                </div>
             </div>
 
             <div v-show="menuOpen" id="mobile-menu" class="border-t border-csc-line bg-white md:hidden">
@@ -145,7 +171,36 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
             </div>
         </header>
 
-        <main class="flex-1">
+        <!-- Staff can see the public site during maintenance, so remind them the
+             switch is still on and point them at the control. -->
+        <div
+            v-if="maintenanceMode"
+            class="border-b border-warning/25 bg-warning-soft px-4 py-2.5 sm:px-6 lg:px-8"
+            role="status"
+        >
+            <div class="mx-auto flex w-full max-w-7xl items-center gap-2 text-sm text-warning">
+                <svg
+                    class="size-4 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    aria-hidden="true"
+                >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 8v5m0 3.5v.5" stroke-linecap="round" />
+                </svg>
+                <p class="min-w-0">
+                    <span class="font-semibold">Maintenance mode is on.</span>
+                    You can see this page because you are signed in — visitors get a maintenance notice instead.
+                    <Link href="/admin/maintenance" class="font-semibold underline hover:opacity-80">
+                        Manage
+                    </Link>
+                </p>
+            </div>
+        </div>
+
+        <main id="main" class="flex-1">
             <Transition name="page" appear>
                 <div :key="page.component">
                     <slot />
@@ -159,7 +214,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                     <!-- Col 1: Brand + seals -->
                     <div>
                         <div class="mb-3 flex items-center gap-2">
-                            <img src="/images/csc-logo.png" alt="" class="h-7 w-7 object-contain" aria-hidden="true" />
+                            <img src="/images/csc-logo-256.png" alt="" class="h-7 w-7 object-contain" aria-hidden="true" />
                             <span class="text-sm font-semibold text-white">CSC TIMS</span>
                         </div>
                         <p class="text-xs leading-relaxed text-white/60">
@@ -179,6 +234,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                                 <img
                                     :src="seal.src"
                                     :alt="seal.alt"
+                                    loading="lazy"
                                     class="h-16 w-auto opacity-80 transition-opacity duration-150 hover:opacity-100"
                                 />
                             </a>

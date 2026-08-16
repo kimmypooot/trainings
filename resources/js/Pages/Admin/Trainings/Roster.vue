@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
@@ -8,7 +8,11 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AppInput from '@/Components/AppInput.vue';
+import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
+import AppSelect from '@/Components/AppSelect.vue';
+import AppTextarea from '@/Components/AppTextarea.vue';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -16,7 +20,14 @@ const props = defineProps({
     summary: { type: Object, required: true },
     scopedTo: { type: String, default: null },
     attendanceStatuses: { type: Array, default: () => [] },
+    supervisoryDocumentStatuses: { type: Array, default: () => [] },
     scanLinks: { type: Array, default: () => [] },
+    transferTargets: { type: Array, default: () => [] },
+    officeBreakdown: { type: Array, default: () => [] },
+    revenue: { type: Object, default: () => ({}) },
+    can: { type: Object, default: () => ({}) },
+    paymentMethods: { type: Array, default: () => [] },
+    collectingOfficers: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -204,9 +215,184 @@ const decide = (registration, decision) => {
     });
 };
 
+/**
+ * Verify or reject a supervisory supporting document.
+ *
+ * Rejecting asks for a reason, same as a registration rejection — the
+ * participant reads it when they are told to fix the file.
+ */
+const decideDocument = (registration, decision) => {
+    const url = `/admin/registrations/${registration.id}/supervisory-document`;
+
+    if (decision !== 'rejected') {
+        post(url, { decision, remarks: null });
+
+        return;
+    }
+
+    askFor({
+        title: 'Reject this supporting document',
+        description: `${registration.name}'s document will be sent back for a replacement.`,
+        label: 'Reason for rejection',
+        hint: 'Shown to the participant, who can then upload a corrected document.',
+        confirmLabel: 'Reject document',
+        minLength: 10,
+        onConfirm: (remarks) => post(url, { decision, remarks }),
+    });
+};
+
+/**
+ * Cancel on the participant's behalf — a phoned-in withdrawal, a duplicate, a
+ * confirmed no-show. Always asks: the participant loses their place on someone
+ * else's say-so, so the record has to carry whose and why.
+ */
+const cancelRegistration = (registration) => {
+    askFor({
+        title: 'Cancel this registration',
+        description: `${registration.name} gives up their place, and the slot is released to the next applicant.`,
+        label: 'Reason for cancellation',
+        hint: 'Kept on the registration. You have a few seconds to take this back.',
+        confirmLabel: 'Cancel registration',
+        minLength: 10,
+        onConfirm: (reason) => post(`/admin/registrations/${registration.id}/cancel`, { reason }),
+    });
+};
+
+// Matches RegistrationStatus::isCancellable() — the server refuses the rest.
+const isCancellable = (registration) =>
+    ['pending', 'approved', 'waitlisted'].includes(registration.status);
+
 const pendingCount = computed(() => props.registrations.filter((r) => r.status === 'pending').length);
 
 const restrictions = computed(() => props.registrations.filter((r) => r.food_restrictions));
+
+/* -------------------------------------------------------------------------- */
+/* Filtering, search, "not checked in today", sorting                          */
+/* -------------------------------------------------------------------------- */
+
+const query = ref('');
+const statusFilter = ref('all');
+const onlyNotCheckedInToday = ref(false);
+// The supervisory-document filter, meaningful only when the training is
+// supervisory and someone has actually been asked to attach a document.
+const docFilter = ref('all');
+
+// The training day that is happening right now, if any. The "not checked in
+// today" view has nothing to say on a day the training is not running.
+const todayDay = computed(() => props.training.days.find((day) => day.is_today)?.day ?? null);
+
+const notCheckedInToday = (registration) =>
+    todayDay.value !== null &&
+    isMarkable(registration) &&
+    !(registration.attendance[todayDay.value]?.time_in);
+
+const statusCounts = computed(() => {
+    const counts = { all: props.registrations.length };
+
+    for (const registration of props.registrations) {
+        counts[registration.status] = (counts[registration.status] ?? 0) + 1;
+    }
+
+    return counts;
+});
+
+const notCheckedInCount = computed(
+    () => props.registrations.filter(notCheckedInToday).length
+);
+
+// Chips in display order. Statuses that never occur on this roster simply read
+// as zero, which is easier to reason about than a chip vanishing mid-session.
+const statusChips = ['pending', 'approved', 'completed', 'cancelled', 'waitlisted'];
+
+const sortKey = ref(null);
+const sortDir = ref('asc');
+
+function toggleSort(key) {
+    if (sortKey.value === key) {
+        sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortKey.value = key;
+        sortDir.value = 'asc';
+    }
+}
+
+const sortIndicator = (key) => {
+    if (sortKey.value !== key) {
+        return '';
+    }
+
+    return sortDir.value === 'asc' ? ' ↑' : ' ↓';
+};
+
+const filtered = computed(() => {
+    const needle = query.value.trim().toLowerCase();
+
+    let rows = props.registrations.filter((registration) => {
+        const matchesQuery =
+            !needle ||
+            `${registration.name} ${registration.email} ${registration.organization ?? ''}`
+                .toLowerCase()
+                .includes(needle);
+        const matchesStatus = statusFilter.value === 'all' || registration.status === statusFilter.value;
+        const matchesDoc = docFilter.value === 'all'
+            || registration.supervisory_document?.status === docFilter.value;
+        const matchesToday = !onlyNotCheckedInToday.value || notCheckedInToday(registration);
+
+        return matchesQuery && matchesStatus && matchesToday && matchesDoc;
+    });
+
+    if (sortKey.value) {
+        const dir = sortDir.value === 'asc' ? 1 : -1;
+
+        // Dotted keys resolve a nested value (e.g. the document status label);
+        // the fallback keeps a null document from sorting above a present one.
+        const valueAt = (row, key) =>
+            key.split('.').reduce((acc, part) => (acc == null ? null : acc[part]), row);
+
+        rows = [...rows].sort((a, b) => {
+            const av = valueAt(a, sortKey.value) ?? '';
+            const bv = valueAt(b, sortKey.value) ?? '';
+
+            return (typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv))) * dir;
+        });
+    }
+
+    return rows;
+});
+
+const hasActiveFilters = computed(
+    () =>
+        Boolean(query.value.trim()) ||
+        statusFilter.value !== 'all' ||
+        onlyNotCheckedInToday.value ||
+        docFilter.value !== 'all'
+);
+
+const clearFilters = () => {
+    query.value = '';
+    statusFilter.value = 'all';
+    onlyNotCheckedInToday.value = false;
+    docFilter.value = 'all';
+};
+
+// Document status chips for a supervisory training, with live counts.
+const docStatusCounts = computed(() => {
+    const counts = { all: props.registrations.filter((r) => r.supervisory_document).length };
+
+    for (const registration of props.registrations) {
+        const status = registration.supervisory_document?.status;
+
+        if (status) {
+            counts[status] = (counts[status] ?? 0) + 1;
+        }
+    }
+
+    return counts;
+});
+
+/* -------------------------------------------------------------------------- */
+/* Selection                                                                   */
+/* -------------------------------------------------------------------------- */
 
 /*
  * Selection.
@@ -238,12 +424,17 @@ const toggle = (id) => {
     selected.value = next;
 };
 
+// Select-all acts on the rows currently in front of the operator, not on the
+// whole roster — checking one box and approving "all" when the roster was
+// filtered is a scope the server would reject anyway.
+const visibleSelectable = computed(() => filtered.value.filter((r) => selectable.value.includes(r)));
+
 const allSelected = computed(
-    () => selectable.value.length > 0 && selected.value.size === selectable.value.length
+    () => visibleSelectable.value.length > 0 && selected.value.size === visibleSelectable.value.length
 );
 
 const toggleAll = () => {
-    selected.value = allSelected.value ? new Set() : new Set(selectable.value.map((r) => r.id));
+    selected.value = allSelected.value ? new Set() : new Set(visibleSelectable.value.map((r) => r.id));
 };
 
 const selectedRows = computed(() => props.registrations.filter((r) => selected.value.has(r.id)));
@@ -287,13 +478,141 @@ const applyBulk = (action) => {
         onConfirm: (remarks) => sendBulk(action, remarks),
     });
 };
+
+/*
+ * Moving a selection to another run.
+ *
+ * Its own dialog rather than another bulk action: it needs a target training
+ * as well as a reason, and the server reports back per-participant which of
+ * them could not be moved.
+ */
+const transferring = ref(false);
+
+const transferForm = useForm({
+    target_training_id: '',
+    reason: '',
+    ids: [],
+});
+
+const startTransfer = () => {
+    transferForm.reset();
+    transferForm.clearErrors();
+    transferring.value = true;
+};
+
+const submitTransfer = () => {
+    transferForm.ids = [...selected.value];
+
+    transferForm.post(`/admin/trainings/${props.training.id}/registrations/transfer`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            transferring.value = false;
+            selected.value = new Set();
+            transferForm.reset();
+        },
+    });
+};
+
+/*
+ * Money taken at the counter. The participant paid cash at the desk and left
+ * with the receipt, so there is nothing to upload and nothing to review — the
+ * officer enters what is on the OR stub and it lands verified.
+ */
+const paying = ref(null);
+
+const paymentForm = useForm({
+    amount: '',
+    payment_method: 'cash',
+    payment_date: '',
+    reference_number: '',
+    or_number: '',
+    or_date: '',
+    collecting_officer_id: '',
+    remarks: '',
+    prime_hrm_discount: false,
+});
+
+/*
+ * The PRIME-HRM incentive, previewed for the officer. These are the same
+ * figures the server computes — this is a display of the arithmetic, not the
+ * source of it. The form posts only the flag; PaymentService derives what is
+ * owed, so nothing here can steer the amount that is actually recorded.
+ */
+const PRIME_HRM_RATE = 0.2;
+
+const money = (value) =>
+    Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const primeHrm = computed(() => {
+    const gross = Number(props.training.payment_amount ?? 0);
+    const discount = Math.round(gross * PRIME_HRM_RATE * 100) / 100;
+
+    return { gross, discount, net: Math.round((gross - discount) * 100) / 100 };
+});
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+const startPayment = (registration) => {
+    paymentForm.reset();
+    paymentForm.clearErrors();
+    // Pre-filled with the run's fee and today's date — the overwhelmingly
+    // common case is the exact amount, handed over now.
+    paymentForm.amount = props.training.payment_amount ?? '';
+    paymentForm.payment_date = today();
+    paymentForm.or_date = today();
+    paying.value = registration;
+};
+
+// Ticking the discount replaces the amount with the discounted price, and
+// unticking restores the full fee. The field goes read-only while ticked — the
+// figure is the office's to compute, not the officer's to type.
+watch(
+    () => paymentForm.prime_hrm_discount,
+    (discounted) => {
+        paymentForm.amount = discounted ? primeHrm.value.net : (props.training.payment_amount ?? '');
+    }
+);
+
+// Mirrors PaymentMethod::requiresReference() and isSettlement(): cash leaves no
+// reference, and a promissory note has no receipt because no money arrived.
+const methodNeedsReference = computed(() =>
+    ['check', 'online', 'credit_card'].includes(paymentForm.payment_method)
+);
+const methodIsSettlement = computed(() => paymentForm.payment_method !== 'promissory');
+
+const submitPayment = () => {
+    paymentForm.post(`/admin/registrations/${paying.value.id}/payment`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            paying.value = null;
+            paymentForm.reset();
+        },
+    });
+};
+
+// Only where there is a fee, the viewer may post one, and nothing is already
+// standing against it — a pending upload is reviewed on the payments screen,
+// not overwritten here.
+const canRecordPayment = (registration) =>
+    props.can.record_payment &&
+    props.training.payment_required &&
+    !registration.payment.settled &&
+    !registration.payment.awaiting_review &&
+    registration.status !== 'cancelled';
+
+// The attendance sheet is the same page in print — the interactive chrome
+// carries the print:hidden class and the sheet the print-only section shows.
+const printAttendanceSheet = () => window.print();
+
+// Evaluated once when the page loads; for a printout that is the right "now".
+const printedAt = new Date().toLocaleString();
 </script>
 
 <template>
     <Head :title="`Roster — ${training.title}`" />
 
     <AuthenticatedLayout title="Roster" current="admin-trainings">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <Link
                 href="/admin/trainings"
                 class="inline-flex items-center gap-1.5 text-sm font-medium text-csc-blue hover:text-csc-blue-deep"
@@ -304,16 +623,21 @@ const applyBulk = (action) => {
                 Manage Trainings
             </Link>
 
-            <div class="flex flex-wrap gap-3">
-                <AppButton :href="`/admin/exports/trainings/${training.id}/roster`" variant="ghost" size="sm">
+            <div class="flex flex-wrap gap-3 print:hidden">
+                <AppButton :href="`/admin/exports/trainings/${training.id}/roster`" variant="ghost" size="sm" icon="download" external>
                     Export Roster (CSV)
                 </AppButton>
                 <AppButton
                     :href="`/admin/exports/trainings/${training.id}/roster?format=xlsx`"
                     variant="ghost"
                     size="sm"
+                    icon="download"
+                    external
                 >
                     Export Roster (Excel)
+                </AppButton>
+                <AppButton variant="ghost" size="sm" icon="print" @click="printAttendanceSheet">
+                    Print Attendance Sheet
                 </AppButton>
             </div>
 
@@ -323,8 +647,8 @@ const applyBulk = (action) => {
                 Showing participants from <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
 
-            <AppCard :title="training.title" :subtitle="`${training.starts_at} · ${training.venue}`">
-                <div class="grid grid-cols-2 gap-4 sm:grid-cols-6">
+            <AppCard :title="training.title" :subtitle="`${training.starts_at} · ${training.venue}`" class="print:hidden">
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-7">
                     <div>
                         <p class="text-2xl font-bold text-warning">{{ pendingCount }}</p>
                         <p class="text-xs text-csc-ink/60">Pending</p>
@@ -349,6 +673,11 @@ const applyBulk = (action) => {
                         <p class="text-2xl font-bold text-warning">{{ summary.with_food_restrictions }}</p>
                         <p class="text-xs text-csc-ink/60">Food restrictions</p>
                     </div>
+                    <!-- Only meaningful on a supervisory course. -->
+                    <div v-if="training.is_supervisory">
+                        <p class="text-2xl font-bold text-warning">{{ summary.documents_to_review }}</p>
+                        <p class="text-xs text-csc-ink/60">Docs to verify</p>
+                    </div>
                 </div>
             </AppCard>
 
@@ -360,6 +689,7 @@ const applyBulk = (action) => {
             <AppCard
                 title="Scanning stations"
                 subtitle="Hand a door to someone without an account — a phone, a link and a code."
+                class="print:hidden"
             >
                 <!-- The one and only sighting of the code. -->
                 <div v-if="newStation" class="rounded-xl border border-success/40 bg-success-soft p-4">
@@ -433,7 +763,7 @@ const applyBulk = (action) => {
                         />
                     </label>
 
-                    <AppButton size="sm" :disabled="issuing" @click="issueStation">
+                    <AppButton size="sm" icon="qr" :disabled="issuing" @click="issueStation">
                         {{ issuing ? 'Creating…' : stationIsTest ? 'Create practice station' : 'Create scanning station' }}
                     </AppButton>
                 </div>
@@ -472,7 +802,7 @@ const applyBulk = (action) => {
                             </p>
                         </div>
 
-                        <AppButton size="sm" variant="ghost" @click="revokeStation(link)">Revoke</AppButton>
+                        <AppButton size="sm" variant="ghost" icon="close" @click="revokeStation(link)">Revoke</AppButton>
                     </li>
                 </ul>
 
@@ -481,15 +811,145 @@ const applyBulk = (action) => {
                 </p>
             </AppCard>
 
-            <AppAlert v-if="awaitingCertificates" tone="info" title="Certificates ready to issue">
+            <AppAlert v-if="awaitingCertificates" tone="info" title="Certificates ready to issue" class="print:hidden">
                 <p>
                     {{ awaitingCertificates }} completed participant(s) have no certificate yet.
                 </p>
-                <AppButton class="mt-3" size="sm" @click="releaseAll">Issue All Certificates</AppButton>
+                <AppButton class="mt-3" size="sm" icon="certificate" @click="releaseAll">Issue All Certificates</AppButton>
             </AppAlert>
 
+            <!--
+                What this run earned. Every figure is summed from the payment
+                rows, each of which froze its own gross and discount when it was
+                taken — so repricing the course later cannot restate what was
+                collected.
+            -->
+            <AppCard
+                v-if="training.payment_required && can.record_payment"
+                title="Revenue"
+                subtitle="Verified payments only. A pending upload is a claim, not money."
+                class="print:hidden"
+            >
+                <template #action>
+                    <AppButton
+                        :href="`/admin/exports/trainings/${training.id}/revenue`"
+                        external
+                        size="sm"
+                        variant="ghost"
+                        icon="download"
+                    >
+                        Export
+                    </AppButton>
+                </template>
+
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div>
+                        <p class="text-xs text-csc-ink/60">Assessed</p>
+                        <p class="mt-0.5 text-lg font-semibold text-csc-ink">₱{{ money(revenue.gross ?? 0) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-csc-ink/60">PRIME-HRM Discount</p>
+                        <p class="mt-0.5 text-lg font-semibold text-warning">
+                            − ₱{{ money(revenue.discount ?? 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-csc-ink/60">Collected</p>
+                        <p class="mt-0.5 text-lg font-semibold text-csc-blue">
+                            ₱{{ money(revenue.collected ?? 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-csc-ink/60">On Promissory Note</p>
+                        <p class="mt-0.5 text-lg font-semibold text-csc-ink/70">
+                            ₱{{ money(revenue.promissory ?? 0) }}
+                        </p>
+                        <p v-if="revenue.promissory_count" class="text-2xs text-csc-ink/55">
+                            {{ revenue.promissory_count }} outstanding
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Which participants, by name — the question the office asks. -->
+                <div v-if="revenue.discounted?.length" class="mt-5 border-t border-csc-line pt-4">
+                    <p class="text-xs font-semibold text-csc-ink">
+                        PRIME-HRM discount granted to {{ revenue.discounted_count }} participant(s)
+                    </p>
+                    <div class="mt-2 overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="border-b border-csc-line text-xs uppercase">
+                                <tr>
+                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">Participant</th>
+                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">OR No.</th>
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                        Full Fee
+                                    </th>
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                        Discount
+                                    </th>
+                                    <th scope="col" class="py-2 text-right font-semibold text-csc-ink/70">Paid</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-csc-line">
+                                <tr v-for="row in revenue.discounted" :key="row.id">
+                                    <td class="py-2.5 pr-4 text-csc-ink/80">{{ row.participant }}</td>
+                                    <td class="py-2.5 pr-4 font-mono text-xs text-csc-ink/60">
+                                        {{ row.or_number ?? '—' }}
+                                    </td>
+                                    <td class="py-2.5 pr-4 text-right text-csc-ink/70">₱{{ money(row.gross) }}</td>
+                                    <td class="py-2.5 pr-4 text-right font-medium text-warning">
+                                        − ₱{{ money(row.discount) }}
+                                    </td>
+                                    <td class="py-2.5 text-right font-medium text-csc-ink">₱{{ money(row.net) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </AppCard>
+
+            <!--
+                Who is coming, by field office, and what each still owes. The
+                office that recruited a participant is the one HRD chases for an
+                outstanding fee, so the split is what makes chasing possible.
+            -->
+            <AppCard
+                v-if="officeBreakdown.length > 1"
+                title="By Field Office"
+                subtitle="Excludes cancelled registrations."
+                class="print:hidden"
+            >
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="border-b border-csc-line text-xs uppercase">
+                            <tr>
+                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">Field Office</th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                    Participants
+                                </th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">Settled</th>
+                                <th scope="col" class="py-2 text-right font-semibold text-csc-ink/70">Outstanding</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-csc-line">
+                            <tr v-for="office in officeBreakdown" :key="office.label">
+                                <td class="py-2.5 pr-4 text-csc-ink/80">{{ office.label }}</td>
+                                <td class="py-2.5 pr-4 text-right font-medium text-csc-ink">{{ office.count }}</td>
+                                <td class="py-2.5 pr-4 text-right text-csc-ink/70">{{ office.settled }}</td>
+                                <td
+                                    class="py-2.5 text-right font-medium"
+                                    :class="office.outstanding ? 'text-warning' : 'text-csc-ink/50'"
+                                >
+                                    {{ office.outstanding }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </AppCard>
+
             <!-- Catering needs this as a list, not buried per-row -->
-            <AppAlert v-if="restrictions.length" tone="warning" title="Food restrictions for catering">
+            <AppAlert v-if="restrictions.length" tone="warning" title="Food restrictions for catering" class="print:hidden">
                 <ul class="mt-1 space-y-1">
                     <li v-for="item in restrictions" :key="item.id">
                         <span class="font-medium">{{ item.name }}</span> — {{ item.food_restrictions }}
@@ -497,7 +957,7 @@ const applyBulk = (action) => {
                 </ul>
             </AppAlert>
 
-            <AppCard title="Participants" :padded="registrations.length > 0">
+            <AppCard title="Participants" :padded="registrations.length > 0" class="print:hidden">
                 <AppEmptyState
                     v-if="!registrations.length"
                     title="No one has registered yet"
@@ -506,6 +966,117 @@ const applyBulk = (action) => {
                 />
 
                 <template v-else>
+                <!--
+                    Client-side find and filter. The whole roster ships in the
+                    page, so the narrowing happens locally — the operator at the
+                    venue gets the answer without a round trip. Selection is not
+                    affected by the filters; choosing rows always means choosing
+                    rows in the roster.
+                -->
+                <div class="flex flex-col gap-3 border-b border-csc-line pb-4">
+                    <input
+                        v-model="query"
+                        type="search"
+                        :placeholder="`Find ${registrations.length} participant(s) by name, email or agency…`"
+                        aria-label="Find participants"
+                        class="w-full rounded-lg border border-csc-ink/20 bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                    />
+
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button
+                            v-for="chip in ['all', ...statusChips]"
+                            :key="chip"
+                            type="button"
+                            class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                statusFilter === chip
+                                    ? 'bg-csc-blue text-white shadow-sm'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink/70 hover:text-csc-ink'
+                            "
+                            @click="statusFilter = chip"
+                        >
+                            {{ chip === 'all' ? 'All' : chip }}
+                            <span
+                                class="ml-1 text-xs"
+                                :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                            >
+                                {{ statusCounts[chip] ?? 0 }}
+                            </span>
+                        </button>
+
+                        <button
+                            v-if="todayDay !== null"
+                            type="button"
+                            class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                onlyNotCheckedInToday
+                                    ? 'bg-warning text-white shadow-sm'
+                                    : 'bg-warning-soft text-warning-ink hover:text-csc-ink'
+                            "
+                            @click="onlyNotCheckedInToday = !onlyNotCheckedInToday"
+                        >
+                            Not checked in today
+                            <span
+                                class="ml-1 text-xs"
+                                :class="onlyNotCheckedInToday ? 'text-white/80' : 'text-warning/70'"
+                            >
+                                {{ notCheckedInCount }}
+                            </span>
+                        </button>
+                    </div>
+
+                    <!--
+                        The supervisory-document lifecycle, on supervisory
+                        trainings only. Filters the same local roster; the count
+                        is per-status for the whole page.
+                    -->
+                    <div
+                        v-if="training.is_supervisory"
+                        class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3"
+                    >
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink/50 uppercase">
+                            Document
+                        </span>
+                        <button
+                            v-for="chip in ['all', ...supervisoryDocumentStatuses.map((s) => s.value)]"
+                            :key="chip"
+                            type="button"
+                            class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                docFilter === chip
+                                    ? 'bg-csc-blue text-white shadow-sm'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink/70 hover:text-csc-ink'
+                            "
+                            @click="docFilter = chip"
+                        >
+                            {{ chip === 'all' ? 'All' : chip }}
+                            <span
+                                class="ml-1 text-xs"
+                                :class="docFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                            >
+                                {{ docStatusCounts[chip] ?? 0 }}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <AppEmptyState
+                    v-if="filtered.length === 0"
+                    title="No participants match"
+                    :description="
+                        hasActiveFilters
+                            ? 'Try another search, or clear the filters to see the full roster.'
+                            : 'The roster is empty.'
+                    "
+                    icon="users"
+                    class="pt-6"
+                >
+                    <template v-if="hasActiveFilters" #action>
+                        <AppButton size="sm" variant="ghost" @click="clearFilters">Clear filters</AppButton>
+                    </template>
+                </AppEmptyState>
+
+                <template v-if="filtered.length > 0">
                 <!--
                     The bulk bar sticks to the bottom of the viewport rather
                     than the top of the table: on a long roster the selection is
@@ -517,7 +1088,7 @@ const applyBulk = (action) => {
                 -->
                 <div
                     v-if="selected.size"
-                    class="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-(--z-tabbar) -mx-5 flex flex-wrap items-center gap-3 border-t border-csc-line bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:bottom-0"
+                    class="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-(--z-tabbar) -mx-5 flex flex-wrap items-center gap-3 border-t border-csc-line bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:bottom-0 print:hidden"
                 >
                     <p class="text-sm font-medium text-csc-ink" role="status">
                         {{ selected.size }} selected
@@ -567,10 +1138,19 @@ const applyBulk = (action) => {
                         >
                             Mark {{ selectedApproved }} Complete
                         </AppButton>
+                        <AppButton
+                            v-if="transferTargets.length"
+                            size="sm"
+                            variant="ghost"
+                            icon="calendar"
+                            @click="startTransfer"
+                        >
+                            Move to Another Training
+                        </AppButton>
                     </div>
                 </div>
 
-                <div class="-mx-5 overflow-x-auto sm:-mx-6">
+                <div class="-mx-5 hidden overflow-x-auto sm:-mx-6 md:block print:hidden">
                     <table class="w-full min-w-160 text-left text-sm">
                         <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
@@ -580,22 +1160,63 @@ const applyBulk = (action) => {
                                         class="size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                         :checked="allSelected"
                                         :indeterminate="selected.size > 0 && !allSelected"
-                                        :disabled="!selectable.length"
+                                        :disabled="!visibleSelectable.length"
                                         :aria-label="allSelected ? 'Clear selection' : 'Select all actionable participants'"
                                         @change="toggleAll"
                                     />
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Participant</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Agency</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Field Office</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Status</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('name')"
+                                    >
+                                        Participant{{ sortIndicator('name') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('organization')"
+                                    >
+                                        Agency{{ sortIndicator('organization') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('field_office')"
+                                    >
+                                        Field Office{{ sortIndicator('field_office') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('status')"
+                                    >
+                                        Status{{ sortIndicator('status') }}
+                                    </button>
+                                </th>
+                                <th v-if="training.is_supervisory" scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('supervisory_document.status_label')"
+                                    >
+                                        Document{{ sortIndicator('supervisory_document.status_label') }}
+                                    </button>
+                                </th>
                                 <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Attendance</th>
                                 <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
                             <tr
-                                v-for="registration in registrations"
+                                v-for="registration in filtered"
                                 :key="registration.id"
                                 :class="isSelected(registration.id) ? 'bg-csc-blue-tint/50' : ''"
                             >
@@ -630,6 +1251,56 @@ const applyBulk = (action) => {
                                     >
                                         {{ registration.review_remarks }}
                                     </p>
+                                </td>
+                                <td v-if="training.is_supervisory" class="px-5 py-3.5">
+                                    <template v-if="registration.supervisory_document">
+                                        <div class="flex items-center gap-2">
+                                            <AppBadge :status="`document_${registration.supervisory_document.status}`" />
+                                            <a
+                                                v-if="registration.supervisory_document.download_url"
+                                                :href="registration.supervisory_document.download_url"
+                                                class="shrink-0 rounded text-xs font-medium text-csc-blue underline underline-offset-2 hover:text-csc-blue-deep"
+                                            >
+                                                View
+                                            </a>
+                                        </div>
+                                        <div
+                                            v-if="registration.supervisory_document.can_review"
+                                            class="mt-1.5 flex gap-2"
+                                        >
+                                            <button
+                                                type="button"
+                                                class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                                @click="decideDocument(registration, 'verified')"
+                                            >
+                                                Verify
+                                            </button>
+                                            <span class="text-csc-line">|</span>
+                                            <button
+                                                type="button"
+                                                class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                                @click="decideDocument(registration, 'rejected')"
+                                            >
+                                                Reject
+                                            </button>
+                                        </div>
+                                        <p
+                                            v-if="registration.supervisory_document.remarks"
+                                            class="mt-1 max-w-48 text-xs text-csc-ink/55"
+                                        >
+                                            {{ registration.supervisory_document.remarks }}
+                                        </p>
+                                        <p
+                                            v-else-if="registration.supervisory_document.reviewed_by"
+                                            class="mt-1 text-2xs text-csc-ink/45"
+                                        >
+                                            {{ registration.supervisory_document.reviewed_by }}
+                                            <template v-if="registration.supervisory_document.reviewed_at">
+                                                · {{ registration.supervisory_document.reviewed_at }}
+                                            </template>
+                                        </p>
+                                    </template>
+                                    <span v-else class="text-xs text-csc-ink/50">—</span>
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <div v-if="isMarkable(registration)" class="flex flex-wrap gap-1.5">
@@ -735,13 +1406,266 @@ const applyBulk = (action) => {
                                     </template>
 
                                     <span v-else class="text-xs text-csc-ink/50">—</span>
+
+                                    <template v-if="canRecordPayment(registration)">
+                                        <span class="px-2 text-csc-line">|</span>
+                                        <button
+                                            type="button"
+                                            class="rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            @click="startPayment(registration)"
+                                        >
+                                            Record Payment
+                                        </button>
+                                    </template>
+                                    <span
+                                        v-else-if="registration.payment.or_number"
+                                        class="ml-2 font-mono text-2xs text-csc-ink/60"
+                                        :title="`Paid by ${registration.payment.method}`"
+                                    >
+                                        {{ registration.payment.or_number }}
+                                    </span>
+                                    <span
+                                        v-else-if="registration.payment.awaiting_review"
+                                        class="ml-2 text-2xs text-warning"
+                                    >
+                                        Payment awaiting review
+                                    </span>
+
+                                    <template v-if="isCancellable(registration)">
+                                        <span class="px-2 text-csc-line">|</span>
+                                        <button
+                                            type="button"
+                                            class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            @click="cancelRegistration(registration)"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </template>
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Mobile: the same participants as stacked cards -->
+                <ul class="space-y-3 md:hidden print:hidden">
+                    <li
+                        v-for="registration in filtered"
+                        :key="registration.id"
+                        class="rounded-xl border border-csc-line bg-white p-4"
+                        :class="isSelected(registration.id) ? 'border-csc-blue/50 bg-csc-blue-tint/30' : ''"
+                    >
+                        <div class="flex items-start gap-3">
+                            <input
+                                v-if="['pending', 'approved'].includes(registration.status)"
+                                type="checkbox"
+                                class="mt-0.5 size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                :checked="isSelected(registration.id)"
+                                :aria-label="`Select ${registration.name}`"
+                                @change="toggle(registration.id)"
+                            />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start justify-between gap-2">
+                                    <p class="text-sm font-semibold text-csc-ink">{{ registration.name }}</p>
+                                    <AppBadge :status="registration.status" />
+                                </div>
+                                <p class="mt-0.5 text-xs text-csc-ink/60">{{ registration.email }}</p>
+                                <p class="mt-1 text-xs text-csc-ink/70">
+                                    {{ registration.organization ?? '—' }}
+                                    <template v-if="registration.position"> · {{ registration.position }}</template>
+                                </p>
+                                <p v-if="registration.field_office" class="text-xs text-csc-ink/55">
+                                    {{ registration.field_office }}
+                                </p>
+                                <div
+                                    v-if="training.is_supervisory && registration.supervisory_document"
+                                    class="mt-2 flex flex-wrap items-center gap-2"
+                                >
+                                    <AppBadge :status="`document_${registration.supervisory_document.status}`" />
+                                    <a
+                                        v-if="registration.supervisory_document.download_url"
+                                        :href="registration.supervisory_document.download_url"
+                                        class="rounded text-xs font-medium text-csc-blue underline underline-offset-2 hover:text-csc-blue-deep"
+                                    >
+                                        View
+                                    </a>
+                                    <button
+                                        v-if="registration.supervisory_document.can_review"
+                                        type="button"
+                                        class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="decideDocument(registration, 'verified')"
+                                    >
+                                        Verify
+                                    </button>
+                                    <button
+                                        v-if="registration.supervisory_document.can_review"
+                                        type="button"
+                                        class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="decideDocument(registration, 'rejected')"
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                                <p
+                                    v-if="training.is_supervisory && registration.supervisory_document?.remarks"
+                                    class="mt-1 text-xs text-csc-ink/55"
+                                >
+                                    {{ registration.supervisory_document.remarks }}
+                                </p>
+                                <p v-if="registration.review_remarks" class="mt-1 text-xs text-csc-ink/55">
+                                    {{ registration.review_remarks }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div v-if="isMarkable(registration)" class="mt-3 border-t border-csc-line pt-3">
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                                <label v-for="day in training.days" :key="day.day" class="flex flex-col gap-0.5">
+                                    <span
+                                        class="text-[10px] font-semibold uppercase"
+                                        :class="day.is_today ? 'text-csc-red-ink' : 'text-csc-ink/50'"
+                                    >
+                                        {{ day.label }}
+                                    </span>
+                                    <select
+                                        class="rounded border border-csc-line bg-white px-1.5 py-1 text-xs text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                                        :value="registration.attendance[day.day]?.status ?? ''"
+                                        @change="setAttendance(registration, day.day, $event.target.value)"
+                                    >
+                                        <option value="">—</option>
+                                        <option
+                                            v-for="option in attendanceStatuses"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                </label>
+                            </div>
+                            <p v-if="training.duration_days > 1" class="mt-2 text-2xs text-csc-ink/55">
+                                {{ registration.credited_days }} of {{ training.duration_days }} days
+                            </p>
+                        </div>
+
+                        <div
+                            class="mt-3 flex flex-wrap items-center justify-end gap-x-3 gap-y-2 border-t border-csc-line pt-3"
+                        >
+                            <template v-if="registration.status === 'pending'">
+                                <button
+                                    type="button"
+                                    class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="decide(registration, 'approved')"
+                                >
+                                    Approve
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded text-xs font-semibold text-warning hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="decide(registration, 'waitlisted')"
+                                >
+                                    Waitlist
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="decide(registration, 'rejected')"
+                                >
+                                    Reject
+                                </button>
+                            </template>
+
+                            <AppButton
+                                v-else-if="registration.status === 'approved'"
+                                size="sm"
+                                variant="ghost"
+                                @click="markComplete(registration)"
+                            >
+                                {{ registration.can_complete ? 'Mark Complete' : 'Complete (Override)' }}
+                            </AppButton>
+
+                            <template v-else-if="registration.status === 'completed'">
+                                <span
+                                    v-if="registration.certificate_number"
+                                    class="font-mono text-2xs text-csc-ink/60"
+                                >
+                                    {{ registration.certificate_number }}
+                                </span>
+                                <span v-else-if="!registration.fee_cleared" class="text-2xs text-warning">
+                                    Fee outstanding
+                                </span>
+                                <AppButton
+                                    v-else
+                                    size="sm"
+                                    variant="ghost"
+                                    @click="releaseCertificate(registration.id)"
+                                >
+                                    Issue Certificate
+                                </AppButton>
+                            </template>
+
+                            <span v-else class="text-xs text-csc-ink/50">—</span>
+                        </div>
+                    </li>
+                </ul>
+                </template>
                 </template>
             </AppCard>
+
+            <!--
+                The printed attendance sheet. Everything interactive above is
+                print:hidden; this section only exists in the @media print
+                rendering and reflects the filters currently applied.
+            -->
+            <section class="hidden print:block">
+                <header class="mb-6 text-center">
+                    <p class="text-sm font-semibold">
+                        Republic of the Philippines · Civil Service Commission · Regional Office
+                    </p>
+                    <h1 class="mt-2 text-xl font-bold">{{ training.title }}</h1>
+                    <p class="mt-1 text-sm">
+                        {{ training.starts_at }} · {{ training.venue }} · {{ training.status_label }}
+                    </p>
+                </header>
+
+                <table class="w-full border-collapse text-xs">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">#</th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Participant</th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Agency</th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Field Office</th>
+                            <th
+                                v-for="day in training.days"
+                                :key="day.day"
+                                scope="col"
+                                class="border border-black px-2 py-1.5 text-center font-semibold"
+                            >
+                                {{ day.label }}
+                            </th>
+                            <th scope="col" class="border border-black px-2 py-1.5 text-left font-semibold">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(registration, index) in filtered" :key="registration.id">
+                            <td class="border border-black px-2 py-1.5">{{ index + 1 }}</td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.name }}</td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.organization ?? '—' }}</td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.field_office ?? '—' }}</td>
+                            <td
+                                v-for="day in training.days"
+                                :key="day.day"
+                                class="border border-black px-2 py-1.5 text-center"
+                            >
+                                {{ registration.attendance[day.day]?.status_label ?? '—' }}
+                            </td>
+                            <td class="border border-black px-2 py-1.5">{{ registration.status_label }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p class="mt-4 text-right text-[10px]">Printed {{ printedAt }}</p>
+            </section>
         </div>
 
         <AppPromptModal
@@ -756,5 +1680,186 @@ const applyBulk = (action) => {
             @confirm="confirmPrompt"
             @close="closePrompt"
         />
+
+        <AppModal
+            :open="transferring"
+            title="Move to another training"
+            :subtitle="`${selected.size} participant(s) selected. Their registration date, attendance and any payment move with them.`"
+            @close="transferring = false"
+        >
+            <form class="space-y-4" @submit.prevent="submitTransfer">
+                <AppSelect
+                    v-model="transferForm.target_training_id"
+                    label="Move to"
+                    :options="transferTargets"
+                    placeholder="Choose a training"
+                    :error="transferForm.errors.target_training_id"
+                    required
+                />
+
+                <AppTextarea
+                    v-model="transferForm.reason"
+                    label="Why are they being moved?"
+                    hint="Shown to every participant in the notification they receive."
+                    :error="transferForm.errors.reason"
+                    required
+                />
+
+                <p v-if="transferForm.errors.ids" class="text-xs font-medium text-csc-red-ink">
+                    {{ transferForm.errors.ids }}
+                </p>
+                <p v-if="transferForm.errors.transfer" class="text-xs font-medium text-csc-red-ink">
+                    {{ transferForm.errors.transfer }}
+                </p>
+
+                <div class="flex justify-end gap-2">
+                    <AppButton type="button" variant="ghost" @click="transferring = false">Cancel</AppButton>
+                    <AppButton type="submit" :loading="transferForm.processing">
+                        Move {{ selected.size }} Participant(s)
+                    </AppButton>
+                </div>
+            </form>
+        </AppModal>
+
+        <AppModal
+            :open="paying !== null"
+            title="Record a payment"
+            :subtitle="
+                paying
+                    ? `Money taken over the counter from ${paying.name}. This is verified on entry — there is nothing further to review.`
+                    : ''
+            "
+            @close="paying = null"
+        >
+            <form class="space-y-4" @submit.prevent="submitPayment">
+                <!--
+                    The PRIME-HRM incentive. Ticking it hands the arithmetic to
+                    the server; the breakdown below is a preview of what will be
+                    recorded, not the figure that gets posted.
+                -->
+                <div class="rounded-lg border border-csc-line bg-csc-blue-tint/30 p-3">
+                    <label class="flex items-start gap-3 text-sm text-csc-ink">
+                        <input
+                            v-model="paymentForm.prime_hrm_discount"
+                            type="checkbox"
+                            class="mt-0.5 size-4 shrink-0 rounded border-csc-line accent-csc-blue"
+                        />
+                        <span class="leading-relaxed">
+                            PRIME-HRM 20% discount — the participant's agency is accredited and the
+                            incentive applies to this fee.
+                        </span>
+                    </label>
+
+                    <dl
+                        v-if="paymentForm.prime_hrm_discount"
+                        class="mt-3 space-y-1 border-t border-csc-line pt-3 text-xs"
+                    >
+                        <div class="flex justify-between">
+                            <dt class="text-csc-ink/60">Full fee</dt>
+                            <dd class="font-medium text-csc-ink">₱{{ money(primeHrm.gross) }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-csc-ink/60">Discount (20%)</dt>
+                            <dd class="font-medium text-warning">− ₱{{ money(primeHrm.discount) }}</dd>
+                        </div>
+                        <div class="flex justify-between border-t border-csc-line pt-1">
+                            <dt class="font-medium text-csc-ink">Payable</dt>
+                            <dd class="font-semibold text-csc-blue">₱{{ money(primeHrm.net) }}</dd>
+                        </div>
+                    </dl>
+
+                    <p v-if="paymentForm.errors.prime_hrm_discount" class="mt-2 text-xs font-medium text-csc-red-ink">
+                        {{ paymentForm.errors.prime_hrm_discount }}
+                    </p>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <AppInput
+                        v-model="paymentForm.amount"
+                        label="Amount"
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        :readonly="paymentForm.prime_hrm_discount"
+                        :hint="paymentForm.prime_hrm_discount ? 'Set by the discount.' : null"
+                        :error="paymentForm.errors.amount"
+                        required
+                    />
+                    <AppSelect
+                        v-model="paymentForm.payment_method"
+                        label="Payment Method"
+                        :options="paymentMethods"
+                        :error="paymentForm.errors.payment_method"
+                        required
+                    />
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <AppInput
+                        v-model="paymentForm.payment_date"
+                        label="Date Received"
+                        type="date"
+                        :error="paymentForm.errors.payment_date"
+                        required
+                    />
+                    <AppInput
+                        v-if="methodNeedsReference"
+                        v-model="paymentForm.reference_number"
+                        label="Reference Number"
+                        hint="The transfer or cheque number — the only proof there is."
+                        :error="paymentForm.errors.reference_number"
+                        required
+                    />
+                </div>
+
+                <!--
+                    A promissory note has no receipt, because no money arrived.
+                    Hiding the OR block rather than disabling it keeps the form
+                    honest about what is being recorded.
+                -->
+                <div v-if="methodIsSettlement" class="grid gap-4 sm:grid-cols-2">
+                    <AppInput
+                        v-model="paymentForm.or_number"
+                        label="OR Number"
+                        hint="What finance reconciles on."
+                        :error="paymentForm.errors.or_number"
+                        required
+                    />
+                    <AppInput
+                        v-model="paymentForm.or_date"
+                        label="OR Date"
+                        type="date"
+                        :error="paymentForm.errors.or_date"
+                    />
+                </div>
+
+                <AppSelect
+                    v-if="methodIsSettlement"
+                    v-model="paymentForm.collecting_officer_id"
+                    label="Collecting Officer"
+                    :options="collectingOfficers"
+                    placeholder="You — the officer recording this"
+                    hint="Only change this when entering money another office collected."
+                    :error="paymentForm.errors.collecting_officer_id"
+                />
+
+                <AppTextarea
+                    v-model="paymentForm.remarks"
+                    label="Remarks"
+                    :rows="2"
+                    hint="Optional. Kept on the payment record."
+                    :error="paymentForm.errors.remarks"
+                />
+
+                <p v-if="paymentForm.errors.payment" class="text-xs font-medium text-csc-red-ink">
+                    {{ paymentForm.errors.payment }}
+                </p>
+
+                <div class="flex justify-end gap-2">
+                    <AppButton type="button" variant="ghost" @click="paying = null">Cancel</AppButton>
+                    <AppButton type="submit" :loading="paymentForm.processing">Record Payment</AppButton>
+                </div>
+            </form>
+        </AppModal>
     </AuthenticatedLayout>
 </template>

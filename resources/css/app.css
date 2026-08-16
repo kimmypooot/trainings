@@ -85,6 +85,15 @@
 }
 
 /*
+ * Anchor targets (/#programs, /#about, #contact) must land clear of the sticky
+ * public header when a visitor jumps to them — 6.5rem clears the ~6rem shell
+ * (GOVPH ribbon + navigation bar) with breathing room to spare.
+ */
+[id] {
+    scroll-margin-top: 6.5rem;
+}
+
+/*
  * Print.
  *
  * Rosters, attendance sheets, and participant lists get printed — this is a

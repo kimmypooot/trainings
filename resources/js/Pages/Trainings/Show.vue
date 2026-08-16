@@ -1,16 +1,19 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppFileField from '@/Components/AppFileField.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
     training: { type: Object, required: true },
     registration: { type: Object, default: null },
+    eligibility: { type: Object, required: true },
+    chargeOptions: { type: Array, required: true },
 });
 
 const page = usePage();
@@ -18,6 +21,7 @@ const error = computed(() => page.props.errors?.registration);
 
 const working = ref(false);
 const confirmingCancel = ref(false);
+const registering = ref(false);
 
 const isActive = computed(
     () => props.registration && ['pending', 'approved', 'completed'].includes(props.registration.status)
@@ -45,10 +49,30 @@ const joinLockedReason = computed(() => {
     return null;
 });
 
-const register = () => {
-    working.value = true;
-    router.post(`/trainings/${props.training.id}/register`, {}, { onFinish: () => (working.value = false) });
+// Registration is a short form now, not a single button: finance needs to know
+// who the fee is billed to before the receipt is cut, HRD needs to know whether
+// to print a certificate, and a supervisory course needs proof of the job.
+const registrationForm = useForm({
+    charge_to: 'personal',
+    needs_certificate: true,
+    supporting_document: null,
+});
+
+const startRegistering = () => {
+    registrationForm.reset();
+    registrationForm.clearErrors();
+    registering.value = true;
 };
+
+const register = () =>
+    registrationForm.post(`/trainings/${props.training.id}/register`, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            registering.value = false;
+            registrationForm.reset();
+        },
+    });
 
 const cancel = () => {
     working.value = true;
@@ -65,7 +89,7 @@ const cancel = () => {
     <Head :title="training.title" />
 
     <AuthenticatedLayout title="Training Details" current="trainings">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <Link
                 href="/trainings"
                 class="inline-flex items-center gap-1.5 text-sm font-medium text-csc-blue transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -79,12 +103,13 @@ const cancel = () => {
             <AppAlert v-if="error" tone="danger">{{ error }}</AppAlert>
 
             <AppCard>
-                <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
                     <h2 class="text-xl font-semibold tracking-tight text-csc-blue sm:text-2xl">
                         {{ training.title }}
                     </h2>
-                    <AppBadge v-if="isActive" :status="registration.status" />
+                    <AppBadge v-if="training.is_supervisory" status="supervisory" />
                 </div>
+                <AppBadge v-if="isActive" :status="registration.status" />
 
                 <dl class="mt-6 grid gap-5 border-t border-csc-line pt-5 text-sm sm:grid-cols-2">
                     <div>
@@ -188,7 +213,7 @@ const cancel = () => {
                                     <AppButton size="sm" variant="ghost" @click="confirmingCancel = false">
                                         Keep It
                                     </AppButton>
-                                    <AppButton size="sm" variant="accent" :loading="working" @click="cancel">
+                                    <AppButton size="sm" variant="accent" :loading="working" icon="close" @click="cancel">
                                         Cancel
                                     </AppButton>
                                 </div>
@@ -208,9 +233,111 @@ const cancel = () => {
                         This training is full.
                     </p>
 
-                    <AppButton v-else size="lg" block :loading="working" @click="register">
+                    <!-- Turned away before the form is offered at all. -->
+                    <AppAlert
+                        v-else-if="eligibility.barred"
+                        tone="warning"
+                        title="You are not eligible for this course"
+                    >
+                        {{ eligibility.barred_reason }}
+                    </AppAlert>
+
+                    <AppButton
+                        v-else-if="!registering"
+                        size="lg"
+                        block
+                        icon="clipboard"
+                        @click="startRegistering"
+                    >
                         Register for This Training
                     </AppButton>
+
+                    <form v-else class="space-y-4" @submit.prevent="register">
+                        <fieldset>
+                            <legend class="mb-2 text-sm font-medium text-csc-ink">
+                                Who is paying the training fee?
+                            </legend>
+                            <div class="space-y-2">
+                                <label
+                                    v-for="option in chargeOptions"
+                                    :key="option.value"
+                                    class="flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors"
+                                    :class="
+                                        registrationForm.charge_to === option.value
+                                            ? 'border-csc-blue bg-csc-blue-tint'
+                                            : 'border-csc-line hover:border-csc-blue/40'
+                                    "
+                                >
+                                    <input
+                                        v-model="registrationForm.charge_to"
+                                        type="radio"
+                                        name="charge_to"
+                                        :value="option.value"
+                                        class="mt-0.5 accent-csc-blue"
+                                    />
+                                    <span class="min-w-0">
+                                        <span class="block text-sm font-medium text-csc-ink">
+                                            {{ option.label }}
+                                        </span>
+                                        <span class="block text-xs text-csc-ink/60">
+                                            {{ option.description }}
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                            <p
+                                v-if="registrationForm.errors.charge_to"
+                                class="mt-1.5 text-xs font-medium text-csc-red-ink"
+                            >
+                                {{ registrationForm.errors.charge_to }}
+                            </p>
+                        </fieldset>
+
+                        <label class="flex cursor-pointer gap-3">
+                            <input
+                                v-model="registrationForm.needs_certificate"
+                                type="checkbox"
+                                class="mt-0.5 accent-csc-blue"
+                            />
+                            <span class="min-w-0">
+                                <span class="block text-sm font-medium text-csc-ink">
+                                    Issue me a certificate on completion
+                                </span>
+                                <span class="block text-xs text-csc-ink/60">
+                                    Uncheck if you are attending for the content and do not need one.
+                                </span>
+                            </span>
+                        </label>
+
+                        <AppFileField
+                            v-if="eligibility.needs_supporting_document"
+                            id="supporting-document"
+                            label="Proof of supervisory function"
+                            :hint="eligibility.supporting_document_hint"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            required
+                            :error="registrationForm.errors.supporting_document"
+                            @change="registrationForm.supporting_document = $event"
+                        />
+
+                        <div class="flex gap-2">
+                            <AppButton
+                                type="button"
+                                variant="ghost"
+                                @click="registering = false"
+                            >
+                                Cancel
+                            </AppButton>
+                            <AppButton
+                                type="submit"
+                                block
+                                icon="clipboard"
+                                :loading="registrationForm.processing"
+                            >
+                                Submit Registration
+                            </AppButton>
+                        </div>
+                    </form>
                 </template>
             </AppCard>
         </div>

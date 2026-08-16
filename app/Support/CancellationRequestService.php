@@ -81,6 +81,16 @@ class CancellationRequestService
                 'review_remarks' => $remarks,
             ])->save();
 
+            ActivityLogger::recordTransition(
+                "cancellation.{$decision->value}",
+                $locked,
+                RequestStatus::Pending,
+                $decision,
+                "Withdrawal request {$decision->label()} by {$reviewer->name}.",
+                ['registration_id' => $locked->registration_id, 'remarks' => $remarks],
+                $reviewer,
+            );
+
             if ($decision === RequestStatus::Approved) {
                 RegistrationService::cancel($locked->registration);
             }

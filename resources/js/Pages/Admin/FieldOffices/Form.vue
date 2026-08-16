@@ -48,7 +48,7 @@ const submit = () => {
         :title="isEdit ? 'Edit Field Office' : 'New Field Office'"
         current="admin-field-offices"
     >
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <AppAlert v-if="Object.keys(form.errors).length" tone="danger">
                 Please review the highlighted fields below.
             </AppAlert>
@@ -126,7 +126,7 @@ const submit = () => {
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <AppButton href="/admin/field-offices" variant="ghost" size="lg">Cancel</AppButton>
-                    <AppButton type="submit" size="lg" :loading="form.processing">
+                    <AppButton type="submit" size="lg" :loading="form.processing" icon="check">
                         {{ isEdit ? 'Save Changes' : 'Add Office' }}
                     </AppButton>
                 </div>

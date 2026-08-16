@@ -79,7 +79,7 @@ const reload = () => window.location.reload();
                 <AppButton href="/" variant="ghost" size="lg">Go home</AppButton>
             </div>
             <div v-else class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-                <AppButton :href="homeUrl" size="lg">
+                <AppButton :href="homeUrl" size="lg" icon="arrow-left">
                     Back to {{ homeUrl === '/' ? 'home' : 'dashboard' }}
                 </AppButton>
                 <AppButton href="/" variant="ghost" size="lg">Go home</AppButton>

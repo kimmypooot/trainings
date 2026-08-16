@@ -42,18 +42,28 @@ enum Role: string
     }
 
     /**
-     * Roles that may verify payments and settle refunds.
+     * Roles that reach the money screens by virtue of the job itself.
      *
-     * Collecting officers exist only for this — they are staff, but the cashier
-     * has no business in the participant directory or the training roster.
+     * Everyone else needs the collecting-officer designation — see
+     * User::collectsPayments(), which is the predicate the routes actually
+     * check. Kept as a list here so the two callers agree on who is included
+     * without repeating the pair.
+     *
+     * @return array<int, self>
      */
     public static function financial(): array
     {
-        return [self::CollectingOfficer, self::Admin, self::SuperAdmin];
+        return [self::Admin, self::SuperAdmin];
     }
 
-    public function handlesPayments(): bool
+    /**
+     * Who manages the physical-OR request queue and its GCash/delivery
+     * settings. Delivery of receipts is HRD admin work — it is not a payment
+     * the collecting officer touches, so it deliberately shares the trainings
+     * roles rather than the financial() ones.
+     */
+    public function handlesPhysicalOrRequests(): bool
     {
-        return in_array($this, self::financial(), true);
+        return $this === self::Admin || $this === self::SuperAdmin;
     }
 }

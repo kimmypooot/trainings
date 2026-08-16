@@ -28,7 +28,7 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
     <Head title="Request a Training" />
 
     <AuthenticatedLayout title="Request a Training" current="training-requests">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <p class="text-sm leading-relaxed text-csc-ink/70">
                 If your agency needs a training that is not in the catalogue, ask CSC to run one. HRD reviews
                 every request and will schedule it if there is enough demand.
@@ -80,7 +80,7 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
                     </div>
 
                     <div class="flex justify-end">
-                        <AppButton type="submit" :loading="form.processing">Submit Request</AppButton>
+                        <AppButton type="submit" :loading="form.processing" icon="check">Submit Request</AppButton>
                     </div>
                 </form>
             </AppCard>

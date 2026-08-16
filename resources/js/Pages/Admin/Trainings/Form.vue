@@ -14,6 +14,7 @@ const props = defineProps({
     statuses: { type: Array, required: true },
     modes: { type: Array, required: true },
     levels: { type: Array, required: true },
+    curricula: { type: Array, required: true },
 });
 
 const isEdit = computed(() => props.training !== null);
@@ -36,7 +37,6 @@ const form = useForm({
     capacity: props.training?.capacity ?? '',
     facilitator_name: props.training?.facilitator_name ?? '',
     facilitator_contact: props.training?.facilitator_contact ?? '',
-    objectives: props.training?.objectives ?? '',
     prerequisites: props.training?.prerequisites ?? '',
     target_participants: props.training?.target_participants ?? '',
     payment_required: props.training?.payment_required ?? false,
@@ -82,7 +82,7 @@ const submit = () => {
     <Head :title="isEdit ? 'Edit Training' : 'New Training'" />
 
     <AuthenticatedLayout :title="isEdit ? 'Edit Training' : 'New Training'" current="admin-trainings">
-        <div class="mx-auto max-w-3xl space-y-5">
+        <div class="mx-auto max-w-4xl space-y-5">
             <AppAlert v-if="Object.keys(form.errors).length" tone="danger">
                 Please review the highlighted fields below.
             </AppAlert>
@@ -105,10 +105,12 @@ const submit = () => {
                                 hint="Generated automatically if left blank."
                                 :error="form.errors.training_code"
                             />
-                            <AppInput
+                            <AppSelect
                                 v-model="form.category"
-                                label="Category"
-                                placeholder="Leadership, Technical, Values…"
+                                label="Curriculum"
+                                :options="curricula"
+                                placeholder="Not specified"
+                                hint="Technical, Leadership and Management, or Foundation."
                                 :error="form.errors.category"
                             />
                         </div>
@@ -235,12 +237,6 @@ const submit = () => {
                             :error="form.errors.target_participants"
                         />
                         <AppTextarea
-                            v-model="form.objectives"
-                            label="Objectives"
-                            rows="3"
-                            :error="form.errors.objectives"
-                        />
-                        <AppTextarea
                             v-model="form.prerequisites"
                             label="Prerequisites"
                             rows="3"
@@ -329,7 +325,7 @@ const submit = () => {
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <AppButton href="/admin/trainings" variant="ghost" size="lg">Cancel</AppButton>
-                    <AppButton type="submit" size="lg" :loading="form.processing">
+                    <AppButton type="submit" size="lg" :loading="form.processing" icon="check">
                         {{ isEdit ? 'Save Changes' : 'Create Training' }}
                     </AppButton>
                 </div>

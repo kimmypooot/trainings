@@ -2,17 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
+use App\Enums\RegistrationStatus;
 use App\Enums\Role;
 use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\FieldOffice;
+use App\Models\Payment;
 use App\Models\Profile;
+use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
+use App\Notifications\ResetPassword;
 use App\Support\AttendanceService;
 use App\Support\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -396,7 +403,263 @@ class AdminAreaTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Admin/Participants/Show')
                 ->where('registrations.0.title', 'Ethics 101')
+                ->where('trainingStats.total', 1)
             );
+    }
+
+    public function test_participants_directory_filters_without_moving_the_counters(): void
+    {
+        $active = $this->participant(['email' => 'active@example.com', 'email_verified_at' => now()]);
+        $active->profile->update(['sector' => 'Local Government Unit']);
+
+        $deactivated = $this->participant([
+            'email' => 'off@example.com',
+            'is_active' => false,
+            'email_verified_at' => null,
+        ]);
+        $deactivated->profile->update(['sector' => 'Judiciary']);
+
+        $staff = $this->staff();
+
+        // Each filter narrows the table…
+        foreach ([
+            ['status' => 'active'],
+            ['verified' => '1'],
+            ['sector' => 'Local Government Unit'],
+        ] as $filter) {
+            $this->actingAs($staff)
+                ->get('/admin/participants?'.http_build_query($filter))
+                ->assertOk()
+                ->assertInertia(fn (AssertableInertia $page) => $page
+                    ->has('participants.data', 1)
+                    ->where('participants.data.0.email', 'active@example.com')
+                    // …but the counters are the denominator the narrowed table
+                    // is read against, so they must not move with it.
+                    ->where('stats.total', 2)
+                    ->where('stats.active', 1)
+                    ->where('stats.deactivated', 1)
+                );
+        }
+    }
+
+    public function test_admin_can_correct_a_participant_profile_without_recording_consent(): void
+    {
+        $participant = $this->participant();
+        $consentedAt = $participant->profile->consented_at;
+
+        $payload = [
+            ...$participant->profile->only([
+                'first_name', 'middle_name', 'suffix', 'sex', 'civil_status', 'mobile_number',
+                'position_title', 'salary_grade', 'sector', 'region', 'province',
+                'city_municipality', 'field_office_id', 'position_level', 'employment_status',
+                'organization_address',
+            ]),
+            'last_name' => 'CORRECTED',
+            'organization_name' => 'DEPARTMENT OF EDUCATION',
+            'date_of_birth' => $participant->profile->date_of_birth->format('Y-m-d'),
+            'is_pwd' => 'No',
+        ];
+
+        $this->actingAs($this->staff())
+            ->put("/admin/participants/{$participant->id}", $payload)
+            ->assertRedirect("/admin/participants/{$participant->id}");
+
+        $participant->refresh();
+
+        $this->assertSame('CORRECTED', $participant->profile->last_name);
+        $this->assertSame('DEPARTMENT OF EDUCATION', $participant->profile->organization_name);
+        // The display name follows the profile name, as it does on the
+        // participant's own form.
+        $this->assertStringContainsString('CORRECTED', $participant->name);
+        // Consent is the participant's to give. An administrator fixing a typo
+        // must not manufacture one, nor re-date the one already on file.
+        $this->assertEquals($consentedAt, $participant->profile->consented_at);
+    }
+
+    public function test_deactivating_a_participant_locks_them_out_of_sign_in(): void
+    {
+        $participant = $this->participant([
+            'email' => 'locked@example.com',
+            'password' => 'Password123',
+            'email_verified_at' => now(),
+        ]);
+
+        $this->actingAs($this->staff())
+            ->post("/admin/participants/{$participant->id}/toggle")
+            ->assertRedirect();
+
+        $this->assertFalse($participant->fresh()->is_active);
+
+        $this->post('/login', ['email' => 'locked@example.com', 'password' => 'Password123'])
+            ->assertSessionHasErrors('form');
+        $this->assertGuest();
+    }
+
+    public function test_admin_can_send_a_participant_a_password_reset_link(): void
+    {
+        Notification::fake();
+
+        $participant = $this->participant();
+
+        $this->actingAs($this->staff())
+            ->post("/admin/participants/{$participant->id}/password-reset")
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        Notification::assertSentTo($participant, ResetPassword::class);
+    }
+
+    public function test_a_google_only_participant_has_no_password_to_reset(): void
+    {
+        Notification::fake();
+
+        // No password: the broker would happily mail a link to a form this
+        // participant cannot use.
+        $participant = $this->participant(['password' => null, 'google_id' => 'g-1']);
+
+        $this->actingAs($this->staff())
+            ->post("/admin/participants/{$participant->id}/password-reset")
+            ->assertSessionHasErrors('participant');
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_management_reads_participants_but_cannot_act_on_them(): void
+    {
+        $participant = $this->participant();
+        $staff = $this->staff(Role::Management);
+
+        $this->actingAs($staff)->get('/admin/participants')->assertOk();
+        $this->actingAs($staff)->get("/admin/participants/{$participant->id}")->assertOk();
+
+        $this->actingAs($staff)->get("/admin/participants/{$participant->id}/edit")->assertForbidden();
+        $this->actingAs($staff)->put("/admin/participants/{$participant->id}", [])->assertForbidden();
+        $this->actingAs($staff)->post("/admin/participants/{$participant->id}/toggle")->assertForbidden();
+        $this->actingAs($staff)->post("/admin/participants/{$participant->id}/password-reset")->assertForbidden();
+    }
+
+    public function test_staff_accounts_are_not_reachable_through_the_participant_routes(): void
+    {
+        $other = $this->staff(Role::CollectingOfficer);
+
+        $this->actingAs($this->staff())->get("/admin/participants/{$other->id}")->assertNotFound();
+        $this->actingAs($this->staff())->get("/admin/participants/{$other->id}/edit")->assertNotFound();
+        $this->actingAs($this->staff())->post("/admin/participants/{$other->id}/toggle")->assertNotFound();
+    }
+
+    public function test_the_roster_carries_what_the_counter_payment_dialog_needs(): void
+    {
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+            'accepts_promissory' => false,
+        ]);
+        RegistrationService::register($this->participant(), $training);
+
+        $this->actingAs($this->staff())
+            ->get("/admin/trainings/{$training->id}/roster")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('can.record_payment', true)
+                ->where('training.payment_amount', 1500)
+                ->where('registrations.0.payment.settled', false)
+                ->where('registrations.0.payment.awaiting_review', false)
+                // A run that does not accept promissory notes must not offer
+                // one, or the form proposes what the server would reject.
+                ->where('paymentMethods', fn ($methods) => collect($methods)
+                    ->doesntContain(fn ($method) => $method['value'] === PaymentMethod::Promissory->value)
+                )
+            );
+    }
+
+    public function test_the_roster_breaks_participants_down_by_field_office(): void
+    {
+        $training = Training::factory()->create();
+
+        $one = $this->participant();
+        $two = $this->participant();
+        $cancelled = $this->participant();
+
+        $office = FieldOffice::query()->first();
+        foreach ([$one, $two, $cancelled] as $participant) {
+            $participant->profile->update(['field_office_id' => $office->getKey()]);
+            RegistrationService::register($participant, $training);
+        }
+
+        RegistrationService::cancel(
+            Registration::where('user_id', $cancelled->getKey())->sole()
+        );
+
+        $this->actingAs($this->staff())
+            ->get("/admin/trainings/{$training->id}/roster")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('officeBreakdown', 1)
+                ->where('officeBreakdown.0.label', $office->name)
+                // A cancelled registration holds no slot and owes nothing, so
+                // counting it would overstate what the office is chasing.
+                ->where('officeBreakdown.0.count', 2)
+                ->where('officeBreakdown.0.outstanding', 0)
+            );
+    }
+
+    public function test_staff_who_cannot_take_money_are_not_offered_the_dialog(): void
+    {
+        $training = Training::factory()->create(['payment_required' => true, 'payment_amount' => 1500]);
+        RegistrationService::register($this->participant(), $training);
+
+        $this->actingAs($this->staff(Role::Management))
+            ->get("/admin/trainings/{$training->id}/roster")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('can.record_payment', false));
+    }
+
+    public function test_hrd_can_cancel_a_registration_and_take_it_back(): void
+    {
+        $training = Training::factory()->create(['capacity' => 1]);
+        $participant = $this->participant();
+        $registration = RegistrationService::register($participant, $training);
+        $staff = $this->staff();
+
+        $response = $this->actingAs($staff)
+            ->from("/admin/trainings/{$training->id}/roster")
+            ->post("/admin/registrations/{$registration->id}/cancel", [
+                'reason' => 'Participant phoned in to withdraw.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $registration->refresh();
+
+        $this->assertSame(RegistrationStatus::Cancelled, $registration->status);
+        $this->assertNotNull($registration->cancelled_at);
+        $this->assertSame('Participant phoned in to withdraw.', $registration->review_remarks);
+        $this->assertSame($staff->getKey(), $registration->reviewed_by);
+        // The slot is what the office was after — it has to come back.
+        $this->assertSame(1, $training->fresh()->slotsRemaining());
+
+        // Undoing must clear the cancellation stamp too, or the restored
+        // registration carries a cancellation date it no longer has.
+        $undo = $response->getSession()->get('undo');
+        $this->assertNotNull($undo);
+
+        $this->actingAs($staff)->post('/admin/undo', ['token' => $undo['token']])->assertRedirect();
+
+        $registration->refresh();
+        $this->assertSame(RegistrationStatus::Pending, $registration->status);
+        $this->assertNull($registration->cancelled_at);
+        $this->assertSame(0, $training->fresh()->slotsRemaining());
+    }
+
+    public function test_a_cancellation_must_carry_a_reason(): void
+    {
+        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+
+        $this->actingAs($this->staff())
+            ->post("/admin/registrations/{$registration->id}/cancel", ['reason' => 'nope'])
+            ->assertSessionHasErrors('reason');
+
+        $this->assertSame(RegistrationStatus::Pending, $registration->fresh()->status);
     }
 
     public function test_field_office_and_management_cannot_edit_trainings(): void
@@ -423,5 +686,94 @@ class AdminAreaTest extends TestCase
         $this->actingAs($this->staff(Role::SuperAdmin))
             ->get('/admin/trainings/create')
             ->assertOk();
+    }
+
+    private function registrationFor(Training $training, RegistrationStatus $status = RegistrationStatus::Approved): Registration
+    {
+        return Registration::factory()->create([
+            'user_id' => $this->participant()->getKey(),
+            'training_id' => $training->getKey(),
+            'status' => $status,
+        ]);
+    }
+
+    public function test_the_trainings_index_breaks_the_registered_column_down_by_fee_state(): void
+    {
+        $admin = $this->staff();
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+            'capacity' => 20,
+        ]);
+
+        Payment::factory()->verified()->create([
+            'registration_id' => $this->registrationFor($training)->getKey(),
+            'payment_method' => PaymentMethod::Online,
+        ]);
+
+        Payment::factory()->verified()->create([
+            'registration_id' => $this->registrationFor($training)->getKey(),
+            'payment_method' => PaymentMethod::Promissory,
+        ]);
+
+        // Proof uploaded but not yet verified.
+        Payment::factory()->create([
+            'registration_id' => $this->registrationFor($training)->getKey(),
+        ]);
+
+        // No payment at all — still a slot-holder, so it counts as pending.
+        $this->registrationFor($training);
+
+        // Cancelled is reported apart from the total.
+        $this->registrationFor($training, RegistrationStatus::Cancelled);
+
+        $this->actingAs($admin)->get('/admin/trainings')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainings.data.0.registered', 4)
+                ->where('trainings.data.0.paid', 1)
+                ->where('trainings.data.0.promissory', 1)
+                ->where('trainings.data.0.pending', 2)
+                ->where('trainings.data.0.free', 0)
+                ->where('trainings.data.0.cancelled', 1)
+            );
+    }
+
+    public function test_free_trainings_only_count_in_the_free_bucket(): void
+    {
+        $admin = $this->staff();
+        $training = Training::factory()->create(['payment_required' => false]);
+
+        $this->registrationFor($training);
+        $this->registrationFor($training);
+        $this->registrationFor($training, RegistrationStatus::Cancelled);
+
+        $this->actingAs($admin)->get('/admin/trainings')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainings.data.0.registered', 0)
+                ->where('trainings.data.0.paid', 0)
+                ->where('trainings.data.0.promissory', 0)
+                ->where('trainings.data.0.pending', 0)
+                ->where('trainings.data.0.free', 2)
+                ->where('trainings.data.0.cancelled', 1)
+            );
+    }
+
+    public function test_the_status_tabs_carry_the_catalogue_counts(): void
+    {
+        $admin = $this->staff();
+
+        Training::factory()->create(['status' => TrainingStatus::Draft]);
+        Training::factory()->create(['status' => TrainingStatus::Published]);
+        Training::factory()->create(['status' => TrainingStatus::Published]);
+
+        $this->actingAs($admin)->get('/admin/trainings')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('tabs.0.label', 'All')
+                ->where('tabs.0.count', 3)
+                ->where('tabs.1.value', 'draft')
+                ->where('tabs.1.count', 1)
+                ->where('tabs.2.value', 'published')
+                ->where('tabs.2.count', 2)
+            );
     }
 }

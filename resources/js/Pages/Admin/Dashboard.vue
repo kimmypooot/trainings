@@ -56,7 +56,7 @@ const show = (name, propName) => {
     <Head title="Admin Dashboard" />
 
     <AuthenticatedLayout title="Dashboard" current="admin-dashboard">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="scopedTo" tone="info">
                 Showing participants for <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
@@ -150,7 +150,7 @@ const show = (name, propName) => {
                     icon="calendar"
                 >
                     <template #action>
-                        <AppButton href="/admin/trainings/create">Create Training</AppButton>
+                        <AppButton href="/admin/trainings/create" icon="plus">Create Training</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>

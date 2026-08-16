@@ -36,8 +36,18 @@ class UndoService
      */
     private const SESSION_PREFIX = 'undo_snapshot:';
 
-    /** @var array<int, string> */
-    private const TRACKED = ['status', 'review_remarks', 'reviewed_by', 'reviewed_at', 'attended_at'];
+    /**
+     * Only the fields a reversible decision writes.
+     *
+     * `cancelled_at` is here because a staff cancellation is one of those
+     * decisions: restoring the status without clearing the timestamp would
+     * leave an active registration carrying a cancellation date.
+     *
+     * @var array<int, string>
+     */
+    private const TRACKED = [
+        'status', 'review_remarks', 'reviewed_by', 'reviewed_at', 'attended_at', 'cancelled_at',
+    ];
 
     /**
      * Capture the state of these registrations before they are changed.
@@ -114,6 +124,18 @@ class UndoService
             $registration->forceFill($row['attributes'])->save();
             $restored++;
         }
+
+        // Logged as its own action rather than by rewriting the entries it
+        // reverses. An undo is a thing that happened, and a trail that quietly
+        // erases decisions is worse than no trail — the fact that a reviewer
+        // took a decision back within seconds is itself worth keeping.
+        ActivityLogger::record(
+            'registration.undone',
+            null,
+            "Undid: {$entry['label']} ({$restored} registration(s) restored).",
+            ['label' => $entry['label'], 'restored' => $restored],
+            $actor,
+        );
 
         return ['label' => $entry['label'], 'count' => $restored];
     }

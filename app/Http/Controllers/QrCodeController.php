@@ -74,6 +74,9 @@ class QrCodeController extends Controller
             'participant' => [
                 'name' => $participant->name,
                 'email' => $participant->email,
+                // Shown at the door: the photo is the fastest way for staff to
+                // confirm the badge belongs to the person holding it.
+                'avatar' => $participant->avatarUrl(),
                 'organization' => $participant->profile?->organization_name,
                 'position' => $participant->profile?->position_title,
                 'field_office' => $participant->profile?->fieldOffice?->name,

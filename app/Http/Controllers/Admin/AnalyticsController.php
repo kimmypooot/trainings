@@ -10,10 +10,12 @@ use App\Models\Attendance;
 use App\Models\Certificate;
 use App\Models\FieldOffice;
 use App\Models\Payment;
+use App\Models\Profile;
 use App\Models\Registration;
 use App\Models\Training;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,6 +41,8 @@ class AnalyticsController extends Controller
             'byFieldOffice' => $this->byFieldOffice($officeId),
             'attendance' => $this->attendance($officeId),
             'payments' => $this->payments($request),
+            'demographics' => $this->demographics($officeId),
+            'topAgencies' => $this->topAgencies($officeId),
             'scopedTo' => $request->user()->fieldOffice?->name,
         ]);
     }
@@ -177,6 +181,147 @@ class AnalyticsController extends Controller
     }
 
     /**
+     * Who is being trained, ported from v1's `get-analytics-data.php`.
+     *
+     * These are the cuts CSC reports upward — a regional office is asked how
+     * many first-level staff it reached, and how the intake splits by sex and
+     * age band. The vocabulary already exists in ProfileOptions, so the only
+     * thing missing was the counting.
+     *
+     * Counted over registrations rather than participants: one person attending
+     * three trainings is three training slots delivered, which is what the
+     * report is about. A head-count would answer a different question.
+     *
+     * @return array<string, array<int, array{label: string, count: int}>>
+     */
+    private function demographics(?int $officeId): array
+    {
+        // One pass over the profiles behind the registrations. Grouping in PHP
+        // rather than SQL keeps every cut on identical rows — a per-column
+        // GROUP BY would silently drop registrations whose profile is missing
+        // that one field, and the totals would then disagree between charts.
+        $profiles = $this->scope(Registration::with('user.profile'), $officeId)
+            ->get()
+            ->map(fn (Registration $registration) => $registration->user->profile)
+            ->filter();
+
+        return [
+            'sex' => $this->tally($profiles, 'sex'),
+            'positionLevel' => $this->tally($profiles, 'position_level'),
+            'employmentStatus' => $this->tally($profiles, 'employment_status'),
+            'sector' => $this->tally($profiles, 'sector'),
+            'ageBand' => $this->ageBands($profiles),
+            'chargeTo' => $this->chargeTo($officeId),
+            /*
+             * Where participants actually come from, which v1 called the "geo
+             * breakdown". v1 grouped by field office — already charted above —
+             * but the office is an administrative assignment, not a location:
+             * two participants in the same office can be provinces apart, and
+             * out-of-region attendees (who drive the physical-OR pipeline) all
+             * collapse into whichever office was picked. These read the PSGC
+             * fields on the profile instead, so the answer is geography.
+             */
+            'region' => $this->tally($profiles, 'region'),
+            'province' => $this->tally($profiles, 'province'),
+        ];
+    }
+
+    /**
+     * Count one profile column, largest first.
+     *
+     * @param  Collection<int, Profile>  $profiles
+     * @return array<int, array{label: string, count: int}>
+     */
+    private function tally($profiles, string $column): array
+    {
+        return $profiles
+            ->countBy(fn ($profile) => filled($profile->{$column}) ? $profile->{$column} : 'Not stated')
+            ->map(fn (int $count, string $label) => ['label' => $label, 'count' => $count])
+            ->sortByDesc('count')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Age at the time the report is run, in the bands v1 used.
+     *
+     * @param  Collection<int, Profile>  $profiles
+     * @return array<int, array{label: string, count: int}>
+     */
+    private function ageBands($profiles): array
+    {
+        $bands = ['18-25', '26-35', '36-45', '46-55', '56-65', 'Over 65'];
+        $counts = array_fill_keys([...$bands, 'Not stated'], 0);
+
+        foreach ($profiles as $profile) {
+            if ($profile->date_of_birth === null) {
+                $counts['Not stated']++;
+
+                continue;
+            }
+
+            $age = $profile->date_of_birth->age;
+
+            $counts[match (true) {
+                $age <= 25 => '18-25',
+                $age <= 35 => '26-35',
+                $age <= 45 => '36-45',
+                $age <= 55 => '46-55',
+                $age <= 65 => '56-65',
+                default => 'Over 65',
+            }]++;
+        }
+
+        // Age bands keep their natural order rather than being sorted by size —
+        // a distribution read out of sequence is not a distribution.
+        return array_values(array_map(
+            fn (string $label) => ['label' => $label, 'count' => $counts[$label]],
+            array_filter(
+                array_keys($counts),
+                fn (string $label) => $counts[$label] > 0 || $label !== 'Not stated',
+            ),
+        ));
+    }
+
+    /**
+     * Personal versus agency-funded, from the registration itself.
+     *
+     * @return array<int, array{label: string, count: int}>
+     */
+    private function chargeTo(?int $officeId): array
+    {
+        $counts = $this->scope(Registration::query(), $officeId)
+            ->get()
+            ->countBy(fn (Registration $registration) => $registration->charge_to?->label() ?? 'Not stated');
+
+        return $counts
+            ->map(fn (int $count, string $label) => ['label' => $label, 'count' => $count])
+            ->sortByDesc('count')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The agencies sending the most people.
+     *
+     * Capped at ten: the tail is a long list of agencies with one registration
+     * each, which tells nobody anything and makes the chart unreadable.
+     *
+     * @return array<int, array{label: string, count: int}>
+     */
+    private function topAgencies(?int $officeId): array
+    {
+        return $this->scope(Registration::with('user.profile'), $officeId)
+            ->get()
+            ->countBy(fn (Registration $registration) => $registration->user->profile?->organization_name ?: 'Not stated')
+            ->map(fn (int $count, string $label) => ['label' => $label, 'count' => $count])
+            ->sortByDesc('count')
+            ->take(10)
+            ->values()
+            ->all();
+    }
+
+    /**
      * Money, for the roles that handle it.
      *
      * Not office-scoped, deliberately: none of the financial roles are tied to
@@ -186,7 +331,7 @@ class AnalyticsController extends Controller
      */
     private function payments(Request $request): ?array
     {
-        if (! $request->user()->role->handlesPayments()) {
+        if (! $request->user()->collectsPayments()) {
             return null;
         }
 

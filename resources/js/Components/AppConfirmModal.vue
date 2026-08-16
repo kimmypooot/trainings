@@ -22,7 +22,9 @@ const emit = defineEmits(['confirm', 'close']);
 </script>
 
 <template>
-    <AppModal :open="open" :title="title" :subtitle="description" @close="emit('close')">
+    <AppModal :open="open" :title="title" @close="emit('close')">
+        <p v-if="description" class="text-sm text-csc-ink/70">{{ description }}</p>
+
         <template #footer>
             <div class="flex flex-col gap-2 sm:flex-row-reverse">
                 <AppButton size="sm" :loading="processing" @click="emit('confirm')">

@@ -44,6 +44,9 @@ const onKeydown = (event) => {
 
 const accept = () => {
     sessionStorage.setItem(STORAGE_KEY, '1');
+    // Consent is the gate for analytics — start it now rather than waiting for
+    // the next page load. It is a no-op when no measurement id is configured.
+    window.__enableCscAnalytics?.();
     visible.value = false;
     document.body.style.overflow = '';
     lastFocused?.focus?.();
@@ -83,7 +86,7 @@ onBeforeUnmount(() => {
             <div class="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
                 <!-- Header -->
                 <header class="flex shrink-0 items-center gap-3 bg-csc-blue px-6 py-4">
-                    <img src="/images/csc-logo.png" alt="" class="h-9 w-auto object-contain" aria-hidden="true" />
+                    <img src="/images/csc-logo-256.png" alt="" class="h-9 w-auto object-contain" aria-hidden="true" />
                     <div>
                         <p id="privacy-notice-title" class="text-sm font-semibold text-white">
                             {{ step === 1 ? 'Civil Service Commission' : 'Data Privacy Notice' }}

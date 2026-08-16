@@ -42,11 +42,21 @@ class SampleUsersSeeder extends Seeder
     private const COUNTS = [
         'participant' => [18, 30],
         'field-office' => [3, 6],
-        'collecting-officer' => [1, 3],
         'admin' => [1, 3],
         'management' => [1, 2],
         'superadmin' => [1, 1],
     ];
+
+    /**
+     * Roughly how many field-office accounts also collect money.
+     *
+     * Collecting officer is a designation, not a role — so seeded data has to
+     * express it the way the office does: some of the field-office staff are
+     * designated, and they keep their own office's scoping while taking
+     * payments. A separate "collecting officer" account would not exercise
+     * that combination at all, which is the one worth testing against.
+     */
+    private const DESIGNATED_COLLECTORS = [1, 3];
 
     public function run(): void
     {
@@ -79,7 +89,28 @@ class SampleUsersSeeder extends Seeder
             $created[$role->label()] = $count;
         }
 
+        $created['Collecting Officer (designated)'] = $this->designateCollectors();
+
         $this->report($created, $seed);
+    }
+
+    /**
+     * Designate some of the seeded field-office staff as collecting officers.
+     *
+     * Deliberately drawn from field-office accounts rather than admins: the
+     * combination the app has to get right is "scoped to one office *and* able
+     * to take money", and only these exercise it.
+     */
+    private function designateCollectors(): int
+    {
+        $collectors = User::where('role', Role::FieldOffice)
+            ->inRandomOrder()
+            ->limit(fake()->numberBetween(...self::DESIGNATED_COLLECTORS))
+            ->get();
+
+        $collectors->each(fn (User $user) => $user->forceFill(['is_collecting_officer' => true])->save());
+
+        return $collectors->count();
     }
 
     /**

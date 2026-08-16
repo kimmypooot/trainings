@@ -11,12 +11,16 @@ import AppIcon from '@/Components/AppIcon.vue';
  */
 const props = defineProps({
     open: { type: Boolean, default: false },
-    title: { type: String, required: true },
+    title: { type: String, default: null },
     subtitle: { type: String, default: null },
+    // Confirm-style dialogs (sign out, delete) own their copy in the body and
+    // shouldn't show the header bar with its close button — there is nothing
+    // to dismiss except the choice itself.
+    hideHeader: { type: Boolean, default: false },
     size: {
         type: String,
-        default: 'md', // md | lg
-        validator: (value) => ['md', 'lg'].includes(value),
+        default: 'md', // sm | md | lg
+        validator: (value) => ['sm', 'md', 'lg'].includes(value),
     },
 });
 
@@ -27,7 +31,7 @@ const dialogRef = ref(null);
 
 let lastFocused = null;
 
-const widths = { md: 'max-w-lg', lg: 'max-w-3xl' };
+const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-3xl' };
 const width = computed(() => widths[props.size]);
 
 const focusables = () =>
@@ -118,12 +122,15 @@ onBeforeUnmount(release);
                     ref="dialogRef"
                     role="dialog"
                     aria-modal="true"
-                    :aria-labelledby="titleId"
+                    :aria-labelledby="title ? titleId : undefined"
                     tabindex="-1"
                     class="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl focus:outline-none sm:rounded-2xl"
                     :class="width"
                 >
-                    <header class="flex shrink-0 items-start justify-between gap-4 border-b border-csc-line px-5 py-4 sm:px-6">
+                    <header
+                        v-if="!hideHeader"
+                        class="flex shrink-0 items-start justify-between gap-4 border-b border-csc-line px-5 py-4 sm:px-6"
+                    >
                         <div class="min-w-0">
                             <h2 :id="titleId" class="text-base font-semibold tracking-tight text-csc-blue sm:text-lg">
                                 {{ title }}

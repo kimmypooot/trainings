@@ -10,6 +10,7 @@ const props = defineProps({
     error: { type: String, default: null },
     hint: { type: String, default: null },
     required: { type: Boolean, default: false },
+    disabled: { type: Boolean, default: false },
 });
 
 defineEmits(['update:modelValue']);
@@ -40,7 +41,7 @@ const describedBy = computed(() => {
 
 <template>
     <div>
-        <label :for="selectId" class="mb-1.5 block text-sm font-medium text-csc-ink">
+        <label v-if="label" :for="selectId" class="mb-1.5 block text-sm font-medium text-csc-ink">
             {{ label }}
             <span v-if="required" class="text-csc-red-ink" aria-hidden="true">*</span>
         </label>
@@ -50,9 +51,10 @@ const describedBy = computed(() => {
                 :id="selectId"
                 :value="modelValue"
                 :required="required"
+                :disabled="disabled"
                 :aria-invalid="error ? 'true' : undefined"
                 :aria-describedby="describedBy"
-                class="w-full appearance-none rounded-lg border bg-white py-2.5 pr-10 pl-4 text-sm text-csc-ink uppercase transition-colors duration-150 focus:outline-2 focus:outline-offset-1"
+                class="w-full appearance-none rounded-lg border bg-white py-2.5 pr-10 pl-4 text-sm text-csc-ink transition-colors duration-150 focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink/60"
                 :class="
                     error
                         ? 'border-csc-red-ink focus:outline-csc-red-ink'

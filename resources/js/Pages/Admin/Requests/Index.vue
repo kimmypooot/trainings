@@ -168,7 +168,7 @@ const convert = (id) => {
     <Head title="Requests" />
 
     <AuthenticatedLayout title="Requests" current="admin-requests">
-        <div class="mx-auto max-w-6xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="scopedTo" tone="info">
                 Showing requests from <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
@@ -228,10 +228,10 @@ const convert = (id) => {
                         </p>
 
                         <div v-if="item.status === 'pending'" class="mt-4 flex flex-wrap gap-2">
-                            <AppButton size="sm" @click="approveCancellation(item)">
+                            <AppButton size="sm" icon="check" @click="approveCancellation(item)">
                                 Approve &amp; Release Slot
                             </AppButton>
-                            <AppButton size="sm" variant="ghost" @click="rejectCancellation(item)">
+                            <AppButton size="sm" variant="ghost" icon="close" @click="rejectCancellation(item)">
                                 Decline
                             </AppButton>
                         </div>
@@ -275,10 +275,10 @@ const convert = (id) => {
 
                         <div class="mt-4 flex flex-wrap gap-2">
                             <template v-if="item.status === 'pending'">
-                                <AppButton size="sm" @click="approveTraining(item)">
+                                <AppButton size="sm" icon="check" @click="approveTraining(item)">
                                     Approve
                                 </AppButton>
-                                <AppButton size="sm" variant="ghost" @click="rejectTraining(item)">
+                                <AppButton size="sm" variant="ghost" icon="close" @click="rejectTraining(item)">
                                     Decline
                                 </AppButton>
                             </template>
@@ -286,6 +286,7 @@ const convert = (id) => {
                             <AppButton
                                 v-else-if="item.status === 'approved' && !item.converted"
                                 size="sm"
+                                icon="plus"
                                 @click="convert(item.id)"
                             >
                                 Create Draft Training
@@ -335,10 +336,10 @@ const convert = (id) => {
                         </div>
 
                         <div v-if="item.status === 'pending'" class="mt-4 flex flex-wrap gap-2">
-                            <AppButton size="sm" @click="acceptOutput(item)">
+                            <AppButton size="sm" icon="check" @click="acceptOutput(item)">
                                 Accept
                             </AppButton>
-                            <AppButton size="sm" variant="ghost" @click="returnOutput(item)">
+                            <AppButton size="sm" variant="ghost" icon="arrow-left" @click="returnOutput(item)">
                                 Return for Revision
                             </AppButton>
                         </div>
