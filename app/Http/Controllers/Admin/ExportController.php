@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\PaymentStatus;
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\Exports\SpreadsheetExport;
+use App\Support\ParticipantFilter;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -44,19 +47,25 @@ class ExportController extends Controller
 
     /**
      * Every participant, with their profile. v1's `export-participants.php`.
+     *
+     * The directory's filters ride along in the query string, as they did on
+     * v1's Export All button: what the administrator downloads is what they
+     * were looking at. Both surfaces narrow the query through
+     * ParticipantFilter, which is also where the field-office scoping lives —
+     * so a filtered export cannot lose it.
      */
     public function participants(Request $request): StreamedResponse
     {
-        $query = User::query()
-            ->where('role', 'participant')
-            ->whereHas('profile')
-            ->with('profile.fieldOffice');
-
         $officeId = $request->user()->scopedFieldOfficeId();
 
-        if ($officeId !== null) {
-            $query->whereHas('profile', fn ($profile) => $profile->where('field_office_id', $officeId));
-        }
+        $query = ParticipantFilter::apply(
+            ParticipantFilter::base($officeId),
+            ParticipantFilter::fromRequest($request)
+        )
+            // A participant who never filled in a profile has nothing to put in
+            // any of these columns.
+            ->whereHas('profile')
+            ->with('profile.fieldOffice');
 
         return SpreadsheetExport::download(
             'csc-tims-participants',
@@ -134,6 +143,133 @@ class ExportController extends Controller
     }
 
     /**
+     * One participant's whole training record.
+     *
+     * v1 had an "Export History" button on its field-office participant page,
+     * but it was never wired up: `export.php` reads the `type` parameter and
+     * then ignores it, dying on the missing `training_id` that a history export
+     * never sends. Clicking it produced a plain-text error. So this is the
+     * report that button implied rather than a port of one.
+     *
+     * The office needs it when a participant asks what they have attended, or
+     * when an agency asks what CSC has delivered to its staff — questions the
+     * roster and the registrations export answer per *training*, never per
+     * person.
+     *
+     * One row per registration, carrying the training, what was decided, what
+     * was attended, what was paid and what was issued — so the row stands on
+     * its own without a second lookup.
+     */
+    public function participantHistory(Request $request, User $user): StreamedResponse
+    {
+        abort_unless($user->role === Role::Participant, 404);
+
+        // The same office guard the participant directory applies. 404 rather
+        // than 403: a scoped officer has no business knowing the record exists.
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        abort_if(
+            $officeId !== null && $user->profile?->field_office_id !== $officeId,
+            404
+        );
+
+        $query = Registration::with(['training', 'attendances', 'certificate', 'payments'])
+            ->where('user_id', $user->getKey());
+
+        return SpreadsheetExport::download(
+            'training-history-'.$user->name,
+            [
+                'Participant', 'Training', 'Training Code', 'Starts', 'Ends', 'Mode',
+                'Registration Status', 'Registered On', 'Charged To', 'Days Credited',
+                'Amount Paid', 'PRIME-HRM Discount', 'Payment Method', 'OR No.',
+                'Payment Status', 'Certificate No.', 'Certificate Issued',
+            ],
+            fn () => $this->rows(
+                $query->join('trainings', 'trainings.id', '=', 'registrations.training_id')
+                    ->orderByDesc('trainings.starts_at')
+                    ->select('registrations.*'),
+                function (Registration $registration) use ($user) {
+                    // The payment that settled it, if any. A registration can
+                    // carry a rejected attempt as well, and reporting that one
+                    // would understate what the participant actually paid.
+                    $payment = $registration->payments
+                        ->firstWhere('status', PaymentStatus::Verified);
+
+                    return [
+                        $user->name,
+                        $registration->training->title,
+                        $registration->training->training_code,
+                        $registration->training->starts_at,
+                        $registration->training->ends_at,
+                        $registration->training->mode->label(),
+                        $registration->status->label(),
+                        $registration->registered_at,
+                        $registration->charge_to?->label(),
+                        $registration->creditedDays(),
+                        $payment?->amount,
+                        $payment?->prime_hrm_discount ? 'Yes (20%)' : ($payment ? 'No' : ''),
+                        $payment?->payment_method->label(),
+                        $payment?->or_number,
+                        $payment?->status->label() ?? 'No payment recorded',
+                        $registration->certificate?->certificate_number,
+                        $registration->certificate?->generated_at,
+                    ];
+                }
+            ),
+            $request->string('format')->toString()
+        );
+    }
+
+    /**
+     * What one training earned, participant by participant.
+     *
+     * The PRIME-HRM discount is the reason this exists as its own report: the
+     * office is asked both what a run brought in and which participants were
+     * given the incentive, and neither the roster nor the payments queue
+     * answers the pair together.
+     *
+     * Figures come off the payment rows, which froze their own gross and
+     * discount when taken — so a later repricing of the course cannot restate a
+     * closed run's revenue.
+     */
+    public function revenue(Request $request, Training $training): StreamedResponse
+    {
+        abort_unless($request->user()->collectsPayments(), 403);
+
+        $query = Payment::with(['user.profile.fieldOffice', 'collectingOfficer'])
+            ->where('training_id', $training->getKey())
+            ->where('status', PaymentStatus::Verified);
+
+        $query = $this->scoped($request, $query);
+
+        return SpreadsheetExport::download(
+            "revenue-{$training->slug}",
+            [
+                'Participant', 'Organization', 'Field Office', 'Full Fee',
+                'PRIME-HRM Discount', 'Discount Amount', 'Amount Paid', 'Method',
+                'OR No.', 'OR Date', 'Collecting Officer', 'Payment Date',
+            ],
+            fn () => $this->rows($query->orderBy('or_number'), fn (Payment $payment) => [
+                $payment->user->name,
+                $payment->user->profile?->organization_name,
+                $payment->user->profile?->fieldOffice?->name,
+                $payment->grossAmount(),
+                // Spelled out rather than a bare 1/0: this column is read by a
+                // person reconciling a spreadsheet, not by a machine.
+                $payment->prime_hrm_discount ? 'Yes (20%)' : 'No',
+                $payment->discount_amount,
+                $payment->amount,
+                $payment->payment_method->label(),
+                $payment->or_number,
+                $payment->or_date,
+                $payment->collectingOfficer?->name,
+                $payment->payment_date,
+            ]),
+            $request->string('format')->toString()
+        );
+    }
+
+    /**
      * Every registration across every training. v1's `export-records.php`.
      */
     public function registrations(Request $request): StreamedResponse
@@ -175,7 +311,7 @@ class ExportController extends Controller
      */
     public function payments(Request $request): StreamedResponse
     {
-        abort_unless($request->user()->role->handlesPayments(), 403);
+        abort_unless($request->user()->collectsPayments(), 403);
 
         $status = $request->string('status')->toString();
         $method = $request->string('method')->toString();

@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Enums\ChargeTo;
 use App\Enums\RegistrationStatus;
+use App\Enums\SupervisoryDocumentStatus;
 use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
@@ -93,6 +94,11 @@ class RegistrationService
                 // rather than silently dropping it.
                 'supporting_document_path' => $details['supporting_document_path']
                     ?? $existing?->supporting_document_path,
+                'supervisory_document_status' => self::documentStatusFor(
+                    $locked,
+                    $user,
+                    $details['supporting_document_path'] ?? $existing?->supporting_document_path,
+                ),
             ];
 
             if ($existing) {
@@ -103,6 +109,9 @@ class RegistrationService
                     'reviewed_by' => null,
                     'reviewed_at' => null,
                     'review_remarks' => null,
+                    'supervisory_document_reviewed_by' => null,
+                    'supervisory_document_reviewed_at' => null,
+                    'supervisory_document_remarks' => null,
                     ...$submitted,
                 ])->save();
 
@@ -143,13 +152,47 @@ class RegistrationService
     }
 
     /**
+     * The document's starting status for a (re-)registration.
+     *
+     * Only the middle grade band is ever asked to attach anything, so everyone
+     * else gets null — no document, no status. A band participant who attached
+     * the file goes straight to Submitted; one who somehow reached the roster
+     * without it is flagged as Document Required.
+     */
+    private static function documentStatusFor(
+        Training $training,
+        User $user,
+        ?string $documentPath,
+    ): ?SupervisoryDocumentStatus {
+        if (! SupervisoryEligibility::requiresSupportingDocument($training, $user)) {
+            return null;
+        }
+
+        return blank($documentPath)
+            ? SupervisoryDocumentStatus::Required
+            : SupervisoryDocumentStatus::Submitted;
+    }
+
+    /**
      * Withdraw from a training, freeing the slot.
      *
      * Cancellation stays participant-initiated and immediate — v2 routes this
      * through an approval workflow, but that was deliberately kept instant here.
+     *
+     * `$staff` is the other caller: v1's registration-details page let HRD
+     * cancel a registration outright, which is what the office does when a
+     * participant phones in, or when a duplicate or a no-show has to be cleared
+     * so the slot can go to someone else. v2 could only *review* a
+     * participant-filed cancellation request, leaving no way to start one. The
+     * reason lands in `review_remarks` rather than a column of its own: it is
+     * the same field the roster already shows against a decision, and the one
+     * UndoService captures, so a taken-back cancellation restores it too.
      */
-    public static function cancel(Registration $registration): Registration
-    {
+    public static function cancel(
+        Registration $registration,
+        ?User $staff = null,
+        ?string $reason = null
+    ): Registration {
         if (! $registration->status->isCancellable()) {
             throw ValidationException::withMessages([
                 'registration' => "A {$registration->status->label()} registration cannot be cancelled.",
@@ -161,6 +204,11 @@ class RegistrationService
         $registration->forceFill([
             'status' => RegistrationStatus::Cancelled,
             'cancelled_at' => now(),
+            ...($staff ? [
+                'reviewed_by' => $staff->getKey(),
+                'reviewed_at' => now(),
+                'review_remarks' => $reason,
+            ] : []),
         ])->save();
 
         ActivityLogger::recordTransition(
@@ -168,7 +216,11 @@ class RegistrationService
             $registration,
             $from,
             RegistrationStatus::Cancelled,
-            'Registration cancelled, slot released.',
+            $staff
+                ? "Registration cancelled by {$staff->name}, slot released."
+                : 'Registration cancelled, slot released.',
+            $staff ? ['reason' => $reason] : [],
+            $staff,
         );
 
         return $registration;

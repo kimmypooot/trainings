@@ -16,6 +16,9 @@ const props = defineProps({
         validator: (value) => ['sm', 'md', 'lg'].includes(value),
     },
     href: { type: String, default: null },
+    // Render a plain <a> instead of an Inertia <Link>, for file downloads and
+    // other responses Inertia's XHR layer cannot handle.
+    external: { type: Boolean, default: false },
     type: { type: String, default: 'button' },
     disabled: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
@@ -61,7 +64,12 @@ const isDisabled = computed(() => props.disabled || props.loading);
 </script>
 
 <template>
-    <Link v-if="href && !isDisabled" :href="href" :class="classes">
+    <a v-if="href && external && !isDisabled" :href="href" :class="classes">
+        <AppIcon v-if="icon" :name="icon" :size="size === 'lg' ? 'md' : 'sm'" class="shrink-0" />
+        <slot />
+    </a>
+
+    <Link v-else-if="href && !isDisabled" :href="href" :class="classes">
         <AppIcon v-if="icon" :name="icon" :size="size === 'lg' ? 'md' : 'sm'" class="shrink-0" />
         <slot />
     </Link>

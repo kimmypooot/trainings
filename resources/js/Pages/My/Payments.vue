@@ -20,6 +20,7 @@ const props = defineProps({
     methods: { type: Array, required: true },
     physical_or_settings: { type: Object, default: null },
     physical_or_pipeline: { type: Array, default: () => [] },
+    payment_settings: { type: Object, default: null },
 });
 
 const paying = ref(null);
@@ -147,6 +148,37 @@ const submitPhysicalOr = () =>
         <div class="mx-auto max-w-4xl space-y-5">
             <!-- Owed -->
             <AppCard v-if="awaitingPayment.length" title="Awaiting Payment">
+                <!--
+                    Where the money goes. The bank account is an admin-editable
+                    setting, so it is rendered, never hard-coded.
+                -->
+                <div
+                    v-if="payment_settings"
+                    class="mb-4 rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm"
+                >
+                    <p class="font-medium text-csc-ink">Deposit to</p>
+                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink/80 sm:grid-cols-2">
+                        <div class="flex gap-2">
+                            <dt class="w-28 shrink-0 text-csc-ink/55">Bank</dt>
+                            <dd class="font-semibold text-csc-ink">{{ payment_settings.bank_name }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                            <dt class="w-28 shrink-0 text-csc-ink/55">Account name</dt>
+                            <dd class="text-csc-ink">{{ payment_settings.account_name }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                            <dt class="w-28 shrink-0 text-csc-ink/55">Account no.</dt>
+                            <dd class="font-mono font-semibold text-csc-ink">{{ payment_settings.account_number }}</dd>
+                        </div>
+                    </dl>
+                    <p
+                        v-if="payment_settings.instructions"
+                        class="mt-2 border-t border-csc-line pt-2 leading-relaxed text-csc-ink/70"
+                    >
+                        {{ payment_settings.instructions }}
+                    </p>
+                </div>
+
                 <ul class="space-y-3">
                     <li
                         v-for="item in awaitingPayment"

@@ -6,6 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\RefundStatus;
 use App\Enums\Role;
+use App\Models\FieldOffice;
 use App\Models\Payment;
 use App\Models\Profile;
 use App\Models\RefundRequest;
@@ -38,9 +39,21 @@ class PaymentTest extends TestCase
         Storage::fake('local');
     }
 
-    private function officer(Role $role = Role::CollectingOfficer): User
+    /**
+     * A staff member who may handle money.
+     *
+     * Collecting is a designation rather than a role, so the default here is a
+     * field-office account carrying it — which is both the commonest real case
+     * and the combination worth exercising: scoped to one office *and* able to
+     * take payments. Admins and superadmins reach the money screens by role.
+     */
+    private function officer(Role $role = Role::FieldOffice): User
     {
-        return User::factory()->create(['role' => $role, 'profile_completed_at' => now()]);
+        return User::factory()->create([
+            'role' => $role,
+            'profile_completed_at' => now(),
+            'is_collecting_officer' => $role === Role::FieldOffice,
+        ]);
     }
 
     private function participant(): User
@@ -244,16 +257,33 @@ class PaymentTest extends TestCase
         Notification::assertSentTo($participant, PaymentReviewed::class);
     }
 
-    public function test_field_office_staff_cannot_reach_the_payment_queue(): void
+    public function test_the_payment_queue_turns_away_staff_without_the_designation(): void
     {
-        $this->actingAs($this->officer(Role::FieldOffice))
-            ->get('/admin/payments')
-            ->assertForbidden();
+        $undesignated = User::factory()->create([
+            'role' => Role::FieldOffice,
+            'profile_completed_at' => now(),
+            'is_collecting_officer' => false,
+        ]);
+
+        $this->actingAs($undesignated)->get('/admin/payments')->assertForbidden();
     }
 
-    public function test_a_collecting_officer_cannot_reach_the_participant_directory(): void
+    public function test_a_designated_field_office_officer_keeps_both_the_till_and_the_scoping(): void
     {
-        // The cashier is staff, but has no business in participant records.
+        // The combination v1 has and v2 could not express: the same person is
+        // scoped to their own office *and* takes money for it. Modelling the
+        // designation as a role forced a choice between the two.
+        $officer = $this->officer();
+
+        $this->actingAs($officer)->get('/admin/payments')->assertOk();
+
+        $this->assertTrue($officer->isScopedToFieldOffice());
+        $this->assertTrue($officer->collectsPayments());
+    }
+
+    public function test_the_designation_alone_does_not_open_the_rest_of_the_admin_area(): void
+    {
+        // Collecting money is not a licence to edit reference data.
         $this->actingAs($this->officer())
             ->get('/admin/field-offices')
             ->assertForbidden();
@@ -619,7 +649,7 @@ class PaymentTest extends TestCase
     {
         $refund = $this->claim(Payment::factory()->verified()->create());
 
-        $this->actingAs($this->officer(Role::CollectingOfficer))
+        $this->actingAs($this->officer())
             ->get('/admin/payments')
             ->assertInertia(fn ($page) => $page->where('refunds.data.0.account_number', '1234567890'));
 
@@ -678,14 +708,36 @@ class PaymentTest extends TestCase
                 'email' => 'cashier@csc.gov.ph',
                 'password' => 'Password123',
                 'password_confirmation' => 'Password123',
-                'role' => Role::CollectingOfficer->value,
+                // A designation on top of the job they already hold, which is
+                // how v1 has it — not a role that replaces it.
+                'role' => Role::FieldOffice->value,
+                'field_office_id' => FieldOffice::first()->getKey(),
+                'is_collecting_officer' => true,
             ])
             ->assertRedirect('/admin/users');
 
-        $this->assertSame(
-            Role::CollectingOfficer,
-            User::where('email', 'cashier@csc.gov.ph')->sole()->role
-        );
+        $appointed = User::where('email', 'cashier@csc.gov.ph')->sole();
+
+        $this->assertSame(Role::FieldOffice, $appointed->role);
+        $this->assertTrue($appointed->collectsPayments());
+        // The office survives the appointment — that is the whole point.
+        $this->assertNotNull($appointed->field_office_id);
+    }
+
+    public function test_the_retired_collecting_officer_role_is_no_longer_assignable(): void
+    {
+        $this->actingAs(User::factory()->create([
+            'role' => Role::SuperAdmin,
+            'profile_completed_at' => now(),
+        ]))
+            ->post('/admin/users', [
+                'name' => 'Cashier Two',
+                'email' => 'cashier2@csc.gov.ph',
+                'password' => 'Password123',
+                'password_confirmation' => 'Password123',
+                'role' => Role::CollectingOfficer->value,
+            ])
+            ->assertSessionHasErrors('role');
     }
 
     public function test_the_officer_queue_shows_pending_payments_by_default(): void
@@ -763,5 +815,477 @@ class PaymentTest extends TestCase
                 ->where('payments.data.0.id', $target->getKey())
                 ->where('filters.method', 'cash')
             );
+    }
+
+    // --- Money taken at the counter (v1's payment-actions.php) ------------
+
+    public function test_an_officer_can_record_a_payment_taken_at_the_counter(): void
+    {
+        Notification::fake();
+
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+        // HRD, so the registration is in scope whatever office the seeded
+        // participant landed in; the scoped case has its own test below.
+        $officer = $this->officer(Role::Admin);
+
+        $this->actingAs($officer)
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-000123',
+                'or_date' => now()->toDateString(),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $payment = Payment::where('registration_id', $registration->getKey())->sole();
+
+        // Lands verified, not pending: there is nothing to review — the money
+        // and the receipt both changed hands at the desk.
+        $this->assertSame(PaymentStatus::Verified, $payment->status);
+        $this->assertSame('OR-000123', $payment->or_number);
+        // The officer who recorded it is the one accountable for the receipt.
+        $this->assertSame($officer->getKey(), $payment->collecting_officer_id);
+        $this->assertSame($officer->getKey(), $payment->verified_by);
+        $this->assertTrue($registration->fresh()->hasClearedFee());
+
+        // Same road as a reviewed upload, so the participant still hears about it.
+        Notification::assertSentTo($participant, PaymentReviewed::class);
+    }
+
+    public function test_a_counter_payment_can_name_the_officer_who_collected_it(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+        $collector = $this->officer();
+
+        // HRD entering money a field office actually took.
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-000456',
+                'collecting_officer_id' => $collector->getKey(),
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(
+            $collector->getKey(),
+            Payment::where('registration_id', $registration->getKey())->sole()->collecting_officer_id
+        );
+    }
+
+    public function test_a_designated_field_office_officer_collects_for_their_own_office_only(): void
+    {
+        [$mine, $theirs] = FieldOffice::active()->take(2)->get();
+
+        $officer = User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => $mine->getKey(),
+            'profile_completed_at' => now(),
+            'is_collecting_officer' => true,
+        ]);
+
+        $ours = $this->participant();
+        $ours->profile->update(['field_office_id' => $mine->getKey()]);
+
+        $others = $this->participant();
+        $others->profile->update(['field_office_id' => $theirs->getKey()]);
+
+        $post = fn (Registration $registration, string $or) => $this->actingAs($officer)
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => $or,
+            ]);
+
+        // The designation grants the till; the role still bounds the reach.
+        $post($this->paidRegistration($ours), 'OR-100001')->assertRedirect();
+        $post($this->paidRegistration($others), 'OR-100002')->assertNotFound();
+
+        $this->assertSame(1, Payment::count());
+    }
+
+    public function test_a_settled_registration_cannot_be_charged_twice(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        $record = fn (string $or) => $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => $or,
+            ]);
+
+        $record('OR-000789')->assertRedirect();
+        $record('OR-000790')->assertSessionHasErrors('payment');
+
+        $this->assertSame(1, Payment::where('registration_id', $registration->getKey())->count());
+    }
+
+    public function test_a_settlement_payment_must_carry_an_official_receipt(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        // The OR stub is the whole reason this is recorded here rather than
+        // reviewed, so cash without one is refused.
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+            ])
+            ->assertSessionHasErrors('or_number');
+
+        $this->assertSame(0, Payment::where('registration_id', $registration->getKey())->count());
+    }
+
+    // --- PRIME-HRM 20% discount -------------------------------------------
+
+    public function test_a_counter_payment_can_carry_the_prime_hrm_discount(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                // Deliberately wrong: the officer ticks a box, the server does
+                // the arithmetic. A posted amount must not be able to steer it.
+                'amount' => 9999,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-PRIME-01',
+                'prime_hrm_discount' => true,
+            ])
+            ->assertRedirect();
+
+        $payment = Payment::sole();
+
+        $this->assertTrue($payment->prime_hrm_discount);
+        $this->assertSame('1200.00', $payment->amount);
+        $this->assertSame('300.00', $payment->discount_amount);
+        // The identity that makes the revenue report trustworthy.
+        $this->assertSame(1500.0, $payment->grossAmount());
+        $this->assertSame(20.0, $payment->discountRate());
+    }
+
+    public function test_a_payment_without_the_discount_records_no_forgone_revenue(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-FULL-01',
+            ])
+            ->assertRedirect();
+
+        $payment = Payment::sole();
+
+        $this->assertFalse($payment->prime_hrm_discount);
+        $this->assertSame('0.00', $payment->discount_amount);
+        $this->assertSame(1500.0, $payment->grossAmount());
+        $this->assertNull($payment->discountRate());
+    }
+
+    /**
+     * The whole reason the peso value is stored rather than recomputed.
+     */
+    public function test_a_later_fee_change_cannot_rewrite_a_closed_payment(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1200,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-PRIME-02',
+                'prime_hrm_discount' => true,
+            ])
+            ->assertRedirect();
+
+        // The course fee doubles next year.
+        $registration->training->forceFill(['payment_amount' => 3000])->save();
+
+        $payment = Payment::sole()->fresh();
+
+        // Last year's receipt is untouched: still ₱1,200 collected against a
+        // ₱1,500 fee. Recomputing from the training would have invented ₱600 of
+        // discount nobody granted.
+        $this->assertSame('1200.00', $payment->amount);
+        $this->assertSame('300.00', $payment->discount_amount);
+        $this->assertSame(1500.0, $payment->grossAmount());
+    }
+
+    public function test_the_discount_is_refused_on_a_training_with_no_fee(): void
+    {
+        $participant = $this->participant();
+        $registration = Registration::factory()->approved()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create(['payment_required' => false])->getKey(),
+        ]);
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1200,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-PRIME-03',
+                'prime_hrm_discount' => true,
+            ])
+            ->assertSessionHasErrors('payment');
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    /**
+     * A promissory note may carry the discount — the note is then written for
+     * the discounted amount.
+     */
+    public function test_a_promissory_note_can_carry_the_discount(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Promissory->value,
+                'payment_date' => now()->toDateString(),
+                'prime_hrm_discount' => true,
+            ])
+            ->assertRedirect();
+
+        $payment = Payment::sole();
+
+        $this->assertSame('1200.00', $payment->amount);
+        $this->assertSame('300.00', $payment->discount_amount);
+    }
+
+    public function test_an_uploaded_payment_can_be_verified_as_discounted(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        // The participant was quoted the discounted price and paid it.
+        $payment = Payment::factory()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $participant->getKey(),
+            'training_id' => $registration->training_id,
+            'amount' => 1200,
+            'status' => PaymentStatus::Pending,
+        ]);
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/payments/{$payment->id}/review", [
+                'decision' => PaymentStatus::Verified->value,
+                'or_number' => 'OR-PRIME-04',
+                'prime_hrm_discount' => true,
+            ])
+            ->assertRedirect();
+
+        $payment->refresh();
+
+        // The amount is a fact — the money already moved — so the discount
+        // records why it fell short of the fee rather than changing it.
+        $this->assertSame('1200.00', $payment->amount);
+        $this->assertSame('300.00', $payment->discount_amount);
+        $this->assertSame(PaymentStatus::Verified, $payment->status);
+    }
+
+    public function test_a_discount_that_does_not_reconcile_is_refused(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        // Paid the full fee, but the officer ticks the discount box.
+        $payment = Payment::factory()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $participant->getKey(),
+            'training_id' => $registration->training_id,
+            'amount' => 1500,
+            'status' => PaymentStatus::Pending,
+        ]);
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/payments/{$payment->id}/review", [
+                'decision' => PaymentStatus::Verified->value,
+                'or_number' => 'OR-PRIME-05',
+                'prime_hrm_discount' => true,
+            ])
+            ->assertSessionHasErrors('prime_hrm_discount');
+
+        $payment->refresh();
+
+        // Nothing recorded, nothing verified: an overpayment is a discrepancy
+        // for the officer to resolve, not something to annotate away.
+        $this->assertFalse($payment->prime_hrm_discount);
+        $this->assertSame(PaymentStatus::Pending, $payment->status);
+    }
+
+    public function test_a_participant_cannot_grant_themselves_the_discount(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1200,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'prime_hrm_discount' => true,
+            ])
+            ->assertRedirect();
+
+        // The field is not part of the participant's form, so it is ignored
+        // rather than honoured. The officer decides at verification.
+        $payment = Payment::sole();
+
+        $this->assertFalse($payment->prime_hrm_discount);
+        $this->assertSame('0.00', $payment->discount_amount);
+    }
+
+    // --- Revenue reporting -------------------------------------------------
+
+    /**
+     * Build a training with a mix of paying participants.
+     *
+     * @return array{0: Training, 1: User}
+     */
+    private function trainingWithRevenue(): array
+    {
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+        ]);
+
+        $officer = $this->officer(Role::Admin);
+
+        $pay = function (float $amount, bool $discounted, string $or, PaymentMethod $method) use ($training, $officer) {
+            $participant = $this->participant();
+            $registration = Registration::factory()->approved()->create([
+                'user_id' => $participant->getKey(),
+                'training_id' => $training->getKey(),
+            ]);
+
+            $this->actingAs($officer)->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => $amount,
+                'payment_method' => $method->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => $or,
+                'prime_hrm_discount' => $discounted,
+            ])->assertRedirect();
+        };
+
+        $pay(1500, false, 'OR-REV-01', PaymentMethod::Cash);
+        $pay(1500, true, 'OR-REV-02', PaymentMethod::Cash);
+        $pay(1500, true, 'OR-REV-03', PaymentMethod::Cash);
+        // A promissory note: verified, but no money arrived.
+        $pay(1500, false, 'OR-REV-04', PaymentMethod::Promissory);
+
+        return [$training, $officer];
+    }
+
+    public function test_the_roster_reports_revenue_and_names_the_discounted(): void
+    {
+        [$training, $officer] = $this->trainingWithRevenue();
+
+        $this->actingAs($officer)
+            ->get("/admin/trainings/{$training->id}/roster")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                // Three settled payments assessed at ₱1,500 each.
+                ->where('revenue.gross', 4500)
+                ->where('revenue.discount', 600)
+                ->where('revenue.collected', 3900)
+                ->where('revenue.discounted_count', 2)
+                // A note is verified but is not money, so it is counted apart
+                // rather than folded into what was collected.
+                ->where('revenue.promissory_count', 1)
+                ->has('revenue.discounted', 2)
+            );
+    }
+
+    public function test_revenue_totals_reconcile(): void
+    {
+        [$training, $officer] = $this->trainingWithRevenue();
+
+        $this->actingAs($officer)
+            ->get("/admin/trainings/{$training->id}/roster")
+            ->assertOk()
+            ->assertInertia(function ($page) {
+                $revenue = $page->toArray()['props']['revenue'];
+
+                // The identity the whole report rests on.
+                $this->assertSame(
+                    (float) $revenue['gross'],
+                    (float) $revenue['collected'] + (float) $revenue['discount'],
+                );
+            });
+    }
+
+    public function test_the_revenue_export_identifies_the_discounted_participants(): void
+    {
+        [$training, $officer] = $this->trainingWithRevenue();
+
+        $response = $this->actingAs($officer)
+            ->get("/admin/exports/trainings/{$training->id}/revenue")
+            ->assertOk();
+
+        $csv = $response->streamedContent();
+
+        $this->assertStringContainsString('PRIME-HRM Discount', $csv);
+        // Spelled out for the person reconciling the sheet.
+        $this->assertStringContainsString('Yes (20%)', $csv);
+        $this->assertStringContainsString('OR-REV-02', $csv);
+        // The full-price row is still there, marked as such.
+        $this->assertStringContainsString('OR-REV-01', $csv);
+    }
+
+    public function test_the_revenue_export_is_closed_to_staff_who_do_not_handle_money(): void
+    {
+        [$training] = $this->trainingWithRevenue();
+
+        $this->actingAs($this->staffWithoutTill())
+            ->get("/admin/exports/trainings/{$training->id}/revenue")
+            ->assertForbidden();
+    }
+
+    private function staffWithoutTill(): User
+    {
+        return User::factory()->create([
+            'role' => Role::Management,
+            'profile_completed_at' => now(),
+            'is_collecting_officer' => false,
+        ]);
+    }
+
+    public function test_a_scoped_officer_cannot_record_against_another_office(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        // A field-office account with no office resolves to 0, matching nothing
+        // — the same fail-closed rule the roster and directory use.
+        $staff = User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => null,
+            'profile_completed_at' => now(),
+        ]);
+
+        $this->actingAs($staff)
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-000999',
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(0, Payment::where('registration_id', $registration->getKey())->count());
     }
 }

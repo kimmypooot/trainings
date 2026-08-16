@@ -23,6 +23,7 @@ use App\Models\Registration;
 use App\Models\Training;
 use App\Models\TrainingRequest;
 use App\Models\User;
+use Database\Factories\RegistrationFactory;
 use Database\Seeders\Concerns\SeedsRandomly;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
@@ -213,6 +214,10 @@ class SampleActivitySeeder extends Seeder
                 'training_id' => $training->getKey(),
                 'status' => $decision,
                 'registered_at' => $registeredAt,
+                // Every real registration carries this — the form requires it.
+                // Drawn from the factory so the seeded mix and the factory mix
+                // cannot drift apart into two different ideas of "typical".
+                'charge_to' => RegistrationFactory::chargeTo(),
             ]);
 
             // Anything past pending has been looked at by someone.

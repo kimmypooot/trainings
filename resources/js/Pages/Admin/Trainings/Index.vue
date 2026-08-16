@@ -4,6 +4,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppBadge from '@/Components/AppBadge.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 
@@ -141,6 +142,7 @@ const totals = computed(() => {
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">{{ training.title }}</p>
                                     <p class="mt-0.5 text-xs text-csc-ink/60">{{ training.venue }}</p>
+                                    <AppBadge v-if="training.is_supervisory" status="supervisory" class="mt-1.5" />
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <p class="text-[11px] leading-snug text-csc-ink/75">
@@ -206,6 +208,7 @@ const totals = computed(() => {
                                     {{ training.ends_at }}
                                 </p>
                                 <p class="text-xs text-csc-ink/60">{{ training.venue }}</p>
+                                <AppBadge v-if="training.is_supervisory" status="supervisory" class="mt-1.5" />
                             </div>
                             <span
                                 class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold"

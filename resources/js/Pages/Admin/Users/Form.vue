@@ -22,6 +22,7 @@ const form = useForm({
     role: props.staffUser?.role ?? 'admin',
     field_office_id: props.staffUser?.field_office_id ?? '',
     is_active: props.staffUser?.is_active ?? true,
+    is_collecting_officer: props.staffUser?.is_collecting_officer ?? false,
     password: '',
     password_confirmation: '',
 });
@@ -120,6 +121,23 @@ const submit = () => {
                             :required="!isEdit"
                         />
                     </div>
+                </AppCard>
+
+                <AppCard
+                    title="Designations"
+                    subtitle="Duties assigned on top of the role, not instead of it."
+                >
+                    <label class="flex items-start gap-3 text-sm text-csc-ink">
+                        <input
+                            v-model="form.is_collecting_officer"
+                            type="checkbox"
+                            class="mt-0.5 size-4 shrink-0 rounded border-csc-line accent-csc-blue"
+                        />
+                        <span class="leading-relaxed">
+                            Collecting officer — may accept payments, issue official receipts and settle
+                            refunds. A field office account keeps its own office scoping while doing so.
+                        </span>
+                    </label>
                 </AppCard>
 
                 <AppCard v-if="isEdit" title="Status">

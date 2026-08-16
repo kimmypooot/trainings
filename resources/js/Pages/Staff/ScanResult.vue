@@ -35,7 +35,7 @@ const checkIn = (session) => {
         <div class="mx-auto max-w-lg space-y-5">
             <AppCard>
                 <div class="flex items-center gap-4">
-                    <AppAvatar :name="participant.name" size="lg" />
+                    <AppAvatar :name="participant.name" :src="participant.avatar" size="lg" />
                     <div class="min-w-0">
                         <p class="truncate text-lg font-semibold text-csc-blue">{{ participant.name }}</p>
                         <p v-if="participant.position" class="truncate text-sm text-csc-ink/70">

@@ -21,12 +21,36 @@ class SampleUsersSeederTest extends TestCase
         // produce a system full of participants.
         $this->seed(SampleUsersSeeder::class);
 
-        foreach (Role::cases() as $role) {
+        // Collecting officer is excluded: it is retired as a role and seeded as
+        // a designation on field-office staff instead — asserted below.
+        $seeded = array_filter(
+            Role::cases(),
+            fn (Role $role) => $role !== Role::CollectingOfficer
+        );
+
+        foreach ($seeded as $role) {
             $this->assertGreaterThan(
                 0,
                 User::where('role', $role)->count(),
                 "No {$role->label()} account was seeded."
             );
+        }
+    }
+
+    public function test_it_designates_field_office_staff_as_collecting_officers(): void
+    {
+        $this->seed(SampleUsersSeeder::class);
+
+        $collectors = User::where('is_collecting_officer', true)->get();
+
+        $this->assertGreaterThan(0, $collectors->count(), 'No collecting officer was designated.');
+
+        // Drawn from field-office staff on purpose: "scoped to one office and
+        // able to take money" is the combination the app has to get right, and
+        // a standalone cashier account would not exercise it.
+        foreach ($collectors as $collector) {
+            $this->assertSame(Role::FieldOffice, $collector->role);
+            $this->assertNotNull($collector->field_office_id);
         }
     }
 
@@ -56,7 +80,7 @@ class SampleUsersSeederTest extends TestCase
             'A field office account without an office would see nothing.'
         );
 
-        foreach ([Role::Admin, Role::Management, Role::SuperAdmin, Role::CollectingOfficer] as $role) {
+        foreach ([Role::Admin, Role::Management, Role::SuperAdmin] as $role) {
             $this->assertSame(
                 0,
                 User::where('role', $role)->whereNotNull('field_office_id')->count(),

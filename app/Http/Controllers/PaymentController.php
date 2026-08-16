@@ -6,6 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\PhysicalOrRequestStatus;
 use App\Enums\RefundStatus;
 use App\Models\Payment;
+use App\Models\PaymentSetting;
 use App\Models\PhysicalOrRequest;
 use App\Models\PhysicalOrSetting;
 use App\Models\RefundRequest;
@@ -44,8 +45,15 @@ class PaymentController extends Controller
             ->get();
 
         $orSetting = PhysicalOrSetting::current();
+        $bankSetting = PaymentSetting::current();
 
         return Inertia::render('My/Payments', [
+            'payment_settings' => [
+                'bank_name' => $bankSetting->bank_name,
+                'account_name' => $bankSetting->account_name,
+                'account_number' => $bankSetting->account_number,
+                'instructions' => $bankSetting->instructions,
+            ],
             'payments' => $payments->map(fn (Payment $payment) => [
                 'id' => $payment->id,
                 'training' => [
@@ -280,7 +288,7 @@ class PaymentController extends Controller
 
         $isOwner = $refundRequest->payment->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->role->handlesPayments(), 403);
+        abort_unless($isOwner || $request->user()->collectsPayments(), 403);
 
         // Served inline rather than as an attachment: the officer who acts on
         // the claim reviews the receipt on screen, not after opening a download.
@@ -301,7 +309,7 @@ class PaymentController extends Controller
 
         $isOwner = $payment->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->role->handlesPayments(), 403);
+        abort_unless($isOwner || $request->user()->collectsPayments(), 403);
 
         // Inline, not attachment: the collecting officer has to actually look
         // at the uploaded proof before it is verified, and a download adds a

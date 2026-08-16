@@ -5,6 +5,7 @@ import PublicLayout from '@/Layouts/PublicLayout.vue';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppModal from '@/Components/AppModal.vue';
+import AppBadge from '@/Components/AppBadge.vue';
 
 const props = defineProps({
     stats: { type: Array, default: () => [] },
@@ -236,8 +237,11 @@ const money = (value) =>
                         />
 
                         <div class="flex items-center justify-between gap-3">
-                            <span class="inline-flex items-center rounded-full bg-csc-blue-tint px-3 py-1 text-xs font-semibold text-csc-blue">
-                                {{ training.mode }}
+                            <span class="inline-flex items-center gap-1.5">
+                                <span class="inline-flex items-center rounded-full bg-csc-blue-tint px-3 py-1 text-xs font-semibold text-csc-blue">
+                                    {{ training.mode }}
+                                </span>
+                                <AppBadge v-if="training.is_supervisory" status="supervisory" />
                             </span>
                             <span class="inline-flex items-center gap-1.5 text-xs font-medium text-csc-ink/70">
                                 <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

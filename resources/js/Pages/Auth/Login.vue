@@ -1,14 +1,18 @@
 <script setup>
-import { ref } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { ref, watch } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppButton from '@/Components/AppButton.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppAuthSplash from '@/Components/AppAuthSplash.vue';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
 
-defineProps({
+const props = defineProps({
     status: { type: String, default: null },
     googleEnabled: { type: Boolean, default: false },
+    // Set when the login was refused because the email is unverified; the card
+    // below offers to resend the link to this exact address.
+    unverified_email: { type: String, default: null },
 });
 
 const showPassword = ref(false);
@@ -18,6 +22,46 @@ const form = useForm({
     password: '',
     remember: false,
 });
+
+// The blocked-login address, local copy so typing a new one dismisses the card.
+const blockedEmail = ref(props.unverified_email);
+watch(
+    () => props.unverified_email,
+    (value) => {
+        blockedEmail.value = value;
+        resent.value = false;
+        resendError.value = '';
+    }
+);
+watch(
+    () => form.email,
+    (value) => {
+        if (value && value !== blockedEmail.value) blockedEmail.value = null;
+    }
+);
+
+const resending = ref(false);
+const resent = ref(false);
+const resendError = ref('');
+
+const resend = () => {
+    resending.value = true;
+    resent.value = false;
+    resendError.value = '';
+
+    router.post('/email/resend', { email: blockedEmail.value }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            resent.value = true;
+        },
+        onError: (errors) => {
+            resendError.value = errors.email ?? 'Could not resend the verification link. Try again shortly.';
+        },
+        onFinish: () => {
+            resending.value = false;
+        },
+    });
+};
 
 // The branded splash shows while the POST is in flight and flips to a welcome
 // the moment the server accepts the session. Success redirects into the app, so
@@ -29,7 +73,17 @@ const welcome = ref(false);
 const submit = () => {
     showPreload.value = true;
     form.post('/login', {
-        onSuccess: () => {
+        onSuccess: (page) => {
+            // A refused login (e.g. unverified email) redirects right back to
+            // this page, so Inertia reuses this component instance and the
+            // welcome splash would otherwise never unmount. Only play it when
+            // the login actually leaves for the app.
+            if (page.component === 'Auth/Login') {
+                showPreload.value = false;
+                welcome.value = false;
+                return;
+            }
+
             welcome.value = true;
         },
         onError: () => {
@@ -62,6 +116,41 @@ const submit = () => {
                 >
                     {{ status }}
                 </p>
+
+                <div
+                    v-if="blockedEmail"
+                    class="mt-6 rounded-lg border border-warning/40 bg-warning-soft px-4 py-4"
+                    role="alert"
+                >
+                    <div class="flex items-start gap-3">
+                        <span class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-warning/15">
+                            <AppIcon name="warning" class="text-warning" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="text-sm font-semibold text-warning">Email Not Verified</p>
+                            <p class="mt-1 text-sm leading-relaxed text-csc-ink/70">
+                                Your email address has not yet been verified. Please check your email and click the
+                                verification link to activate your account.
+                            </p>
+                            <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <button
+                                    type="button"
+                                    :disabled="resending"
+                                    class="rounded text-sm font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue disabled:cursor-not-allowed disabled:opacity-60"
+                                    @click="resend"
+                                >
+                                    {{ resending ? 'Sending…' : 'Resend verification email' }}
+                                </button>
+                                <span v-if="resent" class="text-xs font-medium text-success">
+                                    A new verification link has been sent.
+                                </span>
+                                <span v-else-if="resendError" class="text-xs font-medium text-danger">
+                                    {{ resendError }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <p
                     v-if="form.errors.form"

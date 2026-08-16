@@ -7,7 +7,9 @@ use App\Enums\PaymentStatus;
 use App\Enums\RefundStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
+use App\Models\PaymentSetting;
 use App\Models\RefundRequest;
+use App\Models\Registration;
 use App\Support\PaymentService;
 use App\Support\RefundService;
 use Illuminate\Http\RedirectResponse;
@@ -90,6 +92,12 @@ class PaymentController extends Controller
                 'participant' => $payment->user->name,
                 'training' => $payment->training->title,
                 'amount' => $payment->amount,
+                // The discount block. `gross` is derived from the stored pair,
+                // never re-read off the training, so a later fee change cannot
+                // move a figure on a closed payment.
+                'prime_hrm_discount' => $payment->prime_hrm_discount,
+                'discount_amount' => $payment->discount_amount,
+                'gross_amount' => $payment->grossAmount(),
                 'method' => $payment->payment_method->label(),
                 'reference_number' => $payment->reference_number,
                 'payment_date' => $payment->payment_date->format('d M Y'),
@@ -157,6 +165,12 @@ class PaymentController extends Controller
             'refundPipeline' => collect(RefundStatus::pipeline())
                 ->map(fn (RefundStatus $stage) => ['value' => $stage->value, 'label' => $stage->label()])
                 ->all(),
+            // The bank account participants are told to deposit training fees
+            // into. Editing this row updates every approval notification and
+            // every payment prompt at once.
+            'paymentSettings' => PaymentSetting::current()->only([
+                'bank_name', 'account_name', 'account_number', 'instructions',
+            ]),
         ]);
     }
 
@@ -186,6 +200,10 @@ class PaymentController extends Controller
                 Rule::unique('payments', 'or_number')->ignore($payment),
             ],
             'or_date' => ['nullable', 'date', 'before_or_equal:today'],
+            // Officer-only, by design: the discount is an entitlement CSC
+            // verifies, so it is never something the participant ticks on the
+            // way in.
+            'prime_hrm_discount' => ['boolean'],
         ]);
 
         if ($validated['decision'] === PaymentStatus::Verified->value) {
@@ -197,6 +215,7 @@ class PaymentController extends Controller
                     'or_number' => $validated['or_number'] ?? null,
                     'or_date' => $validated['or_date'] ?? null,
                 ],
+                (bool) ($validated['prime_hrm_discount'] ?? false),
             );
         } else {
             PaymentService::reject($payment, $request->user(), (string) ($validated['remarks'] ?? ''));
@@ -206,13 +225,112 @@ class PaymentController extends Controller
     }
 
     /**
+     * Record money taken at the counter, ported from v1's `payment-actions.php`.
+     *
+     * The participant paid cash at the desk and left with the receipt, so there
+     * is no upload to review — the officer enters what is on the OR stub. The
+     * registration is re-resolved against the field-office scope first, exactly
+     * as the roster is, so a scoped officer cannot record a payment against
+     * another office's participant by posting its id.
+     */
+    public function record(Request $request, Registration $registration): RedirectResponse
+    {
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        $registration = Registration::whereKey($registration->getKey())
+            ->when($officeId !== null, fn ($query) => $query->whereHas(
+                'user.profile',
+                fn ($profile) => $profile->where('field_office_id', $officeId)
+            ))
+            ->firstOr(fn () => abort(404));
+
+        $registration->loadMissing('training');
+
+        $method = PaymentMethod::tryFrom((string) $request->input('payment_method'));
+
+        $validated = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
+            'payment_method' => [
+                'required',
+                // Same rule the participant's own form applies: a promissory
+                // note is only on offer where the training was published as
+                // accepting one.
+                Rule::enum(PaymentMethod::class)->when(
+                    ! $registration->training->accepts_promissory,
+                    fn ($rule) => $rule->except(PaymentMethod::Promissory)
+                ),
+            ],
+            'payment_date' => ['required', 'date', 'before_or_equal:today'],
+            'reference_number' => [
+                'nullable', 'string', 'max:64',
+                Rule::requiredIf(fn () => $method?->requiresReference() ?? false),
+            ],
+            // The receipt is the whole point of recording it here, so unlike a
+            // reviewed upload the OR is mandatory — except for a promissory
+            // note, where no receipt has been issued because no money arrived.
+            'or_number' => [
+                'nullable', 'string', 'max:32',
+                Rule::requiredIf(fn () => $method?->isSettlement() ?? false),
+                Rule::unique('payments', 'or_number'),
+            ],
+            'or_date' => ['nullable', 'date', 'before_or_equal:today'],
+            // Whoever actually took the money, when HRD is entering it on a
+            // field office's behalf. Defaults to the officer doing the entry.
+            'collecting_officer_id' => [
+                'nullable', 'integer',
+                Rule::exists('users', 'id')->where('is_active', true),
+            ],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+            // The 20% PRIME-HRM incentive. The posted amount is ignored when
+            // this is set — the service computes what is owed, so the figure
+            // cannot be steered from the browser.
+            'prime_hrm_discount' => ['boolean'],
+        ]);
+
+        PaymentService::recordAtCounter($registration, $request->user(), $validated);
+
+        return back()->with(
+            'success',
+            'Payment recorded and verified against '.$registration->user->name.'.'
+        );
+    }
+
+    /**
+     * Save the bank-deposit details participants are told to pay into.
+     *
+     * The one place these live is the settings row, so updating it is updating
+     * every approval notification and payment prompt in one move.
+     */
+    public function updateSettings(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'bank_name' => ['required', 'string', 'max:255'],
+            'account_name' => ['required', 'string', 'max:255'],
+            'account_number' => ['required', 'string', 'max:64'],
+            'instructions' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $setting = PaymentSetting::current();
+
+        $setting->forceFill([
+            'bank_name' => $validated['bank_name'],
+            'account_name' => $validated['account_name'],
+            'account_number' => $validated['account_number'],
+            'instructions' => $validated['instructions'],
+            'updated_by' => $request->user()->getKey(),
+        ])->save();
+
+        return back()->with('success', 'Bank deposit details updated.');
+    }
+
+    /**
      * The full account number goes only to the roles that actually disburse.
      * Everyone else gets the last four, which is enough to match a claim
      * against a bank advice without the whole number sitting on screen.
      */
     private function accountNumberFor(RefundRequest $refund, Request $request): ?string
     {
-        return $request->user()->role->seesBankDetails()
+        return $request->user()->seesBankDetails()
             ? $refund->account_number
             : $refund->maskedAccountNumber();
     }

@@ -445,4 +445,151 @@ class CertificateTest extends TestCase
 
         $this->actingAs($participant)->get('/my/certificates')->assertOk();
     }
+
+    // --- The certificate register (v1's certificates.php) -----------------
+
+    public function test_the_register_lists_issued_certificates_and_counts_them(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        // A half-finished release — a row with no PDF behind it — is not a
+        // certificate anyone can be shown.
+        Certificate::factory()->create(['generated_at' => null, 'file_path' => null]);
+
+        $this->actingAs($this->staff())
+            ->get('/admin/certificates')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Admin/Certificates/Index')
+                ->has('certificates.data', 1)
+                ->where('certificates.data.0.number', $certificate->certificate_number)
+                ->where('stats.total', 1)
+                ->where('can.resend', true)
+            );
+    }
+
+    public function test_the_register_finds_a_certificate_by_its_number(): void
+    {
+        $wanted = CertificateService::release($this->completedRegistration(), $this->staff());
+        CertificateService::release($this->completedRegistration(), $this->staff());
+
+        // The commonest real question: someone rings up quoting a number.
+        $this->actingAs($this->staff())
+            ->get('/admin/certificates?search='.$wanted->certificate_number)
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('certificates.data', 1)
+                ->where('certificates.data.0.number', $wanted->certificate_number)
+            );
+    }
+
+    public function test_staff_can_download_an_issued_certificate(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->actingAs($this->staff())
+            ->get("/admin/certificates/{$certificate->id}/download")
+            ->assertOk()
+            ->assertDownload("{$certificate->certificate_number}.pdf");
+    }
+
+    public function test_staff_can_re_send_the_certificate_email(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        Notification::fake();
+
+        $this->actingAs($this->staff())
+            ->post("/admin/certificates/{$certificate->id}/resend")
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        Notification::assertSentTo($certificate->user, CertificateReleased::class);
+
+        // Nothing is re-issued: the number and the stored file are untouched,
+        // so the document already in circulation stays valid.
+        $this->assertSame(
+            $certificate->file_path,
+            $certificate->fresh()->file_path
+        );
+        $this->assertNotNull($certificate->fresh()->email_sent_at);
+    }
+
+    public function test_the_detail_page_shows_who_has_verified_a_certificate(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        // Two public lookups, recorded the way the verification endpoint does.
+        CertificateService::recordVerification($certificate, '203.0.113.7', 'Mozilla/5.0 Employer');
+        CertificateService::recordVerification($certificate, '198.51.100.4', 'Mozilla/5.0 Other');
+
+        $this->actingAs($this->staff())
+            ->get("/admin/certificates/{$certificate->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Admin/Certificates/Show')
+                ->where('certificate.number', $certificate->certificate_number)
+                ->where('certificate.verifications', 2)
+                ->has('verifications', 2)
+                // Newest first: the question is who has been asking lately.
+                ->where('verifications.0.ip_address', '198.51.100.4')
+                // The QR is rendered server-side, so the page needs no request
+                // to an outside service carrying a certificate code.
+                ->where('certificate.qr', fn ($qr) => str_starts_with($qr, 'data:image/'))
+            );
+    }
+
+    public function test_a_certificate_nobody_has_checked_says_so(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->actingAs($this->staff())
+            ->get("/admin/certificates/{$certificate->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('verifications', 0)
+                ->where('certificate.verifications', 0)
+                ->where('certificate.last_verified_at', null)
+            );
+    }
+
+    public function test_management_may_read_the_register_but_not_re_send(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+        $staff = $this->staff(Role::Management);
+
+        $this->actingAs($staff)
+            ->get('/admin/certificates')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('can.resend', false));
+
+        $this->actingAs($staff)
+            ->post("/admin/certificates/{$certificate->id}/resend")
+            ->assertForbidden();
+    }
+
+    public function test_the_register_is_field_office_scoped(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        // Fails closed: a field-office account with no office matches nothing.
+        $staff = User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => null,
+            'profile_completed_at' => now(),
+        ]);
+
+        $this->actingAs($staff)
+            ->get('/admin/certificates')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->has('certificates.data', 0));
+
+        $this->actingAs($staff)
+            ->get("/admin/certificates/{$certificate->id}/download")
+            ->assertNotFound();
+
+        $this->actingAs($staff)
+            ->get("/admin/certificates/{$certificate->id}")
+            ->assertNotFound();
+    }
 }

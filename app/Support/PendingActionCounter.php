@@ -88,7 +88,7 @@ class PendingActionCounter
     {
         $counts = [];
 
-        if ($user->role->handlesPayments()) {
+        if ($user->collectsPayments()) {
             // The payments screen leads with the two queues that are still work:
             // proof awaiting verification, and refunds still mid-pipeline.
             $counts['admin-payments'] = Payment::where('status', PaymentStatus::Pending)->count()

@@ -6,6 +6,7 @@ use App\Enums\ChargeTo;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\RegistrationStatus;
+use App\Enums\SupervisoryDocumentStatus;
 use Database\Factories\RegistrationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,7 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'user_id', 'training_id', 'status', 'charge_to', 'needs_certificate',
-    'supporting_document_path', 'registered_at', 'cancelled_at', 'attended_at',
+    'supporting_document_path', 'supervisory_document_status',
+    'supervisory_document_reviewed_by', 'supervisory_document_reviewed_at',
+    'supervisory_document_remarks', 'registered_at', 'cancelled_at', 'attended_at',
     'reviewed_by', 'reviewed_at', 'review_remarks',
 ])]
 class Registration extends Model
@@ -35,6 +38,8 @@ class Registration extends Model
             'cancelled_at' => 'datetime',
             'attended_at' => 'datetime',
             'reviewed_at' => 'datetime',
+            'supervisory_document_status' => SupervisoryDocumentStatus::class,
+            'supervisory_document_reviewed_at' => 'datetime',
         ];
     }
 
@@ -46,6 +51,12 @@ class Registration extends Model
     public function training(): BelongsTo
     {
         return $this->belongsTo(Training::class);
+    }
+
+    /** The staff member who last verified or rejected the supervisory document. */
+    public function supervisoryDocumentReviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'supervisory_document_reviewed_by');
     }
 
     public function attendances(): HasMany

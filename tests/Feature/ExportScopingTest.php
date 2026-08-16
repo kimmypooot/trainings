@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentStatus;
 use App\Enums\Role;
 use App\Models\Attendance;
 use App\Models\FieldOffice;
@@ -43,6 +44,16 @@ class ExportScopingTest extends TestCase
             'profile_completed_at' => now(),
             'field_office_id' => $office?->getKey(),
         ]);
+    }
+
+    /** Field-office staff carrying the collecting-officer designation. */
+    private function collectorFor(?FieldOffice $office): User
+    {
+        $user = $this->staffFor($office);
+
+        $user->forceFill(['is_collecting_officer' => true])->save();
+
+        return $user;
     }
 
     private function participantIn(FieldOffice $office, string $name): User
@@ -88,6 +99,154 @@ class ExportScopingTest extends TestCase
 
         $this->assertStringContainsString($a->name, $csv);
         $this->assertStringContainsString($b->name, $csv);
+    }
+
+    public function test_the_participant_export_carries_the_directorys_filters(): void
+    {
+        $wanted = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+        $wanted->profile->update(['sector' => 'Judiciary']);
+
+        $other = $this->participantIn($this->officeA, 'BRAVO PARTICIPANT');
+        $other->profile->update(['sector' => 'Local Government Unit']);
+
+        // v1's Export All downloaded what the administrator had narrowed the
+        // table down to. Same filter names, read through ParticipantFilter, so
+        // the two surfaces cannot answer differently.
+        $csv = $this->body(
+            $this->actingAs($this->staffFor(null, Role::Admin))
+                ->get('/admin/exports/participants?sector=Judiciary')
+                ->assertOk()
+        );
+
+        $this->assertStringContainsString($wanted->name, $csv);
+        $this->assertStringNotContainsString($other->name, $csv);
+    }
+
+    public function test_a_filtered_participant_export_still_cannot_cross_offices(): void
+    {
+        $mine = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+        $mine->profile->update(['sector' => 'Judiciary']);
+
+        $theirs = $this->participantIn($this->officeB, 'BRAVO PARTICIPANT');
+        $theirs->profile->update(['sector' => 'Judiciary']);
+
+        // The scoping is not one of the filters — it is the base the filters
+        // narrow, so no query string can widen it.
+        $csv = $this->body(
+            $this->actingAs($this->staffFor($this->officeA))
+                ->get('/admin/exports/participants?sector=Judiciary&status=active')
+                ->assertOk()
+        );
+
+        $this->assertStringContainsString($mine->name, $csv);
+        $this->assertStringNotContainsString($theirs->name, $csv);
+    }
+
+    public function test_participant_history_carries_the_whole_record(): void
+    {
+        $participant = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+
+        $training = Training::factory()->create([
+            'title' => 'Records Management 101',
+            'payment_required' => true,
+            'payment_amount' => 1500,
+        ]);
+
+        $registration = Registration::factory()->approved()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+        ]);
+
+        Payment::factory()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+            'amount' => 1200,
+            'prime_hrm_discount' => true,
+            'discount_amount' => 300,
+            'or_number' => 'OR-HIST-001',
+            'status' => PaymentStatus::Verified,
+        ]);
+
+        $csv = $this->body(
+            $this->actingAs($this->staffFor(null, Role::Admin))
+                ->get("/admin/exports/participants/{$participant->id}/history")
+                ->assertOk()
+        );
+
+        $this->assertStringContainsString('Records Management 101', $csv);
+        $this->assertStringContainsString('ALPHA PARTICIPANT', $csv);
+        // The row stands on its own: what was decided, paid and receipted.
+        $this->assertStringContainsString('OR-HIST-001', $csv);
+        $this->assertStringContainsString('Yes (20%)', $csv);
+    }
+
+    public function test_participant_history_says_so_when_nothing_was_paid(): void
+    {
+        $participant = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+
+        Registration::factory()->approved()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create()->getKey(),
+        ]);
+
+        $csv = $this->body(
+            $this->actingAs($this->staffFor(null, Role::Admin))
+                ->get("/admin/exports/participants/{$participant->id}/history")
+                ->assertOk()
+        );
+
+        // An empty cell reads as "unknown"; this reads as "none", which is what
+        // a free training or an unpaid registration actually means.
+        $this->assertStringContainsString('No payment recorded', $csv);
+    }
+
+    public function test_participant_history_covers_only_that_participant(): void
+    {
+        $mine = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+        $other = $this->participantIn($this->officeA, 'BRAVO PARTICIPANT');
+
+        foreach ([$mine, $other] as $person) {
+            Registration::factory()->approved()->create([
+                'user_id' => $person->getKey(),
+                'training_id' => Training::factory()->create()->getKey(),
+            ]);
+        }
+
+        $csv = $this->body(
+            $this->actingAs($this->staffFor(null, Role::Admin))
+                ->get("/admin/exports/participants/{$mine->id}/history")
+                ->assertOk()
+        );
+
+        $this->assertStringContainsString($mine->name, $csv);
+        $this->assertStringNotContainsString($other->name, $csv);
+    }
+
+    public function test_participant_history_is_office_scoped(): void
+    {
+        $theirs = $this->participantIn($this->officeB, 'BRAVO PARTICIPANT');
+        $mine = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+        $staff = $this->staffFor($this->officeA);
+
+        // 404, not 403 — a scoped officer has no business knowing the record
+        // exists, which is the rule the participant directory already applies.
+        $this->actingAs($staff)
+            ->get("/admin/exports/participants/{$theirs->id}/history")
+            ->assertNotFound();
+
+        $this->actingAs($staff)
+            ->get("/admin/exports/participants/{$mine->id}/history")
+            ->assertOk();
+    }
+
+    public function test_a_staff_account_has_no_participant_history(): void
+    {
+        $staff = $this->staffFor($this->officeA, Role::Management);
+
+        $this->actingAs($this->staffFor(null, Role::Admin))
+            ->get("/admin/exports/participants/{$staff->id}/history")
+            ->assertNotFound();
     }
 
     public function test_registration_export_is_scoped(): void
@@ -161,7 +320,7 @@ class ExportScopingTest extends TestCase
         $this->assertStringNotContainsString('ALPHA PARTICIPANT', $csv);
     }
 
-    public function test_only_finance_roles_can_export_payments(): void
+    public function test_only_designated_collectors_can_export_payments(): void
     {
         Payment::factory()->create();
 
@@ -169,7 +328,7 @@ class ExportScopingTest extends TestCase
             ->get('/admin/exports/payments')
             ->assertForbidden();
 
-        $this->actingAs($this->staffFor(null, Role::CollectingOfficer))
+        $this->actingAs($this->collectorFor(null))
             ->get('/admin/exports/payments')
             ->assertOk();
     }
@@ -268,6 +427,11 @@ class ExportScopingTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('demographics.sex', fn ($rows) => $total($rows) === 1)
                 ->where('demographics.positionLevel', fn ($rows) => $total($rows) === 1)
+                // The geographic cuts are scoped like every other one — a
+                // region chart that leaked the whole region would be the same
+                // disclosure as a name list.
+                ->where('demographics.region', fn ($rows) => $total($rows) === 1)
+                ->where('demographics.province', fn ($rows) => $total($rows) === 1)
                 ->where('topAgencies', fn ($rows) => $total($rows) === 1)
             );
 
@@ -276,6 +440,7 @@ class ExportScopingTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('demographics.sex', fn ($rows) => $total($rows) === 3)
+                ->where('demographics.region', fn ($rows) => $total($rows) === 3)
                 ->where('topAgencies', fn ($rows) => $total($rows) === 3)
             );
     }
@@ -338,7 +503,7 @@ class ExportScopingTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('payments', null));
 
-        $this->actingAs($this->staffFor(null, Role::CollectingOfficer))
+        $this->actingAs($this->collectorFor(null))
             ->get('/admin/analytics')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->has('payments.verified_total'));

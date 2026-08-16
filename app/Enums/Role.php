@@ -42,35 +42,18 @@ enum Role: string
     }
 
     /**
-     * Roles that may verify payments and settle refunds.
+     * Roles that reach the money screens by virtue of the job itself.
      *
-     * Collecting officers exist only for this — they are staff, but the cashier
-     * has no business in the participant directory or the training roster.
+     * Everyone else needs the collecting-officer designation — see
+     * User::collectsPayments(), which is the predicate the routes actually
+     * check. Kept as a list here so the two callers agree on who is included
+     * without repeating the pair.
+     *
+     * @return array<int, self>
      */
     public static function financial(): array
     {
-        return [self::CollectingOfficer, self::Admin, self::SuperAdmin];
-    }
-
-    public function handlesPayments(): bool
-    {
-        return in_array($this, self::financial(), true);
-    }
-
-    /**
-     * Narrower than financial(): who may read a refund payee's full bank
-     * account number.
-     *
-     * Everyone in financial() can open the refund queue, but only the cashier
-     * actually cuts the transfer. HRD reviews whether a claim is valid, which
-     * needs the amount and the reason and nothing else — so the account number
-     * reaches them masked. The distinction is worth keeping even though both
-     * roles are trusted: the number is on screen far longer than it is needed,
-     * usually in a shared office.
-     */
-    public function seesBankDetails(): bool
-    {
-        return $this === self::CollectingOfficer || $this === self::SuperAdmin;
+        return [self::Admin, self::SuperAdmin];
     }
 
     /**

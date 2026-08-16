@@ -146,6 +146,22 @@ const tiles = computed(() => [
             </AppCard>
 
             <AppCard
+                title="Where Participants Come From"
+                subtitle="Their own region and province, not the field office they are assigned to."
+            >
+                <div class="grid gap-6 sm:grid-cols-2">
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Region</h3>
+                        <AppBarList :rows="demographics.region" label-width="13rem" />
+                    </div>
+                    <div>
+                        <h3 class="mb-2 text-sm font-medium text-csc-ink">Province</h3>
+                        <AppBarList :rows="demographics.province" label-width="11rem" />
+                    </div>
+                </div>
+            </AppCard>
+
+            <AppCard
                 v-if="topAgencies.length"
                 title="Top Agencies"
                 subtitle="The ten sending the most participants."
@@ -174,16 +190,16 @@ const tiles = computed(() => [
 
             <AppCard title="Exports" subtitle="Downloads honour the same field-office scoping as these figures.">
                 <div class="flex flex-wrap gap-3">
-                    <AppButton href="/admin/exports/participants" variant="ghost" size="sm" icon="download">
+                    <AppButton href="/admin/exports/participants" variant="ghost" size="sm" icon="download" external>
                         Participants (CSV)
                     </AppButton>
-                    <AppButton href="/admin/exports/participants?format=xlsx" variant="ghost" size="sm" icon="download">
+                    <AppButton href="/admin/exports/participants?format=xlsx" variant="ghost" size="sm" icon="download" external>
                         Participants (Excel)
                     </AppButton>
-                    <AppButton href="/admin/exports/registrations" variant="ghost" size="sm" icon="download">
+                    <AppButton href="/admin/exports/registrations" variant="ghost" size="sm" icon="download" external>
                         Registrations (CSV)
                     </AppButton>
-                    <AppButton v-if="payments" href="/admin/exports/payments" variant="ghost" size="sm" icon="download">
+                    <AppButton v-if="payments" href="/admin/exports/payments" variant="ghost" size="sm" icon="download" external>
                         Payments (CSV)
                     </AppButton>
                 </div>

@@ -84,6 +84,38 @@ class FieldOfficeScopingTest extends TestCase
         $this->actingAs($staff)->get("/admin/participants/{$mine->id}")->assertOk();
     }
 
+    public function test_field_office_staff_may_manage_their_own_office_only(): void
+    {
+        $theirs = $this->participantIn($this->samar, 'samar@example.com');
+        $mine = $this->participantIn($this->leyte, 'leyte@example.com');
+        $staff = $this->fieldOfficeStaff($this->leyte);
+
+        // A branch office correcting and switching off its own records is the
+        // ordinary case, so the role check lets it through…
+        $this->actingAs($staff)->get("/admin/participants/{$mine->id}/edit")->assertOk();
+        $this->actingAs($staff)->post("/admin/participants/{$mine->id}/toggle")->assertRedirect();
+        $this->assertFalse($mine->fresh()->is_active);
+
+        // …and the office guard is what keeps "its own" honest, on every write
+        // route and not just the listing.
+        $this->actingAs($staff)->get("/admin/participants/{$theirs->id}/edit")->assertNotFound();
+        $this->actingAs($staff)->put("/admin/participants/{$theirs->id}", [])->assertNotFound();
+        $this->actingAs($staff)->post("/admin/participants/{$theirs->id}/toggle")->assertNotFound();
+        $this->actingAs($staff)->post("/admin/participants/{$theirs->id}/password-reset")->assertNotFound();
+        $this->assertTrue($theirs->fresh()->is_active);
+    }
+
+    public function test_unassigned_field_office_staff_may_manage_nobody(): void
+    {
+        $participant = $this->participantIn($this->leyte, 'leyte@example.com');
+        $staff = $this->fieldOfficeStaff(null);
+
+        // scopedFieldOfficeId() resolves to 0 for an unassigned account, which
+        // matches nothing — failing closed on the writes as well as the reads.
+        $this->actingAs($staff)->get("/admin/participants/{$participant->id}/edit")->assertNotFound();
+        $this->actingAs($staff)->post("/admin/participants/{$participant->id}/toggle")->assertNotFound();
+    }
+
     public function test_roster_is_filtered_but_the_training_stays_visible(): void
     {
         $training = Training::factory()->create();

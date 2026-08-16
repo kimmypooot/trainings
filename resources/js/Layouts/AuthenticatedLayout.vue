@@ -1,8 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import AppLogo from '@/Components/AppLogo.vue';
 import AppAvatar from '@/Components/AppAvatar.vue';
+import AppFooter from '@/Components/AppFooter.vue';
+import AppChangePasswordModal from '@/Components/AppChangePasswordModal.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppToast from '@/Components/AppToast.vue';
 import AppModal from '@/Components/AppModal.vue';
@@ -19,6 +20,9 @@ const user = computed(() => page.props.auth?.user ?? {});
 const role = computed(() => user.value.role ?? 'participant');
 const unread = computed(() => page.props.unreadNotifications ?? 0);
 const pendingActions = computed(() => page.props.pendingActions ?? {});
+// Staff pass straight through maintenance mode, so without a banner it can sit
+// on for days unnoticed — see HandleInertiaRequests' maintenanceMode prop.
+const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
 
 // Notifications count comes from its own shared prop; every other badge is a
 // pending action fed to the sidebar by key (see PendingActionCounter).
@@ -35,10 +39,10 @@ const ALL_ROLES = [
 ];
 
 /**
- * Nav is grouped by what the participant is trying to do, and every item
- * declares the roles allowed to see it — adding the staff areas later is a data
- * change here rather than a rewrite of the shell. `primary` marks the items
- * that earn a slot in the mobile tab bar.
+ * Nav is grouped by workflow — what the user is trying to get done — and
+ * every item declares the roles allowed to see it, so adding staff areas
+ * later is a data change here rather than a rewrite of the shell. `primary`
+ * marks the items that earn a slot in the mobile tab bar.
  */
 const STAFF_ROLES = ['field-office', 'admin', 'management', 'superadmin'];
 
@@ -76,8 +80,8 @@ const navGroups = [
         ],
     },
     {
-        key: 'training',
-        label: 'Training',
+        key: 'trainings',
+        label: 'Trainings',
         items: [
             {
                 key: 'trainings',
@@ -86,6 +90,28 @@ const navGroups = [
                 primary: true,
                 roles: ['participant'],
                 icon: 'list',
+            },
+            {
+                key: 'trainings-calendar',
+                label: 'Calendar',
+                href: '/trainings/calendar',
+                roles: ['participant'],
+                icon: 'calendar',
+            },
+            {
+                key: 'admin-trainings',
+                label: 'Manage Trainings',
+                href: '/admin/trainings',
+                roles: ['admin', 'superadmin'],
+                icon: 'calendar',
+            },
+            {
+                key: 'admin-participants',
+                label: 'Manage Participants',
+                href: '/admin/participants',
+                primary: true,
+                roles: STAFF_ROLES,
+                icon: 'users',
             },
             {
                 key: 'registrations',
@@ -103,6 +129,19 @@ const navGroups = [
                 icon: 'certificate',
             },
             {
+                key: 'admin-certificates',
+                label: 'Certificates',
+                href: '/admin/certificates',
+                roles: STAFF_ROLES,
+                icon: 'certificate',
+            },
+        ],
+    },
+    {
+        key: 'payments',
+        label: 'Payments & Fees',
+        items: [
+            {
                 key: 'payments',
                 label: 'Payments',
                 href: '/my/payments',
@@ -115,6 +154,45 @@ const navGroups = [
                 href: '/my/physical-or',
                 roles: ['participant'],
                 icon: 'document',
+            },
+            {
+                key: 'admin-payments',
+                label: 'Payments',
+                href: '/admin/payments',
+                // Collecting is a designation, not a role, so this one item
+                // cannot be decided from the role list alone — `designation`
+                // names the shared auth flag that actually gates the routes.
+                roles: STAFF_ROLES,
+                designation: 'collects_payments',
+                icon: 'card',
+            },
+            {
+                key: 'admin-physical-or',
+                label: 'Physical OR',
+                href: '/admin/physical-or',
+                roles: ['admin', 'superadmin'],
+                icon: 'document',
+            },
+        ],
+    },
+    {
+        key: 'requests',
+        label: 'Requests',
+        items: [
+            {
+                key: 'admin-requests',
+                label: 'Requests',
+                href: '/admin/requests',
+                primary: true,
+                roles: STAFF_ROLES,
+                icon: 'document',
+            },
+            {
+                key: 'admin-agency-requests',
+                label: 'Agency Requests',
+                href: '/admin/agency-requests',
+                roles: ['admin', 'superadmin'],
+                icon: 'building',
             },
             {
                 key: 'training-requests',
@@ -136,24 +214,9 @@ const navGroups = [
         ],
     },
     {
-        key: 'core',
-        label: 'Core Management',
+        key: 'administration',
+        label: 'Administration',
         items: [
-            {
-                key: 'admin-trainings',
-                label: 'Manage Trainings',
-                href: '/admin/trainings',
-                roles: ['admin', 'superadmin'],
-                icon: 'calendar',
-            },
-            {
-                key: 'admin-participants',
-                label: 'Manage Participants',
-                href: '/admin/participants',
-                primary: true,
-                roles: STAFF_ROLES,
-                icon: 'users',
-            },
             {
                 key: 'admin-field-offices',
                 label: 'Field Offices',
@@ -167,35 +230,6 @@ const navGroups = [
                 href: '/admin/analytics',
                 roles: STAFF_ROLES,
                 icon: 'analytics',
-            },
-            {
-                key: 'admin-payments',
-                label: 'Payments',
-                href: '/admin/payments',
-                roles: ['collecting-officer', 'admin', 'superadmin'],
-                icon: 'card',
-            },
-            {
-                key: 'admin-physical-or',
-                label: 'Physical OR',
-                href: '/admin/physical-or',
-                roles: ['admin', 'superadmin'],
-                icon: 'document',
-            },
-            {
-                key: 'admin-requests',
-                label: 'Requests',
-                href: '/admin/requests',
-                primary: true,
-                roles: STAFF_ROLES,
-                icon: 'document',
-            },
-            {
-                key: 'admin-agency-requests',
-                label: 'Agency Requests',
-                href: '/admin/agency-requests',
-                roles: ['admin', 'superadmin'],
-                icon: 'building',
             },
             {
                 key: 'admin-emails',
@@ -217,6 +251,13 @@ const navGroups = [
                 href: '/admin/activity',
                 roles: ['superadmin'],
                 icon: 'shield',
+            },
+            {
+                key: 'admin-maintenance',
+                label: 'Maintenance Mode',
+                href: '/admin/maintenance',
+                roles: ['superadmin'],
+                icon: 'settings',
             },
         ],
     },
@@ -246,7 +287,16 @@ const navGroups = [
 
 const visibleGroups = computed(() =>
     navGroups
-        .map((group) => ({ ...group, items: group.items.filter((item) => item.roles.includes(role.value)) }))
+        .map((group) => ({
+            ...group,
+            items: group.items.filter(
+                (item) =>
+                    item.roles.includes(role.value) &&
+                    // An item may also require a designation the role does not
+                    // carry — collecting payments is the one such duty.
+                    (!item.designation || page.props.auth?.user?.[item.designation])
+            ),
+        }))
         .filter((group) => group.items.length)
 );
 
@@ -335,6 +385,12 @@ onBeforeUnmount(() => {
 // it is up before the POST starts and the whole shell unmounts on arrival.
 const confirmingSignOut = ref(false);
 const signingOut = ref(false);
+const changePasswordOpen = ref(false);
+
+const openChangePassword = () => {
+    accountOpen.value = false;
+    changePasswordOpen.value = true;
+};
 
 const signOut = () => {
     confirmingSignOut.value = true;
@@ -369,21 +425,31 @@ const confirmSignOut = () => {
         -->
         <aside
             id="app-sidebar"
-            class="fixed inset-y-0 left-0 z-(--z-drawer) flex w-60 flex-col bg-csc-blue transition-[transform,width] duration-200 md:z-(--z-backdrop) md:translate-x-0"
+            class="fixed inset-y-0 left-0 z-(--z-drawer) flex w-64 flex-col bg-csc-blue transition-[transform,width] duration-200 md:z-(--z-backdrop) md:translate-x-0"
             :class="[
                 drawerOpen ? 'translate-x-0' : '-translate-x-full',
-                collapsed ? 'md:w-16' : 'md:w-60',
+                collapsed ? 'md:w-16' : 'md:w-64',
             ]"
         >
             <div
-                class="flex h-16 items-center gap-2 border-b border-white/10 px-3"
+                class="flex items-center gap-3 border-b border-white/10 px-5 py-5"
                 :class="collapsed ? 'md:justify-center md:px-0' : ''"
             >
                 <Link
                     href="/dashboard"
-                    class="rounded px-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+                    class="flex items-center gap-3 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
                 >
-                    <AppLogo variant="light" size="sm" :wordmark="!collapsed" />
+                    <img
+                        src="/images/csc-logo.png"
+                        alt="CSC Logo"
+                        class="h-9 w-9 shrink-0 object-contain"
+                    />
+                    <span v-if="!collapsed" class="leading-tight">
+                        <span class="block text-sm font-bold text-white">CSC RO VIII</span>
+                        <span class="mt-0.5 block text-xs font-medium tracking-wide text-white/60">
+                            TIMS
+                        </span>
+                    </span>
                     <span class="sr-only">CSC TIMS dashboard</span>
                 </Link>
 
@@ -397,37 +463,30 @@ const confirmSignOut = () => {
                 </button>
             </div>
 
-            <nav class="flex-1 overflow-y-auto p-3" aria-label="Main">
-                <div v-for="(group, index) in visibleGroups" :key="group.key" :class="index ? 'mt-5' : ''">
-                    <!-- Collapsed rail keeps the grouping as a rule, since labels have no room -->
+            <nav class="sidebar-nav min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Main">
+                <div v-for="group in visibleGroups" :key="group.key">
                     <p
-                        class="px-3 pb-2 text-2xs font-semibold tracking-wider text-white/45 uppercase"
+                        class="mb-1.5 px-3 text-[10px] font-bold tracking-widest text-white/40 uppercase"
                         :class="collapsed ? 'md:hidden' : ''"
                     >
                         {{ group.label }}
                     </p>
-                    <div v-if="index" class="mx-3 mb-2 hidden h-px bg-white/10" :class="collapsed ? 'md:block' : ''" />
 
-                    <div class="space-y-1">
+                    <div class="space-y-0.5">
                         <Link
                             v-for="item in group.items"
                             :key="item.key"
                             :href="item.href"
-                            class="group relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                            class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                             :class="[
                                 props.current === item.key
                                     ? 'bg-white/15 text-white'
-                                    : 'text-white/70 hover:bg-white/10 hover:text-white',
+                                    : 'text-white/75 hover:bg-white/10 hover:text-white',
                                 collapsed ? 'md:justify-center md:px-0' : '',
                             ]"
                             :aria-current="props.current === item.key ? 'page' : undefined"
                             :title="collapsed ? item.label : undefined"
                         >
-                            <span
-                                v-if="props.current === item.key"
-                                class="absolute inset-y-1.5 left-0 w-1 rounded-r bg-white"
-                                aria-hidden="true"
-                            />
                             <span class="relative shrink-0">
                                 <AppIcon :name="item.icon" />
                                 <!-- Rail has no room for the count, so it shows a dot -->
@@ -450,10 +509,10 @@ const confirmSignOut = () => {
                 </div>
             </nav>
 
-            <div class="border-t border-white/10 p-3">
+            <div class="border-t border-white/10 px-3 py-4">
                 <button
                     type="button"
-                    class="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                     :class="collapsed ? 'md:justify-center md:px-0' : ''"
                     :title="collapsed ? 'Sign out' : undefined"
                     @click="signOut"
@@ -465,7 +524,10 @@ const confirmSignOut = () => {
         </aside>
 
         <!-- Content column shifts with the sidebar width -->
-        <div class="transition-[padding] duration-200" :class="collapsed ? 'md:pl-16' : 'md:pl-60'">
+        <div
+            class="flex min-h-screen flex-col transition-[padding] duration-200"
+            :class="collapsed ? 'md:pl-16' : 'md:pl-64'"
+        >
             <header class="sticky top-0 z-(--z-header) border-b border-csc-line bg-white/95 backdrop-blur">
                 <!-- Left padding stays tight so the toggle and title sit close to
                      the sidebar edge; the right side keeps normal breathing room. -->
@@ -543,20 +605,62 @@ const confirmSignOut = () => {
                                 class="absolute right-0 z-(--z-popover) mt-2 w-56 overflow-hidden rounded-xl border border-csc-line bg-white shadow-lg"
                             >
                                 <div class="border-b border-csc-line px-4 py-3">
-                                    <p class="truncate text-sm font-semibold text-csc-ink">{{ user.name ?? '—' }}</p>
-                                    <p class="truncate text-xs text-csc-ink/60">{{ user.email }}</p>
+                                    <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                        <p class="text-xs text-csc-ink/60">{{ user.email }}</p>
+                                        <span
+                                            v-if="user.email_verified"
+                                            class="inline-flex items-center gap-1 text-2xs font-semibold text-csc-blue"
+                                        >
+                                            <span class="inline-flex size-3 items-center justify-center rounded-full bg-csc-blue" aria-hidden="true">
+                                                <svg
+                                                    class="size-1.5 text-white"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="3"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                >
+                                                    <path d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </span>
+                                            Verified
+                                        </span>
+                                        <span v-else class="text-2xs font-medium text-csc-ink/45">
+                                            Not Verified
+                                        </span>
+                                    </div>
                                     <p class="mt-1.5 inline-block rounded-full bg-csc-blue-tint px-2 py-0.5 text-2xs font-medium text-csc-blue">
                                         {{ user.role_label }}
                                     </p>
                                 </div>
-                                <Link href="/profile" class="block px-4 py-2.5 text-sm text-csc-ink transition-colors hover:bg-csc-blue-tint">
+                                <Link
+                                    href="/profile"
+                                    class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-csc-ink transition-colors hover:bg-csc-blue-tint"
+                                >
+                                    <AppIcon name="user" class="shrink-0 text-csc-ink/50" />
                                     My Profile
                                 </Link>
                                 <button
                                     type="button"
-                                    class="block w-full px-4 py-2.5 text-left text-sm text-danger transition-colors hover:bg-danger-soft"
+                                    class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-csc-ink transition-colors hover:bg-csc-blue-tint"
+                                    @click="openChangePassword"
+                                >
+                                    <AppIcon name="lock" class="shrink-0 text-csc-ink/50" />
+                                    <!--
+                                        A Google-created account has no password
+                                        to change yet — it has one to make. The
+                                        label says which, so the item is never a
+                                        form that can only fail.
+                                    -->
+                                    {{ user.has_password === false ? 'Create Password' : 'Change Password' }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="flex w-full items-center gap-2.5 border-t border-csc-line px-4 py-2.5 text-left text-sm text-danger transition-colors hover:bg-danger-soft"
                                     @click="signOut"
                                 >
+                                    <AppIcon name="sign-out" class="shrink-0" />
                                     Sign out
                                 </button>
                             </div>
@@ -565,7 +669,28 @@ const confirmSignOut = () => {
                 </div>
             </header>
 
-            <main id="main" class="px-4 py-6 pb-24 sm:px-6 md:pb-8 lg:px-8 lg:py-8">
+            <!--
+                Only staff see the app while maintenance is on, so the banner is
+                how they remember the public site is still down.
+            -->
+            <div
+                v-if="maintenanceMode"
+                class="border-b border-warning/25 bg-warning-soft px-4 py-2.5 sm:px-6 lg:px-8"
+                role="status"
+            >
+                <div class="mx-auto flex w-full max-w-7xl items-center gap-2 text-sm text-warning">
+                    <AppIcon name="warning" class="shrink-0" />
+                    <p class="min-w-0">
+                        <span class="font-semibold">Maintenance mode is on.</span>
+                        You can see this because you are staff — participants and visitors get a maintenance notice instead.
+                        <Link href="/admin/maintenance" class="font-semibold underline hover:opacity-80">
+                            Manage
+                        </Link>
+                    </p>
+                </div>
+            </div>
+
+            <main id="main" class="flex-1 px-4 py-6 pb-24 sm:px-6 md:pb-8 lg:px-8 lg:py-8">
                 <!-- Keyed by the page component so each navigation plays the
                      fade-and-rise once; see .page-enter in app.css. -->
                 <Transition name="page" appear>
@@ -574,6 +699,8 @@ const confirmSignOut = () => {
                     </div>
                 </Transition>
             </main>
+
+            <AppFooter />
 
             <AppToast />
         </div>
@@ -641,5 +768,37 @@ const confirmSignOut = () => {
             <p class="mb-1 text-xl font-semibold text-csc-blue">Signing you out</p>
             <p class="text-sm text-csc-ink/70">See you next time!</p>
         </AppAuthSplash>
+
+        <!-- Rotating the password from the account menu -->
+        <AppChangePasswordModal :open="changePasswordOpen" @close="changePasswordOpen = false" />
     </div>
 </template>
+
+<style scoped>
+/*
+ * The sidebar scrollbar wears the sidebar: a thin, translucent-white thumb so
+ * the vertical scrolling reads as part of the blue surface instead of a stray
+ * OS control. Mirrors the recruitment-system sidebar treatment.
+ */
+.sidebar-nav {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, white 20%, transparent) transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+    width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, white 20%, transparent);
+    border-radius: 3px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, white 35%, transparent);
+}
+</style>

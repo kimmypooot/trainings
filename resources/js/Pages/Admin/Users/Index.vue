@@ -111,6 +111,21 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                                     <span class="rounded-full bg-csc-blue-tint px-2.5 py-1 text-xs font-semibold text-csc-blue">
                                         {{ user.role_label }}
                                     </span>
+                                    <p
+                                        v-if="user.is_collecting_officer"
+                                        class="mt-1 text-2xs font-medium text-csc-ink/60"
+                                    >
+                                        Collecting officer
+                                    </p>
+                                    <!--
+                                        Left on the retired collecting-officer
+                                        role. They can still take payments, but
+                                        they have no office to be scoped to
+                                        until someone gives them a real role.
+                                    -->
+                                    <p v-if="user.needs_reassignment" class="mt-1 text-2xs font-medium text-warning">
+                                        Needs reassignment
+                                    </p>
                                 </td>
                                 <td class="px-5 py-3.5 text-xs text-csc-ink/70">{{ user.field_office ?? '—' }}</td>
                                 <td class="px-5 py-3.5">

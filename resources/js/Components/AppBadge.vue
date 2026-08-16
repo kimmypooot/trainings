@@ -41,6 +41,13 @@ const props = defineProps({
                 'ready_for_shipment',
                 'shipped',
                 'delivered',
+                // The supervisory-course supporting document. The classification
+                // of the training itself, and the stages of its proof.
+                'supervisory',
+                'document_required',
+                'document_submitted',
+                'document_verified',
+                'document_rejected',
             ].includes(value),
     },
     label: { type: String, default: null },
@@ -169,6 +176,36 @@ const variants = {
         classes: 'bg-success-soft text-success',
         icon: 'M5 12.5l4.5 4.5L19 7.5',
         label: 'Delivered',
+    },
+    // The supervisory-course classification, and the lifecycle of its proof.
+    // The classification is a fact about the training, not a status, so it
+    // wears the brand tint rather than a semantic colour. The document stages
+    // map onto the same in-flight/happy/terminal treatment as every other
+    // workflow in this map.
+    supervisory: {
+        classes: 'bg-csc-blue-tint text-csc-blue',
+        icon: 'M12 3l2.5 5.5 6 .5-4.5 4 1.5 6-5.5-3-5.5 3 1.5-6-4.5-4 6-.5z',
+        label: 'Supervisory Development',
+    },
+    document_required: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M9 3h6v6h6v9a3 3 0 01-3 3H9a3 3 0 01-3-3V6a3 3 0 013-3z',
+        label: 'Document Required',
+    },
+    document_submitted: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M12 7v5l3 2',
+        label: 'Submitted – For Verification',
+    },
+    document_verified: {
+        classes: 'bg-success-soft text-success',
+        icon: 'M5 12.5l4.5 4.5L19 7.5',
+        label: 'Verified',
+    },
+    document_rejected: {
+        classes: 'bg-danger-soft text-danger',
+        icon: 'M8 8l8 8M16 8l-8 8',
+        label: 'Rejected',
     },
 };
 

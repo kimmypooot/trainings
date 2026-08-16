@@ -36,8 +36,18 @@ class UndoService
      */
     private const SESSION_PREFIX = 'undo_snapshot:';
 
-    /** @var array<int, string> */
-    private const TRACKED = ['status', 'review_remarks', 'reviewed_by', 'reviewed_at', 'attended_at'];
+    /**
+     * Only the fields a reversible decision writes.
+     *
+     * `cancelled_at` is here because a staff cancellation is one of those
+     * decisions: restoring the status without clearing the timestamp would
+     * leave an active registration carrying a cancellation date.
+     *
+     * @var array<int, string>
+     */
+    private const TRACKED = [
+        'status', 'review_remarks', 'reviewed_by', 'reviewed_at', 'attended_at', 'cancelled_at',
+    ];
 
     /**
      * Capture the state of these registrations before they are changed.

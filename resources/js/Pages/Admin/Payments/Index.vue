@@ -7,6 +7,7 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
+import AppTextarea from '@/Components/AppTextarea.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppStat from '@/Components/AppStat.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
@@ -26,6 +27,7 @@ const props = defineProps({
     summary: { type: Object, required: true },
     refundStatuses: { type: Array, default: () => [] },
     refundPipeline: { type: Array, default: () => [] },
+    paymentSettings: { type: Object, default: null },
 });
 
 const active = ref('payments');
@@ -37,6 +39,10 @@ const money = (value) =>
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     });
+
+// The stat cards lead with an amount, and a bare number there reads as a count
+// — every card carries the peso sign so the unit is never in doubt.
+const peso = (value) => `₱${money(value)}`;
 
 const openRefunds = computed(() => props.summary.open_refunds ?? { count: 0, amount: 0 });
 
@@ -181,6 +187,7 @@ const verifyForm = useForm({
     remarks: '',
     or_number: '',
     or_date: new Date().toISOString().slice(0, 10),
+    prime_hrm_discount: false,
 });
 
 const startVerifying = (payment) => {
@@ -196,6 +203,41 @@ const submitVerify = () =>
             verifying.value = null;
             verifyForm.reset();
         },
+    });
+
+/*
+ * The bank account participants are told to deposit into. One settings row
+ * feeds every approval notification and payment prompt, so this modal is the
+ * only place it is edited.
+ */
+const editingSettings = ref(false);
+
+const settingsForm = useForm({
+    bank_name: '',
+    account_name: '',
+    account_number: '',
+    instructions: '',
+});
+
+const openSettings = () => {
+    settingsForm.reset();
+    settingsForm.clearErrors();
+    settingsForm.bank_name = props.paymentSettings?.bank_name ?? '';
+    settingsForm.account_name = props.paymentSettings?.account_name ?? '';
+    settingsForm.account_number = props.paymentSettings?.account_number ?? '';
+    settingsForm.instructions = props.paymentSettings?.instructions ?? '';
+    editingSettings.value = true;
+};
+
+const closeSettings = () => {
+    editingSettings.value = false;
+    settingsForm.reset();
+};
+
+const submitSettings = () =>
+    settingsForm.post('/admin/payments/settings', {
+        preserveScroll: true,
+        onSuccess: closeSettings,
     });
 
 const rejectPayment = (payment) => {
@@ -285,15 +327,25 @@ const rejectRefund = (refund) => {
                         {{ openRefunds.count }}
                     </span>
                 </button>
+
+                <AppButton
+                    variant="ghost"
+                    size="sm"
+                    icon="card"
+                    class="ml-auto"
+                    @click="openSettings"
+                >
+                    Bank deposit details
+                </AppButton>
             </div>
 
             <!-- What is in motion right now, for the officer and end-of-day
                  reconciliation alike. Amounts lead, counts ride along. -->
             <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-                <AppStat :value="money(summary.pending?.amount ?? 0)" :label="`Pending · ${summary.pending?.count ?? 0} payment(s)`" />
-                <AppStat :value="money(summary.verified?.amount ?? 0)" :label="`Collected · ${summary.verified?.count ?? 0} verified`" />
-                <AppStat :value="money(summary.rejected?.amount ?? 0)" :label="`Rejected · ${summary.rejected?.count ?? 0}`" />
-                <AppStat :value="money(openRefunds.amount)" :label="`Open refunds · ${openRefunds.count}`" />
+                <AppStat :value="peso(summary.pending?.amount ?? 0)" :label="`Pending · ${summary.pending?.count ?? 0} payment(s)`" />
+                <AppStat :value="peso(summary.verified?.amount ?? 0)" :label="`Collected · ${summary.verified?.count ?? 0} verified`" />
+                <AppStat :value="peso(summary.rejected?.amount ?? 0)" :label="`Rejected · ${summary.rejected?.count ?? 0}`" />
+                <AppStat :value="peso(openRefunds.amount)" :label="`Open refunds · ${openRefunds.count}`" />
             </div>
 
             <template v-if="active === 'payments'">
@@ -322,6 +374,7 @@ const rejectRefund = (refund) => {
                             variant="ghost"
                             size="sm"
                             icon="download"
+                            external
                         >
                             CSV
                         </AppButton>
@@ -330,6 +383,7 @@ const rejectRefund = (refund) => {
                             variant="ghost"
                             size="sm"
                             icon="download"
+                            external
                         >
                             Excel
                         </AppButton>
@@ -431,6 +485,18 @@ const rejectRefund = (refund) => {
                                         <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink">
                                             ₱{{ money(payment.amount) }}
                                             <p class="text-xs text-csc-ink/55">{{ payment.method }}</p>
+                                            <!--
+                                                Both figures, because the gross
+                                                is what the report reconciles on
+                                                and the net is what arrived.
+                                            -->
+                                            <p
+                                                v-if="payment.prime_hrm_discount"
+                                                class="mt-0.5 text-2xs font-medium text-warning"
+                                                :title="`Full fee ₱${money(payment.gross_amount)}, PRIME-HRM discount ₱${money(payment.discount_amount)}`"
+                                            >
+                                                PRIME-HRM −₱{{ money(payment.discount_amount) }}
+                                            </p>
                                         </td>
                                         <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink/75">{{ payment.payment_date }}</td>
                                         <td class="px-5 py-3.5">
@@ -491,6 +557,13 @@ const rejectRefund = (refund) => {
                                         <p class="mt-1 text-sm text-csc-ink">
                                             ₱{{ money(payment.amount) }} · {{ payment.method }} ·
                                             {{ payment.payment_date }}
+                                        </p>
+                                        <p
+                                            v-if="payment.prime_hrm_discount"
+                                            class="text-xs font-medium text-warning"
+                                        >
+                                            PRIME-HRM 20% — ₱{{ money(payment.gross_amount) }} less
+                                            ₱{{ money(payment.discount_amount) }}
                                         </p>
                                         <p v-if="payment.reference_number" class="text-xs text-csc-ink/55">
                                             Ref {{ payment.reference_number }}
@@ -776,11 +849,81 @@ const rejectRefund = (refund) => {
                     :error="verifyForm.errors.remarks"
                 />
 
+                <!--
+                    Unlike a counter payment, the amount here is already fixed —
+                    the money has moved. Ticking this records *why* it fell
+                    short of the full fee; the server refuses if the two do not
+                    reconcile, because an overpayment is a discrepancy rather
+                    than something to annotate.
+                -->
+                <div class="rounded-lg border border-csc-line bg-csc-blue-tint/30 p-3">
+                    <label class="flex items-start gap-3 text-sm text-csc-ink">
+                        <input
+                            v-model="verifyForm.prime_hrm_discount"
+                            type="checkbox"
+                            class="mt-0.5 size-4 shrink-0 rounded border-csc-line accent-csc-blue"
+                        />
+                        <span class="leading-relaxed">
+                            Paid under the PRIME-HRM 20% discount — this payment is the discounted
+                            fee, not the full one.
+                        </span>
+                    </label>
+                    <p v-if="verifyForm.errors.prime_hrm_discount" class="mt-2 text-xs font-medium text-csc-red-ink">
+                        {{ verifyForm.errors.prime_hrm_discount }}
+                    </p>
+                </div>
+
                 <div class="flex justify-end gap-2">
                     <AppButton type="button" variant="ghost" @click="verifying = null">Cancel</AppButton>
-                    <AppButton type="submit" icon="check" :processing="verifyForm.processing">
+                    <AppButton type="submit" icon="check" :loading="verifyForm.processing">
                         Verify payment
                     </AppButton>
+                </div>
+            </form>
+        </AppModal>
+
+        <!--
+            The bank-deposit details. This row is what the approval email and the
+            participant payment prompt print, so the modal explains that editing
+            it changes every future notification at once.
+        -->
+        <AppModal
+            :open="editingSettings"
+            title="Bank deposit details"
+            subtitle="Participants are told to pay training fees into this account. Saving updates every approval notification and payment prompt."
+            @close="closeSettings"
+        >
+            <form class="space-y-4" @submit.prevent="submitSettings">
+                <AppInput
+                    v-model="settingsForm.bank_name"
+                    label="Bank"
+                    placeholder="e.g. Land Bank of the Philippines"
+                    :error="settingsForm.errors.bank_name"
+                    required
+                />
+                <AppInput
+                    v-model="settingsForm.account_name"
+                    label="Account name"
+                    :error="settingsForm.errors.account_name"
+                    required
+                />
+                <AppInput
+                    v-model="settingsForm.account_number"
+                    label="Account number"
+                    :error="settingsForm.errors.account_number"
+                    required
+                />
+                <AppTextarea
+                    v-model="settingsForm.instructions"
+                    label="Instructions"
+                    hint="Optional. Extra guidance shown with the account, e.g. how to mark a deposit."
+                    :rows="3"
+                    :error="settingsForm.errors.instructions"
+                />
+
+                <div class="flex justify-end gap-2">
+                    <AppButton type="button" variant="ghost" @click="closeSettings">Cancel</AppButton>
+                    <AppButton type="submit" :processing="settingsForm.processing">Save</AppButton>
                 </div>
             </form>
         </AppModal>

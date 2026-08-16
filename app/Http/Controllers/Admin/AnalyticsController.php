@@ -212,6 +212,17 @@ class AnalyticsController extends Controller
             'sector' => $this->tally($profiles, 'sector'),
             'ageBand' => $this->ageBands($profiles),
             'chargeTo' => $this->chargeTo($officeId),
+            /*
+             * Where participants actually come from, which v1 called the "geo
+             * breakdown". v1 grouped by field office — already charted above —
+             * but the office is an administrative assignment, not a location:
+             * two participants in the same office can be provinces apart, and
+             * out-of-region attendees (who drive the physical-OR pipeline) all
+             * collapse into whichever office was picked. These read the PSGC
+             * fields on the profile instead, so the answer is geography.
+             */
+            'region' => $this->tally($profiles, 'region'),
+            'province' => $this->tally($profiles, 'province'),
         ];
     }
 
@@ -320,7 +331,7 @@ class AnalyticsController extends Controller
      */
     private function payments(Request $request): ?array
     {
-        if (! $request->user()->role->handlesPayments()) {
+        if (! $request->user()->collectsPayments()) {
             return null;
         }
 

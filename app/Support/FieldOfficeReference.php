@@ -103,7 +103,7 @@ class FieldOfficeReference
             ],
             [
                 'code' => 'hrd',
-                'name' => 'Human Resource Division',
+                'name' => 'Outside Region VIII',
                 'type' => 'division',
                 'province' => 'Outside Region VIII',
                 'jurisdiction' => [

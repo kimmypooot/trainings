@@ -53,6 +53,10 @@ const aboutGovphLinks = [
 const page = usePage();
 const visitorCount = computed(() => page.props.visitors ?? 0);
 
+// Signed-in staff pass straight through maintenance mode, so without this they
+// see a working public site and conclude the switch is broken.
+const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
+
 const scrolled = ref(false);
 const menuOpen = ref(false);
 
@@ -166,6 +170,35 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                 </nav>
             </div>
         </header>
+
+        <!-- Staff can see the public site during maintenance, so remind them the
+             switch is still on and point them at the control. -->
+        <div
+            v-if="maintenanceMode"
+            class="border-b border-warning/25 bg-warning-soft px-4 py-2.5 sm:px-6 lg:px-8"
+            role="status"
+        >
+            <div class="mx-auto flex w-full max-w-7xl items-center gap-2 text-sm text-warning">
+                <svg
+                    class="size-4 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    aria-hidden="true"
+                >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 8v5m0 3.5v.5" stroke-linecap="round" />
+                </svg>
+                <p class="min-w-0">
+                    <span class="font-semibold">Maintenance mode is on.</span>
+                    You can see this page because you are signed in — visitors get a maintenance notice instead.
+                    <Link href="/admin/maintenance" class="font-semibold underline hover:opacity-80">
+                        Manage
+                    </Link>
+                </p>
+            </div>
+        </div>
 
         <main id="main" class="flex-1">
             <Transition name="page" appear>

@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'reference_number', 'or_number', 'or_date', 'collecting_officer_id',
     'payment_date', 'proof_path', 'status', 'verified_by',
     'verified_at', 'rejection_reason', 'remarks',
+    'prime_hrm_discount', 'discount_amount',
 ])]
 class Payment extends Model
 {
@@ -29,12 +30,43 @@ class Payment extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'discount_amount' => 'decimal:2',
+            'prime_hrm_discount' => 'boolean',
             'payment_date' => 'date',
             'or_date' => 'date',
             'verified_at' => 'datetime',
             'status' => PaymentStatus::class,
             'payment_method' => PaymentMethod::class,
         ];
+    }
+
+    /**
+     * What the fee would have been without the discount.
+     *
+     * Derived from the two stored figures rather than read back off the
+     * training, so it is the gross this payment was actually assessed against
+     * — a later change to the course fee cannot move it.
+     */
+    public function grossAmount(): float
+    {
+        return (float) $this->amount + (float) $this->discount_amount;
+    }
+
+    /**
+     * The discount as a percentage, for display.
+     *
+     * Derived rather than stored: the pair of amounts already determines it, and
+     * a stored rate could disagree with them.
+     */
+    public function discountRate(): ?float
+    {
+        $gross = $this->grossAmount();
+
+        if (! $this->prime_hrm_discount || $gross <= 0.0) {
+            return null;
+        }
+
+        return round((float) $this->discount_amount / $gross * 100, 2);
     }
 
     public function registration(): BelongsTo

@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Enums\RegistrationStatus;
+use App\Models\PaymentSetting;
 use App\Models\Registration;
 
 /**
@@ -63,9 +64,10 @@ class RegistrationReviewed extends ParticipantNotification
 
         $body = match ($this->registration->status) {
             RegistrationStatus::Approved => sprintf(
-                'Your slot is confirmed for %s at %s. Bring your QR code — it is how we take attendance at the door.%s',
+                'Your slot is confirmed for %s at %s. Bring your QR code — it is how we take attendance at the door.%s%s',
                 $training->starts_at->format('d M Y, g:i A'),
                 $training->venue,
+                $this->paymentLine(),
                 $this->joinLine()
             ),
             RegistrationStatus::Waitlisted => 'You will be moved up automatically if a slot frees up before the training starts.',
@@ -75,6 +77,36 @@ class RegistrationReviewed extends ParticipantNotification
 
         // A rejection is required to carry a reason, so it always lands here.
         return $remarks ? "{$body} Remarks: {$remarks}" : $body;
+    }
+
+    /**
+     * Where to deposit the fee, when approval is the step that unlocks payment.
+     *
+     * A paid training that still has the fee outstanding needs the account
+     * details at this exact moment — the confirmation is what tells the
+     * participant the fee is now due. Free trainings and already-paid
+     * registrations have nothing to add.
+     */
+    private function paymentLine(): string
+    {
+        $registration = $this->registration->fresh(['training', 'payments']);
+
+        if ($registration === null
+            || ! $registration->training->payment_required
+            || $registration->hasSettledFee()) {
+            return '';
+        }
+
+        $setting = PaymentSetting::current();
+
+        return sprintf(
+            ' To complete your registration, deposit the training fee of ₱%s to %s — Account Name: %s, Account Number: %s. Then upload your proof of payment from the Payments page.%s',
+            number_format($registration->training->payment_amount, 2),
+            $setting->bank_name,
+            $setting->account_name,
+            $setting->account_number,
+            filled($setting->instructions) ? " {$setting->instructions}" : ''
+        );
     }
 
     public function url(object $notifiable): string

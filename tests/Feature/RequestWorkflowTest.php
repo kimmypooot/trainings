@@ -23,6 +23,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
@@ -276,6 +277,110 @@ class RequestWorkflowTest extends TestCase
     }
 
     // --- Output submission ------------------------------------------------
+
+    /**
+     * The submission form has to be reachable, not merely routed.
+     *
+     * HRD's review queue could receive outputs from the day of the rewrite, but
+     * nothing on the participant side offered a way to send one — so the queue
+     * was permanently empty. These assert the page carries what the form needs.
+     */
+    public function test_a_supervisory_registration_offers_output_submission(): void
+    {
+        $participant = $this->participant();
+        $registration = Registration::factory()->completed()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create([
+                'is_supervisory' => true,
+                'starts_at' => now()->subWeek(),
+            ])->getKey(),
+        ]);
+
+        $this->actingAs($participant)
+            ->get('/my/registrations')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('registrations.0.id', $registration->getKey())
+                ->has('registrations.0.output_submission')
+                ->has('registrations.0.output_submission.submitted', 0)
+            );
+    }
+
+    public function test_an_ordinary_training_is_not_asked_for_an_output(): void
+    {
+        $participant = $this->participant();
+        Registration::factory()->completed()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create([
+                'is_supervisory' => false,
+                'starts_at' => now()->subWeek(),
+            ])->getKey(),
+        ]);
+
+        $this->actingAs($participant)
+            ->get('/my/registrations')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('registrations.0.output_submission', null)
+            );
+    }
+
+    public function test_an_output_is_not_asked_for_before_the_training_starts(): void
+    {
+        $participant = $this->participant();
+        Registration::factory()->approved()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create([
+                'is_supervisory' => true,
+                'starts_at' => now()->addWeek(),
+            ])->getKey(),
+        ]);
+
+        // There is nothing to write up yet.
+        $this->actingAs($participant)
+            ->get('/my/registrations')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('registrations.0.output_submission', null)
+            );
+    }
+
+    public function test_a_submitted_output_and_its_verdict_come_back_to_the_participant(): void
+    {
+        Storage::fake('local');
+
+        $participant = $this->participant();
+        $registration = Registration::factory()->completed()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create([
+                'is_supervisory' => true,
+                'starts_at' => now()->subWeek(),
+            ])->getKey(),
+        ]);
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/outputs", [
+                'title' => 'Re-entry action plan',
+                'file' => UploadedFile::fake()->create('plan.pdf', 120, 'application/pdf'),
+            ])
+            ->assertRedirect();
+
+        RegistrationOutput::sole()->forceFill([
+            'status' => RequestStatus::Rejected,
+            'review_remarks' => 'Please expand section 3.',
+        ])->save();
+
+        // The reviewer's note is the whole point of showing a rejection back.
+        $this->actingAs($participant)
+            ->get('/my/registrations')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('registrations.0.output_submission.submitted', 1)
+                ->where('registrations.0.output_submission.submitted.0.title', 'Re-entry action plan')
+                ->where('registrations.0.output_submission.submitted.0.status', 'rejected')
+                ->where('registrations.0.output_submission.submitted.0.remarks', 'Please expand section 3.')
+            );
+    }
 
     public function test_a_participant_can_submit_an_output(): void
     {

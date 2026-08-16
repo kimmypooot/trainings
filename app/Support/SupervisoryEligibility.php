@@ -8,11 +8,10 @@ use App\Models\User;
 /**
  * Who may take a Supervisory Development Course, and what they must show.
  *
- * CSC's rule: an SDC is for people who actually supervise staff. Salary grade
- * is the proxy — below SG 11 nobody does, from SG 18 up it is taken as given,
- * and the band in between is exactly where the title does not settle it. Those
- * participants have to attach a designation, memorandum, or office order that
- * shows staff reporting to them.
+ * CSC RO VIII's rule: an SDC is for people who actually supervise staff. Salary
+ * grade is the proxy — SG 18 and above is taken as given, and SG 15–17 are the
+ * band where the title does not settle it. Those participants have to attach a
+ * designation, memorandum, or office order showing staff reporting to them.
  *
  * v1 decided whether a training was an SDC by searching its *name* for
  * "supervisory development course" and then for "track 1", "track1", "track 2"
@@ -24,7 +23,7 @@ use App\Models\User;
 class SupervisoryEligibility
 {
     /** Below this, the participant does not supervise anyone. */
-    public const MINIMUM_GRADE = 11;
+    public const MINIMUM_GRADE = 15;
 
     /** From this grade up, supervisory function is assumed and needs no proof. */
     public const ASSUMED_GRADE = 18;

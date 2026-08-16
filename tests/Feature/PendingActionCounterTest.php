@@ -39,6 +39,16 @@ class PendingActionCounterTest extends TestCase
         Storage::fake('local');
     }
 
+    /** Field-office staff carrying the collecting-officer designation. */
+    private function collector(): User
+    {
+        $user = $this->staff(Role::FieldOffice);
+
+        $user->forceFill(['is_collecting_officer' => true])->save();
+
+        return $user;
+    }
+
     private function staff(Role $role = Role::Admin, ?FieldOffice $office = null): User
     {
         return User::factory()->create([
@@ -111,9 +121,9 @@ class PendingActionCounterTest extends TestCase
 
     // --- Payments queue ---------------------------------------------------
 
-    public function test_a_collecting_officer_counts_pending_payments_and_open_refunds(): void
+    public function test_a_designated_collector_counts_pending_payments_and_open_refunds(): void
     {
-        $officer = $this->staff(Role::CollectingOfficer);
+        $officer = $this->collector();
 
         Payment::factory()->create();
         Payment::factory()->verified()->create();
@@ -125,7 +135,7 @@ class PendingActionCounterTest extends TestCase
 
     public function test_a_refund_that_has_left_the_pipeline_is_not_open_work(): void
     {
-        $officer = $this->staff(Role::CollectingOfficer);
+        $officer = $this->collector();
         $refund = $this->claim(Payment::factory()->verified()->create());
 
         while ($refund->status !== RefundStatus::Refunded && $refund->status->next() !== null) {

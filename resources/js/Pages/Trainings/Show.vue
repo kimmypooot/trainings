@@ -103,12 +103,13 @@ const cancel = () => {
             <AppAlert v-if="error" tone="danger">{{ error }}</AppAlert>
 
             <AppCard>
-                <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
                     <h2 class="text-xl font-semibold tracking-tight text-csc-blue sm:text-2xl">
                         {{ training.title }}
                     </h2>
-                    <AppBadge v-if="isActive" :status="registration.status" />
+                    <AppBadge v-if="training.is_supervisory" status="supervisory" />
                 </div>
+                <AppBadge v-if="isActive" :status="registration.status" />
 
                 <dl class="mt-6 grid gap-5 border-t border-csc-line pt-5 text-sm sm:grid-cols-2">
                     <div>
