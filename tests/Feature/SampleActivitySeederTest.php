@@ -78,7 +78,13 @@ class SampleActivitySeederTest extends TestCase
 
     public function test_no_training_is_overbooked(): void
     {
-        foreach (Training::whereNotNull('capacity')->get() as $training) {
+        $capped = Training::whereNotNull('capacity')->get();
+
+        // Guarded for the same reason as the refund check: a loop over an
+        // empty set is a test that passes without looking at anything.
+        $this->assertNotEmpty($capped, 'No training carries a capacity, so nothing was checked.');
+
+        foreach ($capped as $training) {
             $this->assertLessThanOrEqual(
                 $training->capacity,
                 $training->activeRegistrations()->count(),
@@ -186,7 +192,13 @@ class SampleActivitySeederTest extends TestCase
 
     public function test_a_verified_payment_records_who_verified_it(): void
     {
-        foreach (Payment::where('status', '!=', PaymentStatus::Pending)->get() as $payment) {
+        $reviewed = Payment::where('status', '!=', PaymentStatus::Pending)->get();
+
+        // The seeder guarantees a verified payment; assert it rather than
+        // trusting it, or this quietly becomes a no-op if that ever changes.
+        $this->assertNotEmpty($reviewed, 'No payment was reviewed, so nothing was checked.');
+
+        foreach ($reviewed as $payment) {
             $this->assertNotNull($payment->verified_by);
             $this->assertNotNull($payment->verified_at);
         }
@@ -194,7 +206,14 @@ class SampleActivitySeederTest extends TestCase
 
     public function test_refunds_only_claim_against_verified_payments(): void
     {
-        foreach (RefundRequest::with('payment')->get() as $refund) {
+        $refunds = RefundRequest::with('payment')->get();
+
+        // Without this the test passes by looping over nothing whenever the
+        // seed happens to produce no refunds — green, and proving nothing.
+        // The seeder now guarantees the first refundable payment draws a claim.
+        $this->assertNotEmpty($refunds, 'No refund was seeded, so nothing was checked.');
+
+        foreach ($refunds as $refund) {
             $this->assertSame(PaymentStatus::Verified, $refund->payment->status);
             $this->assertLessThanOrEqual((float) $refund->payment->amount, (float) $refund->amount);
         }

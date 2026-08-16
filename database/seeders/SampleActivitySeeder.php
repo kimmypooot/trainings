@@ -462,7 +462,19 @@ class SampleActivitySeeder extends Seeder
 
         $this->count('payments');
 
-        if ($status->isRefundable() && fake()->boolean(20)) {
+        /*
+         * The first refundable payment always draws a claim, and only then
+         * does it go random — the same reasoning as the payment statuses
+         * above. On a pure 20% draw a run could produce no refund at all,
+         * leaving the refund queue empty and
+         * SampleActivitySeederTest::test_refunds_only_claim_against_verified_payments
+         * looping over nothing, which PHPUnit rightly calls risky: the test
+         * passed without checking anything. Reproduce the old behaviour with
+         * SAMPLE_DATA_SEED=4.
+         */
+        $noRefundYet = ($this->tally['refund requests'] ?? 0) === 0;
+
+        if ($status->isRefundable() && ($noRefundYet || fake()->boolean(20))) {
             $this->refund($payment);
         }
     }
