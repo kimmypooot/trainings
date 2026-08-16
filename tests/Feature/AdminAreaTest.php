@@ -296,7 +296,9 @@ class AdminAreaTest extends TestCase
     {
         // Runs today so the participant can actually be checked in — completion
         // now follows the attendance record rather than a bare staff decision.
-        $training = Training::factory()->startingToday()->create();
+        // Charged, so the registration lands at pending and there is a decision
+        // to make; a free run is confirmed on registration.
+        $training = Training::factory()->startingToday()->paid()->create();
         $registration = RegistrationService::register($this->participant(), $training);
         $staff = $this->staff();
 
@@ -332,7 +334,7 @@ class AdminAreaTest extends TestCase
 
     public function test_rejection_requires_a_reason(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
 
         $this->actingAs($this->staff())
             ->from('/admin/trainings')
@@ -616,7 +618,7 @@ class AdminAreaTest extends TestCase
 
     public function test_hrd_can_cancel_a_registration_and_take_it_back(): void
     {
-        $training = Training::factory()->create(['capacity' => 1]);
+        $training = Training::factory()->paid()->create(['capacity' => 1]);
         $participant = $this->participant();
         $registration = RegistrationService::register($participant, $training);
         $staff = $this->staff();
@@ -653,7 +655,7 @@ class AdminAreaTest extends TestCase
 
     public function test_a_cancellation_must_carry_a_reason(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
 
         $this->actingAs($this->staff())
             ->post("/admin/registrations/{$registration->id}/cancel", ['reason' => 'nope'])

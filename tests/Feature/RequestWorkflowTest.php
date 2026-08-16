@@ -52,7 +52,7 @@ class RequestWorkflowTest extends TestCase
     public function test_withdrawing_creates_a_request_and_holds_the_slot(): void
     {
         $participant = $this->participant();
-        $training = Training::factory()->create(['capacity' => 1]);
+        $training = Training::factory()->paid()->create(['capacity' => 1]);
         $registration = RegistrationService::register($participant, $training);
 
         $this->actingAs($participant)
@@ -72,7 +72,7 @@ class RequestWorkflowTest extends TestCase
     public function test_a_withdrawal_needs_a_reason(): void
     {
         $participant = $this->participant();
-        $registration = RegistrationService::register($participant, Training::factory()->create());
+        $registration = RegistrationService::register($participant, Training::factory()->paid()->create());
 
         $this->actingAs($participant)
             ->from('/my/registrations')
@@ -84,7 +84,7 @@ class RequestWorkflowTest extends TestCase
 
     public function test_a_participant_cannot_withdraw_someone_elses_registration(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
 
         $this->actingAs($this->participant())
             ->delete("/my/registrations/{$registration->id}", ['reason' => 'Not mine to cancel.'])
@@ -93,7 +93,7 @@ class RequestWorkflowTest extends TestCase
 
     public function test_a_second_open_withdrawal_is_refused(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
 
         CancellationRequestService::open($registration, 'First reason.');
 
@@ -106,7 +106,7 @@ class RequestWorkflowTest extends TestCase
     public function test_approving_a_withdrawal_frees_the_slot(): void
     {
         $participant = $this->participant();
-        $training = Training::factory()->create(['capacity' => 1]);
+        $training = Training::factory()->paid()->create(['capacity' => 1]);
         $registration = RegistrationService::register($participant, $training);
         $request = CancellationRequestService::open($registration, 'Conflicting assignment.');
 
@@ -121,7 +121,7 @@ class RequestWorkflowTest extends TestCase
 
     public function test_declining_a_withdrawal_keeps_the_registration(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
         $request = CancellationRequestService::open($registration, 'Changed my mind.');
 
         $this->actingAs($this->staff())
@@ -137,7 +137,7 @@ class RequestWorkflowTest extends TestCase
 
     public function test_a_withdrawal_cannot_be_reviewed_twice(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
         $request = CancellationRequestService::open($registration, 'A reason.');
         $staff = $this->staff();
 
@@ -154,7 +154,7 @@ class RequestWorkflowTest extends TestCase
         Notification::fake();
 
         $participant = $this->participant();
-        $registration = RegistrationService::register($participant, Training::factory()->create());
+        $registration = RegistrationService::register($participant, Training::factory()->paid()->create());
         $request = CancellationRequestService::open($registration, 'A reason.');
 
         CancellationRequestService::review($request, RequestStatus::Approved, $this->staff());
@@ -290,7 +290,7 @@ class RequestWorkflowTest extends TestCase
         $participant = $this->participant();
         $registration = Registration::factory()->completed()->create([
             'user_id' => $participant->getKey(),
-            'training_id' => Training::factory()->create([
+            'training_id' => Training::factory()->paid()->create([
                 'is_supervisory' => true,
                 'starts_at' => now()->subWeek(),
             ])->getKey(),
@@ -311,7 +311,7 @@ class RequestWorkflowTest extends TestCase
         $participant = $this->participant();
         Registration::factory()->completed()->create([
             'user_id' => $participant->getKey(),
-            'training_id' => Training::factory()->create([
+            'training_id' => Training::factory()->paid()->create([
                 'is_supervisory' => false,
                 'starts_at' => now()->subWeek(),
             ])->getKey(),
@@ -330,7 +330,7 @@ class RequestWorkflowTest extends TestCase
         $participant = $this->participant();
         Registration::factory()->approved()->create([
             'user_id' => $participant->getKey(),
-            'training_id' => Training::factory()->create([
+            'training_id' => Training::factory()->paid()->create([
                 'is_supervisory' => true,
                 'starts_at' => now()->addWeek(),
             ])->getKey(),
@@ -352,7 +352,7 @@ class RequestWorkflowTest extends TestCase
         $participant = $this->participant();
         $registration = Registration::factory()->completed()->create([
             'user_id' => $participant->getKey(),
-            'training_id' => Training::factory()->create([
+            'training_id' => Training::factory()->paid()->create([
                 'is_supervisory' => true,
                 'starts_at' => now()->subWeek(),
             ])->getKey(),
@@ -389,7 +389,7 @@ class RequestWorkflowTest extends TestCase
         $participant = $this->participant();
         $registration = Registration::factory()->completed()->create([
             'user_id' => $participant->getKey(),
-            'training_id' => Training::factory()->create()->getKey(),
+            'training_id' => Training::factory()->paid()->create()->getKey(),
         ]);
 
         $this->actingAs($participant)
@@ -413,7 +413,7 @@ class RequestWorkflowTest extends TestCase
         $participant = $this->participant();
         $registration = Registration::factory()->completed()->create([
             'user_id' => $participant->getKey(),
-            'training_id' => Training::factory()->create()->getKey(),
+            'training_id' => Training::factory()->paid()->create()->getKey(),
         ]);
 
         $this->actingAs($participant)
@@ -433,7 +433,7 @@ class RequestWorkflowTest extends TestCase
 
         $registration = Registration::factory()->completed()->create([
             'user_id' => $this->participant()->getKey(),
-            'training_id' => Training::factory()->create()->getKey(),
+            'training_id' => Training::factory()->paid()->create()->getKey(),
         ]);
 
         $this->actingAs($this->participant())
@@ -451,7 +451,7 @@ class RequestWorkflowTest extends TestCase
         $owner = $this->participant();
         $registration = Registration::factory()->completed()->create([
             'user_id' => $owner->getKey(),
-            'training_id' => Training::factory()->create()->getKey(),
+            'training_id' => Training::factory()->paid()->create()->getKey(),
         ]);
 
         $this->actingAs($owner)->post("/my/registrations/{$registration->id}/outputs", [
@@ -471,7 +471,7 @@ class RequestWorkflowTest extends TestCase
     public function test_the_staff_queue_lists_all_three_request_types(): void
     {
         $participant = $this->participant();
-        $registration = RegistrationService::register($participant, Training::factory()->create());
+        $registration = RegistrationService::register($participant, Training::factory()->paid()->create());
 
         CancellationRequestService::open($registration, 'A reason.');
         TrainingRequest::factory()->create(['requested_by' => $participant->getKey()]);

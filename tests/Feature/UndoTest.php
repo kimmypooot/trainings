@@ -29,7 +29,7 @@ class UndoTest extends TestCase
         $user = User::factory()->create(['profile_completed_at' => now()]);
         Profile::factory()->for($user)->create();
 
-        return RegistrationService::register($user->refresh(), Training::factory()->create());
+        return RegistrationService::register($user->refresh(), Training::factory()->paid()->create());
     }
 
     public function test_a_review_offers_an_undo_token(): void

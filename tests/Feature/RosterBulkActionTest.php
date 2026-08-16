@@ -43,7 +43,7 @@ class RosterBulkActionTest extends TestCase
 
     public function test_a_selection_can_be_approved_in_one_action(): void
     {
-        $training = Training::factory()->create();
+        $training = Training::factory()->paid()->create();
         $registrations = collect([$this->registerOn($training), $this->registerOn($training)]);
 
         $this->bulk($training, [
@@ -58,7 +58,7 @@ class RosterBulkActionTest extends TestCase
 
     public function test_rows_that_are_no_longer_pending_are_skipped_and_reported(): void
     {
-        $training = Training::factory()->create();
+        $training = Training::factory()->paid()->create();
         $pending = $this->registerOn($training);
         $already = $this->registerOn($training);
         $already->forceFill(['status' => RegistrationStatus::Cancelled])->save();
@@ -75,7 +75,7 @@ class RosterBulkActionTest extends TestCase
 
     public function test_completion_is_refused_without_the_attendance_to_back_it(): void
     {
-        $training = Training::factory()->create();
+        $training = Training::factory()->paid()->create();
         $registration = $this->registerOn($training);
         $registration->forceFill(['status' => RegistrationStatus::Approved])->save();
 
@@ -92,8 +92,8 @@ class RosterBulkActionTest extends TestCase
 
     public function test_a_selection_cannot_reach_across_trainings(): void
     {
-        $training = Training::factory()->create();
-        $other = Training::factory()->create();
+        $training = Training::factory()->paid()->create();
+        $other = Training::factory()->paid()->create();
         $mine = $this->registerOn($training);
         $theirs = $this->registerOn($other);
 
@@ -108,7 +108,7 @@ class RosterBulkActionTest extends TestCase
 
     public function test_a_bulk_rejection_must_carry_a_reason(): void
     {
-        $training = Training::factory()->create();
+        $training = Training::factory()->paid()->create();
         $registration = $this->registerOn($training);
 
         $this->bulk($training, [
@@ -121,7 +121,7 @@ class RosterBulkActionTest extends TestCase
 
     public function test_field_office_staff_cannot_apply_bulk_decisions(): void
     {
-        $training = Training::factory()->create();
+        $training = Training::factory()->paid()->create();
         $registration = $this->registerOn($training);
 
         $staff = User::factory()->create([

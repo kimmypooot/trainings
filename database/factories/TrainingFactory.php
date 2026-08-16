@@ -66,6 +66,23 @@ class TrainingFactory extends Factory
         return $this->state(fn () => ['capacity' => 0]);
     }
 
+    /**
+     * A run that charges a fee.
+     *
+     * Worth naming because it decides where a registration lands: a free
+     * training is confirmed on registration — first come, first served — while
+     * a charged one waits at pending until the fee is settled. Anything
+     * exercising the review queue needs this state, or there is nothing to
+     * review.
+     */
+    public function paid(float $amount = 1500): static
+    {
+        return $this->state(fn () => [
+            'payment_required' => true,
+            'payment_amount' => $amount,
+        ]);
+    }
+
     public function draft(): static
     {
         return $this->state(fn () => ['status' => TrainingStatus::Draft]);

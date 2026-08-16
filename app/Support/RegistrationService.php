@@ -101,9 +101,27 @@ class RegistrationService
                 ),
             ];
 
+            /*
+             * A free training is first come, first served.
+             *
+             * On a paid run the slot is confirmed when the fee is settled — see
+             * PaymentService::confirmSlotOnSettlement(). A free run has no fee
+             * to settle, so there is nothing left to wait for: capacity was
+             * already checked above, and holding the registration at pending
+             * would only mean somebody rubber-stamping a queue.
+             *
+             * Staff keep the last word either way. A registration approved this
+             * way can still be cancelled from the roster, with a reason, which
+             * is the honest way to remove someone rather than never letting
+             * them in.
+             */
+            $initial = $locked->payment_required
+                ? RegistrationStatus::Pending
+                : RegistrationStatus::Approved;
+
             if ($existing) {
                 $existing->forceFill([
-                    'status' => RegistrationStatus::Pending,
+                    'status' => $initial,
                     'registered_at' => now(),
                     'cancelled_at' => null,
                     'reviewed_by' => null,
@@ -129,7 +147,7 @@ class RegistrationService
             $registration = Registration::create([
                 'user_id' => $user->getKey(),
                 'training_id' => $locked->getKey(),
-                'status' => RegistrationStatus::Pending,
+                'status' => $initial,
                 'registered_at' => now(),
                 ...$submitted,
             ]);

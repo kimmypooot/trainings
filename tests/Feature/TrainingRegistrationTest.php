@@ -150,7 +150,13 @@ class TrainingRegistrationTest extends TestCase
     public function test_catalogue_card_carries_the_registration_status(): void
     {
         $user = $this->participant();
-        $training = Training::factory()->create(['title' => 'Status Check']);
+        // Charged, so the registration waits at pending — a free run would be
+        // approved on the spot and this card would show that instead.
+        $training = Training::factory()->create([
+            'title' => 'Status Check',
+            'payment_required' => true,
+            'payment_amount' => 1500,
+        ]);
         RegistrationService::register($user, $training);
 
         $this->actingAs($user)
@@ -239,7 +245,9 @@ class TrainingRegistrationTest extends TestCase
         $this->assertDatabaseHas('registrations', [
             'user_id' => $user->id,
             'training_id' => $training->id,
-            'status' => RegistrationStatus::Pending->value,
+            // Free training, so the slot is confirmed on the spot — first
+            // come, first served, with nothing left to settle.
+            'status' => RegistrationStatus::Approved->value,
             'charge_to' => ChargeTo::Personal->value,
             'needs_certificate' => true,
         ]);
@@ -427,6 +435,33 @@ class TrainingRegistrationTest extends TestCase
         $this->assertNull($training->fresh()->slotsRemaining());
     }
 
+    /**
+     * Where the slot gets confirmed depends on whether there is a fee.
+     *
+     * A free run has nothing to settle, so it is first come, first served and
+     * the registration is approved on the spot. A charged run waits at pending
+     * until an officer verifies the money — see PaymentTest for that half.
+     */
+    public function test_a_free_training_confirms_the_slot_immediately(): void
+    {
+        $registration = RegistrationService::register(
+            $this->participant(),
+            Training::factory()->create(['payment_required' => false])
+        );
+
+        $this->assertSame(RegistrationStatus::Approved, $registration->status);
+    }
+
+    public function test_a_paid_training_waits_for_the_fee(): void
+    {
+        $registration = RegistrationService::register(
+            $this->participant(),
+            Training::factory()->create(['payment_required' => true, 'payment_amount' => 1500])
+        );
+
+        $this->assertSame(RegistrationStatus::Pending, $registration->status);
+    }
+
     public function test_registration_is_refused_after_the_deadline(): void
     {
         $training = Training::factory()->closed()->create();
@@ -465,7 +500,9 @@ class TrainingRegistrationTest extends TestCase
         $again = RegistrationService::register($user->fresh(), $training->fresh());
 
         $this->assertSame($registration->id, $again->id);
-        $this->assertSame(RegistrationStatus::Pending, $again->status);
+        // Free run, so re-registering confirms the slot again rather than
+        // rejoining a review queue that has nothing to review.
+        $this->assertSame(RegistrationStatus::Approved, $again->status);
         $this->assertSame(1, Registration::where('user_id', $user->id)->count());
     }
 
@@ -510,9 +547,10 @@ class TrainingRegistrationTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('nextTraining.title', 'Public Service Ethics')
-                // A fresh registration is pending, not yet approved.
-                ->where('summary.pending', 1)
-                ->where('summary.registered', 0)
+                // A free training confirms the slot at registration, so this
+                // counts as registered rather than waiting on a review.
+                ->where('summary.pending', 0)
+                ->where('summary.registered', 1)
                 ->has('recentActivity', 1)
             );
     }
