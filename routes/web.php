@@ -277,54 +277,87 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         Route::get('/trainings/{training}/roster', [AdminTrainingController::class, 'roster'])
             ->name('trainings.roster');
 
-        // Taking attendance is venue work, so every staff role can do it — a
-        // field office running its own session should not need HRD on the phone.
-        Route::post('/registrations/{registration}/attendance', [AdminAttendanceController::class, 'store'])
-            ->name('attendance.store');
-        Route::post('/registrations/{registration}/attendance/check-out', [AdminAttendanceController::class, 'checkOut'])
-            ->name('attendance.check-out');
-
         /*
-         * Verifying the supporting document on a supervisory-course
-         * registration is monitoring, not an HRD decision — a field office is
-         * the one that knows whether a designation is real — so it sits with
-         * the same every-staff group as attendance. The controller re-resolves
-         * the registration against the field-office scope, exactly as the
-         * roster does.
-         */
-        Route::post('/registrations/{registration}/supervisory-document', [AdminTrainingController::class, 'reviewSupervisoryDocument'])
-            ->name('registrations.supervisory-document');
-
-        /*
-         * The venue scanning station, same reasoning as the two routes above:
-         * scanning is door work, so every staff role gets it, scoped by office.
+         * Venue work — everything below is done standing at a door with a
+         * training in progress, so it belongs to every staff role that runs
+         * one: a field office holding its own session should not need HRD on
+         * the phone.
          *
-         * The roster download hands a whole training's participants to a device
-         * that will then work without a network, which is why it stays inside
-         * this authenticated group and is never reachable as a public page.
+         * Management is the exception, and is named out rather than left to
+         * fall through. It is an oversight role — see the participants desk
+         * below, where the same exclusion is spelled out — so it reads rosters
+         * and reports and records nothing. Listing the roles is what the rest
+         * of this file does; the alternative, letting management inherit
+         * whatever no group happens to narrow, is how it ended up holding a
+         * pen it was never meant to have.
          */
-        Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner');
-        Route::get('/scanner/trainings/{training}/roster', [ScannerController::class, 'roster'])
-            ->name('scanner.roster');
-        Route::post('/scanner/sync', [ScannerController::class, 'sync'])->name('scanner.sync');
+        Route::middleware(EnsureUserIsStaff::class.':field-office|collecting-officer|admin|superadmin')
+            ->group(function () {
+                Route::post('/registrations/{registration}/attendance', [AdminAttendanceController::class, 'store'])
+                    ->name('attendance.store');
+                Route::post('/registrations/{registration}/attendance/check-out', [AdminAttendanceController::class, 'checkOut'])
+                    ->name('attendance.check-out');
+
+                /*
+                 * Verifying the supporting document on a supervisory-course
+                 * registration is monitoring, not an HRD decision — a field
+                 * office is the one that knows whether a designation is real.
+                 * The controller re-resolves the registration against the
+                 * field-office scope, exactly as the roster does.
+                 */
+                Route::post('/registrations/{registration}/supervisory-document', [AdminTrainingController::class, 'reviewSupervisoryDocument'])
+                    ->name('registrations.supervisory-document');
+
+                /*
+                 * The venue scanning station. The whole screen exists to check
+                 * people in, so it is gated as one thing rather than leaving a
+                 * role able to open a station it cannot sync.
+                 *
+                 * The roster download hands a whole training's participants to
+                 * a device that will then work without a network, which is why
+                 * it stays inside this authenticated group and is never
+                 * reachable as a public page.
+                 */
+                Route::get('/scanner', [ScannerController::class, 'index'])->name('scanner');
+                Route::get('/scanner/trainings/{training}/roster', [ScannerController::class, 'roster'])
+                    ->name('scanner.roster');
+                Route::post('/scanner/sync', [ScannerController::class, 'sync'])->name('scanner.sync');
+
+                /*
+                 * Issuing a station to someone without an account. Kept with
+                 * scanning itself, because deciding who works a door is the
+                 * same job as working it — and a link can never grant more
+                 * than its issuer already holds, so no role gains reach by
+                 * having this. Revocation is here rather than superadmin-only
+                 * for the same reason it matters at all: a phone goes missing
+                 * mid-session and the person at the venue has to be able to
+                 * kill the link themselves.
+                 */
+                Route::post('/trainings/{training}/scan-links', [AdminScanLinkController::class, 'store'])
+                    ->name('scan-links.store');
+                Route::delete('/scan-links/{scanLink}', [AdminScanLinkController::class, 'destroy'])
+                    ->name('scan-links.destroy');
+            });
 
         /*
-         * Issuing a station to someone without an account. Kept in the same
-         * every-staff-role group as scanning itself, because deciding who works
-         * a door is the same job as working it — and a link can never grant
-         * more than its issuer already holds, so no role gains reach by having
-         * this. Revocation is here rather than superadmin-only for the same
-         * reason it matters at all: a phone goes missing mid-session and the
-         * person at the venue has to be able to kill the link themselves.
+         * The staff directory, ported from v1's admin/hrd/collecting-officers
+         * page — which was HRD's, read-only, and listed the active field-office
+         * and HRD accounts so the office could see who was serving where. That
+         * reading is ordinary HRD work: knowing which office has a collecting
+         * officer is how a payment gets routed to the right desk. Making the
+         * whole screen superadmin-only took it away, so the list comes back to
+         * HRD and the account administration below does not.
+         *
+         * Nothing sensitive is on it — name, office, role, whether the account
+         * is active, last sign-in — which is the same set v1 showed.
          */
-        Route::post('/trainings/{training}/scan-links', [AdminScanLinkController::class, 'store'])
-            ->name('scan-links.store');
-        Route::delete('/scan-links/{scanLink}', [AdminScanLinkController::class, 'destroy'])
-            ->name('scan-links.destroy');
-
-        // Account administration is superadmin-only.
-        Route::middleware(EnsureUserIsStaff::class.':superadmin')->group(function () {
+        Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
             Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        });
+
+        // Creating accounts, changing a role, and switching an account off stay
+        // superadmin-only: those are the decisions the directory only reports.
+        Route::middleware(EnsureUserIsStaff::class.':superadmin')->group(function () {
             Route::get('/users/create', [AdminUserController::class, 'create'])->name('users.create');
             Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
             Route::get('/users/{user}/edit', [AdminUserController::class, 'edit'])->name('users.edit');
@@ -410,6 +443,8 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('field-offices.create');
             Route::post('/field-offices', [AdminFieldOfficeController::class, 'store'])
                 ->name('field-offices.store');
+            Route::get('/field-offices/{fieldOffice}', [AdminFieldOfficeController::class, 'show'])
+                ->name('field-offices.show');
             Route::get('/field-offices/{fieldOffice}/edit', [AdminFieldOfficeController::class, 'edit'])
                 ->name('field-offices.edit');
             Route::put('/field-offices/{fieldOffice}', [AdminFieldOfficeController::class, 'update'])
@@ -418,15 +453,25 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('field-offices.toggle');
         });
 
-        // Review queues. Visible to every staff role (scoped by office), but
-        // only HRD may convert a request into an actual training.
+        /*
+         * Review queues. The queue itself is visible to every staff role
+         * (scoped by office) because knowing what is outstanding is oversight
+         * as much as it is work. Deciding an item is the work, so management
+         * is named out of it — a granted cancellation refunds money and frees
+         * a seat, which is not something a role that reads reports should be
+         * able to do. Only HRD may convert a request into an actual training.
+         */
         Route::get('/requests', [AdminRequestQueueController::class, 'index'])->name('requests.index');
-        Route::post('/requests/cancellations/{cancellationRequest}', [AdminRequestQueueController::class, 'reviewCancellation'])
-            ->name('requests.cancellations.review');
-        Route::post('/requests/trainings/{trainingRequest}', [AdminRequestQueueController::class, 'reviewTrainingRequest'])
-            ->name('requests.trainings.review');
-        Route::post('/requests/outputs/{output}', [AdminRequestQueueController::class, 'reviewOutput'])
-            ->name('requests.outputs.review');
+
+        Route::middleware(EnsureUserIsStaff::class.':field-office|collecting-officer|admin|superadmin')
+            ->group(function () {
+                Route::post('/requests/cancellations/{cancellationRequest}', [AdminRequestQueueController::class, 'reviewCancellation'])
+                    ->name('requests.cancellations.review');
+                Route::post('/requests/trainings/{trainingRequest}', [AdminRequestQueueController::class, 'reviewTrainingRequest'])
+                    ->name('requests.trainings.review');
+                Route::post('/requests/outputs/{output}', [AdminRequestQueueController::class, 'reviewOutput'])
+                    ->name('requests.outputs.review');
+            });
 
         /*
          * Agency requests are HRD correspondence, not a review queue — the
@@ -460,6 +505,8 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         Route::get('/analytics', AdminAnalyticsController::class)->name('analytics');
         Route::get('/exports/participants', [AdminExportController::class, 'participants'])
             ->name('exports.participants');
+        Route::get('/exports/certificates', [AdminExportController::class, 'certificates'])
+            ->name('exports.certificates');
         Route::get('/exports/registrations', [AdminExportController::class, 'registrations'])
             ->name('exports.registrations');
         // One participant's whole record, for when someone asks what they have
@@ -475,6 +522,14 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         // like the payments export it sits beside.
         Route::get('/exports/trainings/{training}/revenue', [AdminExportController::class, 'revenue'])
             ->name('exports.revenue');
+        // The analytics report exports. They share the ReportScope parser with
+        // the analytics page, so a download and the screen it came from always
+        // cover the same trainings; the revenue one is gated on the
+        // collecting-officer designation inside the controller.
+        Route::get('/exports/reports/revenue', [AdminExportController::class, 'revenueReport'])
+            ->name('exports.reports.revenue');
+        Route::get('/exports/reports/breakdown', [AdminExportController::class, 'breakdownReport'])
+            ->name('exports.reports.breakdown');
 
         /*
          * The participants desk, ported from v1's admin/hrd/participants page.

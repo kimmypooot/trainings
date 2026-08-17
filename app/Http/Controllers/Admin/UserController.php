@@ -32,7 +32,13 @@ class UserController extends Controller
             ->paginate(20)
             ->withQueryString();
 
+        // HRD reads this screen as a directory; only a superadmin administers
+        // the accounts on it. The routes are the actual guard — this only stops
+        // the page offering controls that would 403 on click.
+        $canManage = $request->user()->role === Role::SuperAdmin;
+
         return Inertia::render('Admin/Users/Index', [
+            'canManage' => $canManage,
             'users' => $users->through(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -41,6 +47,9 @@ class UserController extends Controller
                 'role_label' => $user->role->label(),
                 'field_office' => $user->fieldOffice?->name,
                 'is_active' => $user->is_active,
+                // The single best "is this account stale or compromised" signal,
+                // recorded on every successful sign-in.
+                'last_login_at' => $user->last_login_at?->format('d M Y, g:i A'),
                 'is_collecting_officer' => $user->is_collecting_officer,
                 // Accounts left on the retired collecting-officer role. The
                 // migration gave them the designation so nothing broke, but it
@@ -49,7 +58,9 @@ class UserController extends Controller
                 // they are field office, an office to be scoped to.
                 'needs_reassignment' => $user->role === Role::CollectingOfficer,
                 'is_self' => $user->id === $request->user()->id,
-                'edit_url' => route('admin.users.edit', $user),
+                // Absent rather than empty for an admin: the edit screen is a
+                // superadmin route, so there is no URL to offer.
+                'edit_url' => $canManage ? route('admin.users.edit', $user) : null,
             ]),
             'filters' => ['search' => $search, 'role' => $role],
             'roles' => self::roleOptions(),
