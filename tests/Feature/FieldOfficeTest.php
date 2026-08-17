@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
 use App\Enums\Role;
 use App\Models\FieldOffice;
+use App\Models\Payment;
 use App\Models\Profile;
+use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\RegistrationService;
@@ -19,6 +22,14 @@ class FieldOfficeTest extends TestCase
     private function staff(Role $role = Role::Admin): User
     {
         return User::factory()->create(['role' => $role, 'profile_completed_at' => now()]);
+    }
+
+    private function participantIn(FieldOffice $office, string $name): User
+    {
+        $user = User::factory()->create(['name' => $name, 'profile_completed_at' => now()]);
+        Profile::factory()->for($user)->create(['field_office_id' => $office->getKey()]);
+
+        return $user;
     }
 
     public function test_the_region_viii_offices_exist_after_migrating(): void
@@ -137,6 +148,83 @@ class FieldOfficeTest extends TestCase
                 ->where('office.email', 'nsfo@csc.gov.ph')
                 ->where('office.remarks', 'Covers Northern Samar.')
                 ->has('recent', 1)
+            );
+    }
+
+    public function test_recent_registrations_are_ordered_by_when_they_were_made(): void
+    {
+        $office = FieldOffice::where('code', 'nsfo')->first();
+        $training = Training::factory()->create(['payment_required' => false]);
+
+        // Inserted newest-first but registered oldest-first, which is what an
+        // import or the sample seeder produces: created_at is the clock of the
+        // machine that wrote the row, registered_at is the participant's.
+        foreach ([['NEWEST', 1], ['MIDDLE', 10], ['OLDEST', 30]] as [$name, $daysAgo]) {
+            $participant = User::factory()->create([
+                'name' => $name,
+                'profile_completed_at' => now(),
+            ]);
+            Profile::factory()->for($participant)->create(['field_office_id' => $office->id]);
+
+            Registration::factory()->create([
+                'user_id' => $participant->getKey(),
+                'training_id' => $training->getKey(),
+                'registered_at' => now()->subDays($daysAgo),
+            ]);
+        }
+
+        $this->actingAs($this->staff())
+            ->get("/admin/field-offices/{$office->id}")
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $names = collect($page->toArray()['props']['recent'])->pluck('participant');
+
+                $this->assertSame(['NEWEST', 'MIDDLE', 'OLDEST'], $names->all());
+            });
+    }
+
+    public function test_the_office_page_counts_without_loading_every_registration(): void
+    {
+        $office = FieldOffice::where('code', 'nsfo')->first();
+        $paid = Training::factory()->paid(1500)->create();
+        $free = Training::factory()->create(['payment_required' => false]);
+
+        $settled = $this->participantIn($office, 'ALPHA SETTLED');
+        $owing = $this->participantIn($office, 'BRAVO OWING');
+        $freeSeat = $this->participantIn($office, 'CHARLIE FREE');
+
+        $settledRegistration = Registration::factory()->create([
+            'user_id' => $settled->getKey(),
+            'training_id' => $paid->getKey(),
+        ]);
+        Payment::factory()->verified()->create([
+            'registration_id' => $settledRegistration->getKey(),
+            'user_id' => $settled->getKey(),
+            'training_id' => $paid->getKey(),
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::Cash,
+        ]);
+
+        Registration::factory()->create([
+            'user_id' => $owing->getKey(),
+            'training_id' => $paid->getKey(),
+        ]);
+        Registration::factory()->create([
+            'user_id' => $freeSeat->getKey(),
+            'training_id' => $free->getKey(),
+        ]);
+
+        $this->actingAs($this->staff())
+            ->get("/admin/field-offices/{$office->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('stats.registrations', 3)
+                // Settled is the paid-and-verified seat plus the free one; a
+                // free training needs no payment to count as settled.
+                ->where('stats.settled', 2)
+                ->where('stats.outstanding', 1)
+                ->where('stats.collected', 1500)
+                ->etc()
             );
     }
 
