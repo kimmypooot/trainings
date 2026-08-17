@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Role;
 use App\Jobs\ImportGoogleAvatar;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as SocialiteUser;
 use Mockery;
 use Tests\TestCase;
@@ -331,6 +333,85 @@ class GoogleAccountLinkTest extends TestCase
         $this->get('/auth/google/callback')->assertRedirect(route('dashboard'));
 
         $this->assertAuthenticatedAs($user->fresh());
+    }
+
+    /*
+     * ── Where a Google sign-in lands ──────────────────────────────────────
+     *
+     * Some staff authenticate with Google, and the button is the same one, so
+     * this branch has to agree with LoginController rather than assume every
+     * Google sign-in is a participant.
+     */
+
+    public function test_a_staff_google_sign_in_lands_on_the_admin_dashboard(): void
+    {
+        $staff = $this->participant([
+            'email' => 'hrd@csc.gov.ph',
+            'role' => Role::Admin,
+        ]);
+
+        $this->fakeGoogleUser('google-staff', 'hrd@csc.gov.ph');
+
+        $this->get('/auth/google/callback')->assertRedirect(route('admin.dashboard'));
+
+        $this->assertAuthenticatedAs($staff->fresh());
+    }
+
+    public function test_a_google_sign_in_records_the_last_login(): void
+    {
+        $user = $this->participant(['email' => 'juan@example.com', 'last_login_at' => null]);
+
+        $this->fakeGoogleUser('google-123', 'juan@example.com');
+
+        $this->get('/auth/google/callback');
+
+        $this->assertNotNull($user->refresh()->last_login_at);
+    }
+
+    /*
+     * ── Recovering a lost state ───────────────────────────────────────────
+     *
+     * Socialite's state lives in the session, and the session is exactly what
+     * goes missing when the callback lands on a different host than the one
+     * the flow started on. Left alone that shows the participant the login
+     * page and teaches them to click the button twice.
+     */
+
+    public function test_a_lost_state_restarts_the_flow_instead_of_showing_the_login_page(): void
+    {
+        Socialite::shouldReceive('driver->user')->andThrow(new InvalidStateException);
+
+        $this->get('/auth/google/callback')->assertRedirect(route('auth.google'));
+
+        $this->assertGuest();
+    }
+
+    public function test_a_second_lost_state_gives_up_rather_than_looping(): void
+    {
+        Socialite::shouldReceive('driver->user')->andThrow(new InvalidStateException);
+
+        // The restart already happened; this is Google sending us back again
+        // with a state that still does not match.
+        $this->withSession(['google.state_retry' => true])
+            ->get('/auth/google/callback')
+            ->assertRedirect(route('login'))
+            ->assertSessionHasErrors('form');
+
+        $this->assertGuest();
+    }
+
+    public function test_a_successful_sign_in_spends_the_restart_marker(): void
+    {
+        $this->participant(['email' => 'juan@example.com']);
+
+        $this->fakeGoogleUser('google-123', 'juan@example.com');
+
+        // A marker left over from an earlier recovery must not cost the next
+        // lost state its one restart.
+        $this->withSession(['google.state_retry' => true])
+            ->get('/auth/google/callback')
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionMissing('google.state_retry');
     }
 
     /*

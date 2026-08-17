@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\AvatarImageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -161,5 +162,105 @@ class GoogleAvatarImportTest extends TestCase
         (new ImportGoogleAvatar(999999, self::URL))->handle();
 
         Http::assertNothingSent();
+    }
+
+    /*
+     * ── The manual backstop ───────────────────────────────────────────────
+     *
+     * The import is dispatched once and never retried, so a job that is queued
+     * and then never run leaves the account with initials and no way back —
+     * disconnecting Google, which would re-import, is refused for an account
+     * Google is the only way into. tims:import-google-avatar is that way back.
+     */
+
+    public function test_the_command_re_queues_the_import(): void
+    {
+        Queue::fake();
+
+        $user = $this->participant([
+            'google_id' => 'google-123',
+            'google_avatar_url' => self::URL,
+        ]);
+
+        $this->artisan('tims:import-google-avatar', ['user' => $user->email])
+            ->assertSuccessful();
+
+        Queue::assertPushed(
+            ImportGoogleAvatar::class,
+            fn (ImportGoogleAvatar $job) => $job->userId === $user->getKey() && $job->url === self::URL,
+        );
+    }
+
+    public function test_the_command_takes_a_numeric_id_too(): void
+    {
+        Queue::fake();
+
+        $user = $this->participant([
+            'google_id' => 'google-123',
+            'google_avatar_url' => self::URL,
+        ]);
+
+        $this->artisan('tims:import-google-avatar', ['user' => (string) $user->getKey()])
+            ->assertSuccessful();
+
+        Queue::assertPushed(ImportGoogleAvatar::class);
+    }
+
+    public function test_the_command_refuses_an_account_with_no_google_photo(): void
+    {
+        Queue::fake();
+
+        $user = $this->participant();
+
+        $this->artisan('tims:import-google-avatar', ['user' => $user->email])
+            ->assertFailed();
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_the_command_leaves_a_photo_the_participant_already_has(): void
+    {
+        Queue::fake();
+
+        $user = $this->participant([
+            'google_id' => 'google-123',
+            'google_avatar_url' => self::URL,
+            'avatar_path' => 'avatars/mine.jpg',
+        ]);
+
+        $this->artisan('tims:import-google-avatar', ['user' => $user->email])
+            ->assertFailed();
+
+        Queue::assertNothingPushed();
+        $this->assertSame('avatars/mine.jpg', $user->refresh()->avatar_path);
+    }
+
+    public function test_force_clears_the_slot_so_the_import_can_fill_it(): void
+    {
+        Queue::fake();
+
+        $user = $this->participant([
+            'google_id' => 'google-123',
+            'google_avatar_url' => self::URL,
+            'avatar_path' => 'avatars/mine.jpg',
+        ]);
+
+        $this->artisan('tims:import-google-avatar', ['user' => $user->email, '--force' => true])
+            ->assertSuccessful();
+
+        // The job refuses to overwrite, so --force has to clear the slot for
+        // it rather than just asking louder.
+        $this->assertNull($user->refresh()->avatar_path);
+        Queue::assertPushed(ImportGoogleAvatar::class);
+    }
+
+    public function test_an_unknown_account_is_refused(): void
+    {
+        Queue::fake();
+
+        $this->artisan('tims:import-google-avatar', ['user' => 'nobody@example.com'])
+            ->assertFailed();
+
+        Queue::assertNothingPushed();
     }
 }
