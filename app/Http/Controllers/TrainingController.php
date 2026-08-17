@@ -36,8 +36,15 @@ class TrainingController extends Controller
             'sort' => $request->string('sort')->toString(),
         ];
 
+        // notEnded(), not upcoming(): a run stays in the catalogue until the
+        // last day is over. upcoming() drops it the moment its first morning
+        // begins, so a three-day course disappeared on day one while it was
+        // still being delivered — and while the calendar, which was moved to
+        // the overlap rule earlier, went on showing it. Whether the
+        // registration window is still open is a separate question the card
+        // already answers for itself.
         $trainings = Training::visible()
-            ->upcoming()
+            ->notEnded()
             ->withCount([
                 'registrations as active_registrations_count' => fn ($query) => $query->whereIn('status', RegistrationStatus::occupying()),
             ])
@@ -79,7 +86,9 @@ class TrainingController extends Controller
         // is true across pages rather than only on the page in view.
         $registeredCount = Registration::where('user_id', $request->user()->getKey())
             ->whereIn('status', RegistrationStatus::occupying())
-            ->whereHas('training', fn ($query) => $query->visible()->upcoming())
+            // Same window as the catalogue above, or the strip would say
+            // "2 registrations" over a page listing three.
+            ->whereHas('training', fn ($query) => $query->visible()->notEnded())
             ->count();
 
         // The detail a card opens in its modal is fetched on demand, not shipped
@@ -90,9 +99,12 @@ class TrainingController extends Controller
         $details = null;
 
         if ($request->filled('details')) {
+            // And again here — this is what a card's View Details asks for, so
+            // a window narrower than the listing's would render cards whose
+            // modal comes back empty.
             $selected = Training::query()
                 ->visible()
-                ->upcoming()
+                ->notEnded()
                 ->whereKey($request->integer('details'))
                 ->first();
 

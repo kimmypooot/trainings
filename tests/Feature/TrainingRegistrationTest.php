@@ -59,6 +59,54 @@ class TrainingRegistrationTest extends TestCase
             );
     }
 
+    /**
+     * A run that has started but not finished still belongs in the catalogue.
+     *
+     * The listing used to filter on `upcoming()` — `starts_at >= now()` —
+     * which drops a multi-day course on the morning of day one, while it is
+     * still being delivered. The calendar had already moved to the overlap
+     * rule, so the two pages disagreed about the same training: it appeared on
+     * every day of its run in the calendar and nowhere in Browse.
+     */
+    public function test_the_catalogue_keeps_a_run_that_has_started_but_not_ended(): void
+    {
+        $running = Training::factory()->startingToday()->runningFor(3)->create([
+            'title' => 'Basic Computer Literacy',
+        ]);
+
+        Training::factory()->create([
+            'title' => 'Finished Yesterday',
+            'starts_at' => now()->subDays(3),
+            'ends_at' => now()->subDay(),
+        ]);
+
+        $this->actingAs($this->participant())
+            ->get('/trainings')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                // The one still running, never the one already over.
+                ->has('trainings.data', 1)
+                ->where('trainings.data.0.title', $running->title)
+            );
+    }
+
+    public function test_a_running_training_can_still_open_its_details(): void
+    {
+        $running = Training::factory()->startingToday()->runningFor(3)->create([
+            'title' => 'Basic Computer Literacy',
+        ]);
+
+        // The modal fetches through its own query. A window narrower than the
+        // listing's would render a card whose View Details comes back empty.
+        $this->actingAs($this->participant())
+            ->get('/trainings?details='.$running->getKey())
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('details.title', $running->title)
+                ->etc()
+            );
+    }
+
     public function test_draft_training_detail_is_not_found(): void
     {
         $training = Training::factory()->draft()->create();
