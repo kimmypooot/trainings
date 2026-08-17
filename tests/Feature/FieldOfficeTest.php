@@ -82,6 +82,32 @@ class FieldOfficeTest extends TestCase
         $this->actingAs($this->staff(Role::SuperAdmin))->get("/admin/field-offices/{$office->id}")->assertOk();
     }
 
+    public function test_the_index_carries_both_counts_the_row_renders(): void
+    {
+        $office = FieldOffice::where('code', 'nsfo')->first();
+
+        $participant = User::factory()->create(['profile_completed_at' => now()]);
+        Profile::factory()->for($participant)->create(['field_office_id' => $office->id]);
+
+        User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => $office->id,
+            'profile_completed_at' => now(),
+        ]);
+
+        $this->actingAs($this->staff())
+            ->get('/admin/field-offices')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) use ($office) {
+                $row = collect($page->toArray()['props']['offices'])->firstWhere('id', $office->id);
+
+                $this->assertSame(1, $row['participants']);
+                // Read from the payload but never loaded, so it arrived as
+                // null and the Staff column rendered blank.
+                $this->assertSame(1, $row['staff']);
+            });
+    }
+
     public function test_show_reports_office_stats(): void
     {
         $office = FieldOffice::where('code', 'nsfo')->first();

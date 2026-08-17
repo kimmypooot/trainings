@@ -17,7 +17,10 @@ class FieldOfficeController extends Controller
 {
     public function index(): Response
     {
-        $offices = FieldOffice::withCount('profiles')->orderBy('name')->get();
+        // Both counts, because the row renders both. `users_count` was read
+        // below without being loaded, which Eloquent answers with null rather
+        // than an error — so the Staff column was simply blank.
+        $offices = FieldOffice::withCount(['profiles', 'users'])->orderBy('name')->get();
 
         return Inertia::render('Admin/FieldOffices/Index', [
             'offices' => $offices->map(fn (FieldOffice $office) => [

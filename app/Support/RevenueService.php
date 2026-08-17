@@ -36,7 +36,13 @@ final class RevenueService
     {
         $settled = $payments->filter(fn (Payment $payment) => $payment->payment_method->isSettlement());
         $promissory = $payments->reject(fn (Payment $payment) => $payment->payment_method->isSettlement());
-        $discounted = $payments->filter(fn (Payment $payment) => $payment->prime_hrm_discount);
+
+        // Counted over the settled payments, not all of them, so the count and
+        // the money it annotates describe the same set. Counting a promissory
+        // note here while its gross and discount are left out of the figures
+        // above made "granted to N participants" impossible to reconcile with
+        // the discount total printed beside it.
+        $discounted = self::discounted($payments);
 
         return [
             'gross' => round($settled->sum(fn (Payment $payment) => $payment->grossAmount()), 2),
@@ -57,8 +63,10 @@ final class RevenueService
      */
     public static function discountedList(Collection $payments): array
     {
-        return $payments
-            ->filter(fn (Payment $payment) => $payment->prime_hrm_discount)
+        // Same set summarize() counts — the table is the detail behind that
+        // figure, so a row here that is missing from the total, or the other
+        // way round, is a report that cannot be added up.
+        return self::discounted($payments)
             ->map(fn (Payment $payment) => [
                 'id' => $payment->getKey(),
                 'participant' => $payment->user->name,
@@ -69,5 +77,19 @@ final class RevenueService
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * The discounted payments among a set, on the one rule both the count and
+     * the list use: the discount is only real once the money is settled.
+     *
+     * @param  Collection<int, Payment>  $payments
+     * @return Collection<int, Payment>
+     */
+    private static function discounted(Collection $payments): Collection
+    {
+        return $payments
+            ->filter(fn (Payment $payment) => $payment->payment_method->isSettlement())
+            ->filter(fn (Payment $payment) => $payment->prime_hrm_discount);
     }
 }

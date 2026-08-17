@@ -439,7 +439,15 @@ class ExportController extends Controller
             'revenue-report-'.$scope->exportSlug(),
             [
                 'Participant', 'Organization', 'Field Office', 'Training', 'Training Date',
-                'Full Fee', 'PRIME-HRM Discount', 'Discount Amount', 'Amount Paid', 'Method', 'OR No.',
+                'Full Fee', 'PRIME-HRM Discount', 'Discount Amount',
+                // Two money columns rather than one "Amount Paid", because a
+                // promissory note is verified but nothing was received. Folded
+                // together, summing the column overstated the takings and
+                // disagreed with the Collected figure on the screen this claims
+                // to mirror. Split, each column totals to its own headline and
+                // the row is still there to show who owes.
+                'Amount Collected', 'On Promissory Note',
+                'Method', 'OR No.',
             ],
             fn () => $this->rows($query->orderBy('or_number'), fn (Payment $payment) => [
                 $payment->user->name,
@@ -452,7 +460,8 @@ class ExportController extends Controller
                 // person reconciling a spreadsheet, not by a machine.
                 $payment->prime_hrm_discount ? 'Yes (20%)' : 'No',
                 $payment->discount_amount,
-                $payment->amount,
+                $payment->payment_method->isSettlement() ? $payment->amount : null,
+                $payment->payment_method->isSettlement() ? null : $payment->amount,
                 $payment->payment_method->label(),
                 $payment->or_number,
             ]),

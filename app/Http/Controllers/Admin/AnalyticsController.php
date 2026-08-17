@@ -580,16 +580,26 @@ class AnalyticsController extends Controller
                 continue;
             }
 
+            // Through RevenueService rather than summed here. Hand-rolling it
+            // is how the trend came to count a promissory note's gross and
+            // discount that the headline above it leaves out, so the rows
+            // added up to more than the total they sat under.
+            $summary = RevenueService::summarize($verified);
+
             $rows[$key]['count'] += $verified->count();
-            $rows[$key]['gross'] += $verified->sum(fn (Payment $payment) => $payment->grossAmount());
-            $rows[$key]['discount'] += $verified->sum(fn (Payment $payment) => (float) $payment->discount_amount);
-            $rows[$key]['collected'] += $verified->sum(fn (Payment $payment) => $payment->payment_method->isSettlement() ? (float) $payment->amount : 0.0);
-            $rows[$key]['promissory'] += $verified->sum(fn (Payment $payment) => $payment->payment_method->isSettlement() ? 0.0 : (float) $payment->amount);
+            $rows[$key]['gross'] += $summary['gross'];
+            $rows[$key]['discount'] += $summary['discount'];
+            $rows[$key]['collected'] += $summary['collected'];
+            $rows[$key]['promissory'] += $summary['promissory'];
         }
 
         return array_map(
             fn (string $key, array $row) => [
-                'label' => CarbonImmutable::createFromFormat('Y-m', $key)->format('M Y'),
+                // Parsed with an explicit first-of-month. 'Y-m' leaves the day
+                // unset, so PHP fills it from today and a 31st turns '2026-02'
+                // into March — the trend then files February's money under the
+                // wrong label, but only when the report is run late in a month.
+                'label' => CarbonImmutable::createFromFormat('Y-m-d', $key.'-01')->format('M Y'),
                 'gross' => round($row['gross'], 2),
                 'discount' => round($row['discount'], 2),
                 'collected' => round($row['collected'], 2),

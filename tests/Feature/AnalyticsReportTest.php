@@ -143,6 +143,80 @@ class AnalyticsReportTest extends TestCase
             );
     }
 
+    /*
+     * ── The reports have to add up ────────────────────────────────────────
+     *
+     * Every money surface reads the same rule from RevenueService: a
+     * promissory note is verified, but no money arrived, so it is held apart
+     * from what was assessed and what was collected. These pin the places
+     * that used to restate the rule for themselves and get it wrong.
+     */
+
+    public function test_a_discounted_promissory_note_is_not_counted_as_a_discount_given(): void
+    {
+        $training = Training::factory()->paid(1500)->create();
+
+        // The discount is only real once the money settles: promising to pay
+        // 1200 of a 1500 fee has given nothing away yet.
+        $this->paymentFor($this->registrationIn($this->officeA, $training, 'ALPHA PROMISED'), [
+            'amount' => 1200,
+            'discount_amount' => 300,
+            'prime_hrm_discount' => true,
+            'payment_method' => PaymentMethod::Promissory,
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get('/admin/analytics?view=training&training_id='.$training->getKey())
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainingReport.revenue.gross', 0)
+                ->where('trainingReport.revenue.discount', 0)
+                // The count and the table have to describe the same set as the
+                // money above them, or the report cannot be reconciled.
+                ->where('trainingReport.revenue.discounted_count', 0)
+                ->has('trainingReport.revenue.discounted', 0)
+                ->where('trainingReport.revenue.promissory', 1200)
+                ->etc()
+            );
+    }
+
+    public function test_the_monthly_trend_rows_sum_to_the_headline_totals(): void
+    {
+        $training = Training::factory()->paid(1500)->create([
+            'starts_at' => CarbonImmutable::create(2026, 2, 10, 9),
+            'ends_at' => CarbonImmutable::create(2026, 2, 10, 17),
+        ]);
+
+        $this->paymentFor($this->registrationIn($this->officeA, $training, 'ALPHA CASH'), [
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::Cash,
+        ]);
+        $this->paymentFor($this->registrationIn($this->officeA, $training, 'ALPHA PROMISSORY'), [
+            'amount' => 2000,
+            'payment_method' => PaymentMethod::Promissory,
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get('/admin/analytics?view=period&period=annual&year=2026')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $rows = collect($page->toArray()['props']['periodReport']['byPeriod']);
+
+                $february = $rows->firstWhere('label', 'Feb 2026');
+
+                // Named for the month it is, not the month today's date pushes
+                // it into: 'Y-m' with no day overflows a short month on a 31st.
+                $this->assertNotNull($february, 'February row is missing or mislabelled.');
+
+                // The promissory 2000 belongs in its own column, exactly as the
+                // headline reports it — not folded into gross. Cast because a
+                // whole number of pesos comes back through JSON as an int.
+                $this->assertSame(1500.0, (float) $february['gross']);
+                $this->assertSame(1500.0, (float) $february['collected']);
+                $this->assertSame(2000.0, (float) $february['promissory']);
+            });
+    }
+
     public function test_a_training_report_without_a_selection_asks_for_one(): void
     {
         $this->actingAs($this->admin())
@@ -331,6 +405,45 @@ class AnalyticsReportTest extends TestCase
         $this->actingAs($this->staffFor($this->officeA))
             ->get('/admin/exports/reports/revenue?view=training&training_id='.$training->getKey())
             ->assertForbidden();
+    }
+
+    public function test_the_revenue_export_holds_a_promissory_note_apart_from_cash(): void
+    {
+        $training = Training::factory()->paid(1500)->create();
+
+        $this->paymentFor($this->registrationIn($this->officeA, $training, 'ALPHA CASH'), [
+            'or_number' => 'OR-CASH',
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::Cash,
+        ]);
+        $this->paymentFor($this->registrationIn($this->officeA, $training, 'ALPHA OWES'), [
+            'or_number' => 'OR-NOTE',
+            'amount' => 2000,
+            'payment_method' => PaymentMethod::Promissory,
+        ]);
+
+        $csv = $this->body(
+            $this->actingAs($this->admin())
+                ->get('/admin/exports/reports/revenue?view=training&training_id='.$training->getKey())
+                ->assertOk()
+        );
+
+        // Two money columns, so summing either one reconciles against the
+        // figure the analytics screen prints. Folded into a single "Amount
+        // Paid" the note inflated the takings by its own value.
+        $this->assertStringContainsString('Amount Collected', $csv);
+        $this->assertStringContainsString('On Promissory Note', $csv);
+
+        $rows = collect(explode("\n", $csv));
+
+        $cash = $rows->first(fn (string $line) => str_contains($line, 'OR-CASH'));
+        $note = $rows->first(fn (string $line) => str_contains($line, 'OR-NOTE'));
+
+        // The row is still there — the office needs to see who owes — but the
+        // amount sits under the column that says nothing was received.
+        $this->assertStringContainsString('1500', $cash);
+        $this->assertStringContainsString('2000', $note);
+        $this->assertStringContainsString('Promissory', $note);
     }
 
     public function test_the_breakdown_report_export_is_scoped(): void
