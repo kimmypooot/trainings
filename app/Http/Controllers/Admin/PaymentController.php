@@ -105,6 +105,9 @@ class PaymentController extends Controller
                 'status' => $payment->status->value,
                 'status_label' => $payment->status->label(),
                 'rejection_reason' => $payment->rejection_reason,
+                // The officer's own notes, recorded at verification or the
+                // counter — and the trail of a refund riding on this payment.
+                'remarks' => $payment->remarks,
                 'verified_by' => $payment->verifier?->name,
                 'or_number' => $payment->or_number,
                 'or_date' => $payment->or_date?->format('d M Y'),

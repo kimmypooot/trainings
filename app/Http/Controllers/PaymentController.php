@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\PaymentMethod;
 use App\Enums\PhysicalOrRequestStatus;
 use App\Enums\RefundStatus;
+use App\Enums\RegistrationStatus;
 use App\Models\Payment;
 use App\Models\PaymentSetting;
 use App\Models\PhysicalOrRequest;
@@ -38,8 +39,18 @@ class PaymentController extends Controller
             ->get();
 
         // Registrations on paid trainings that have no payment recorded yet.
+        /*
+         * Only a registration that still holds a slot owes anything.
+         *
+         * This used to have no status filter at all, so a participant whose
+         * registration had been rejected or cancelled was still shown a bank
+         * account and asked to pay for a training they were not attending.
+         * Now that settling the fee confirms the slot, that was also a way to
+         * pay past a decision somebody had made on purpose.
+         */
         $awaiting = Registration::with('training')
             ->where('user_id', $request->user()->getKey())
+            ->whereIn('status', RegistrationStatus::occupying())
             ->whereHas('training', fn ($query) => $query->where('payment_required', true))
             ->whereDoesntHave('payments')
             ->get();

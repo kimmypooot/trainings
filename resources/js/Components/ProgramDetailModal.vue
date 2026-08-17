@@ -1,0 +1,188 @@
+<script setup>
+import { computed } from 'vue';
+import AppModal from '@/Components/AppModal.vue';
+import AppButton from '@/Components/AppButton.vue';
+import AppBadge from '@/Components/AppBadge.vue';
+import ProgramStatusPill from '@/Components/ProgramStatusPill.vue';
+
+/**
+ * The full catalogue view of one program, for anonymous visitors.
+ *
+ * Shared by the landing page and /programs. `program` is null when closed —
+ * the parent owns the selection and clears it on @close.
+ */
+const props = defineProps({
+    program: { type: Object, default: null },
+});
+
+defineEmits(['close']);
+
+const subtitle = computed(() =>
+    props.program ? `${props.program.mode} · Starts ${props.program.starts_at}` : ''
+);
+
+const slotsDetail = computed(() => {
+    if (! props.program) return '';
+
+    return props.program.capacity === null
+        ? 'No limit'
+        : `${props.program.slots_remaining} of ${props.program.capacity} remaining`;
+});
+
+/*
+ * The call to action follows the status. Sending someone to a sign-in page for
+ * a run they cannot join yet — or at all — is the kind of dead end an
+ * always-on "Sign in to register" button creates.
+ */
+const callToAction = computed(() => {
+    if (! props.program) return { label: '', enabled: false };
+
+    if (props.program.is_registrable) {
+        return { label: 'Sign in to register', enabled: true };
+    }
+
+    return {
+        label: {
+            opening: `Registration opens ${props.program.registration_opens_at}`,
+            full: 'This program is fully booked',
+            closed: 'Registration has closed',
+            ongoing: 'This program is already under way',
+        }[props.program.status] ?? 'Registration is not open',
+        enabled: false,
+    };
+});
+
+const money = (value) =>
+    Number(value).toLocaleString('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+</script>
+
+<template>
+    <AppModal
+        :open="program !== null"
+        :title="program?.title"
+        :subtitle="subtitle"
+        size="lg"
+        @close="$emit('close')"
+    >
+        <template v-if="program">
+            <!-- Same pill as the card, so the modal opens on the answer. -->
+            <div class="mb-6 flex flex-wrap items-center gap-2">
+                <ProgramStatusPill :status="program.status" :label="program.status_label" />
+                <AppBadge v-if="program.is_supervisory" status="supervisory" />
+            </div>
+
+            <dl class="grid gap-x-6 gap-y-5 text-sm sm:grid-cols-2">
+                <div>
+                    <dt class="text-csc-ink/60">Date</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">
+                        {{ program.starts_at }}
+                        <!-- A single-day run stores the same date twice; "Oct 4 – Oct 4" is noise. -->
+                        <template v-if="program.ends_at && program.ends_at !== program.starts_at">
+                            <span class="text-csc-ink/55">– {{ program.ends_at }}</span>
+                        </template>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-csc-ink/60">Venue</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">{{ program.venue }}</dd>
+                </div>
+                <div>
+                    <dt class="text-csc-ink/60">Mode</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">{{ program.mode }}</dd>
+                </div>
+                <div>
+                    <dt class="text-csc-ink/60">Fee</dt>
+                    <dd class="mt-0.5 font-medium" :class="program.payment_required ? 'text-csc-ink' : 'text-success'">
+                        {{ program.payment_required ? `₱${money(program.payment_amount)}` : 'Free of charge' }}
+                    </dd>
+                </div>
+                <div v-if="program.category">
+                    <dt class="text-csc-ink/60">Curriculum</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">{{ program.category }}</dd>
+                </div>
+                <div>
+                    <dt class="text-csc-ink/60">Available slots</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">{{ slotsDetail }}</dd>
+                </div>
+                <div v-if="program.duration_days">
+                    <dt class="text-csc-ink/60">Duration</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">
+                        {{ program.duration_days }} day{{ program.duration_days === 1 ? '' : 's' }}
+                    </dd>
+                </div>
+                <div v-if="program.level_label">
+                    <dt class="text-csc-ink/60">Level</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">{{ program.level_label }}</dd>
+                </div>
+                <div v-if="program.registration_opens_at">
+                    <dt class="text-csc-ink/60">Registration opens</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">{{ program.registration_opens_at }}</dd>
+                </div>
+                <div v-if="program.registration_closes_at">
+                    <dt class="text-csc-ink/60">Registration closes</dt>
+                    <dd class="mt-0.5 font-medium text-csc-ink">{{ program.registration_closes_at }}</dd>
+                </div>
+                <div v-if="program.venue_details" class="sm:col-span-2">
+                    <dt class="text-csc-ink/60">Venue details</dt>
+                    <dd class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink/75">
+                        {{ program.venue_details }}
+                    </dd>
+                </div>
+            </dl>
+
+            <div v-if="program.description" class="mt-6 border-t border-csc-line pt-5">
+                <h3 class="text-sm font-semibold text-csc-blue">Description</h3>
+                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
+                    {{ program.description }}
+                </p>
+            </div>
+
+            <div v-if="program.target_participants" class="mt-6 border-t border-csc-line pt-5">
+                <h3 class="text-sm font-semibold text-csc-blue">Target participants</h3>
+                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
+                    {{ program.target_participants }}
+                </p>
+            </div>
+
+            <div v-if="program.prerequisites" class="mt-6 border-t border-csc-line pt-5">
+                <h3 class="text-sm font-semibold text-csc-blue">Prerequisites</h3>
+                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
+                    {{ program.prerequisites }}
+                </p>
+            </div>
+
+            <p
+                v-if="program.is_supervisory"
+                class="mt-6 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70"
+            >
+                <svg class="mt-0.5 size-4 shrink-0 text-csc-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 16v-4M12 8h.01M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z" />
+                </svg>
+                This is a Supervisory Development Course. You will be asked to submit an output before
+                your completion is credited.
+            </p>
+        </template>
+
+        <template #footer>
+            <div v-if="program" class="w-full">
+                <AppButton v-if="callToAction.enabled" href="/login" size="lg" block>
+                    {{ callToAction.label }}
+                </AppButton>
+                <!--
+                    Not a disabled button: there is nothing to enable later, so a
+                    real explanation reads better than a dead control — and it
+                    keeps the reason on screen for a screen reader.
+                -->
+                <p
+                    v-else
+                    class="rounded-lg bg-csc-blue-tint px-4 py-3 text-center text-sm font-medium text-csc-ink/75"
+                >
+                    {{ callToAction.label }}
+                </p>
+            </div>
+        </template>
+    </AppModal>
+</template>

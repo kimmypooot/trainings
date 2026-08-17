@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\PaymentStatus;
 use App\Enums\Role;
 use App\Models\Attendance;
+use App\Models\Certificate;
 use App\Models\FieldOffice;
 use App\Models\Payment;
 use App\Models\Profile;
@@ -99,6 +100,33 @@ class ExportScopingTest extends TestCase
 
         $this->assertStringContainsString($a->name, $csv);
         $this->assertStringContainsString($b->name, $csv);
+    }
+
+    public function test_the_certificate_export_is_limited_to_the_staff_members_office(): void
+    {
+        $mine = $this->participantIn($this->officeA, 'ALPHA CERT');
+        $theirs = $this->participantIn($this->officeB, 'BRAVO CERT');
+
+        $training = Training::factory()->create();
+
+        $mineCert = Certificate::factory()->released()->create([
+            'user_id' => $mine->id,
+            'training_id' => $training->id,
+        ]);
+        $theirsCert = Certificate::factory()->released()->create([
+            'user_id' => $theirs->id,
+            'training_id' => $training->id,
+        ]);
+
+        $csv = $this->body(
+            $this->actingAs($this->staffFor($this->officeA))
+                ->get('/admin/exports/certificates')
+                ->assertOk()
+        );
+
+        $this->assertStringContainsString($mineCert->certificate_number, $csv);
+        $this->assertStringNotContainsString($theirsCert->certificate_number, $csv);
+        $this->assertStringNotContainsString($theirs->email, $csv);
     }
 
     public function test_the_participant_export_carries_the_directorys_filters(): void
@@ -337,7 +365,7 @@ class ExportScopingTest extends TestCase
     {
         $participant = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
 
-        foreach (['participants', 'registrations', 'payments'] as $export) {
+        foreach (['participants', 'registrations', 'payments', 'certificates'] as $export) {
             $this->actingAs($participant)
                 ->get("/admin/exports/{$export}")
                 ->assertForbidden();
@@ -391,15 +419,15 @@ class ExportScopingTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Admin/Analytics')
-                ->where('headline.registrations', 1)
+                ->where('overview.headline.registrations', 1)
                 // The per-office breakdown is meaningless when scoped to one.
-                ->has('byFieldOffice', 0)
+                ->has('overview.byFieldOffice', 0)
             );
 
         $this->actingAs($this->staffFor(null, Role::Admin))
             ->get('/admin/analytics')
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('headline.registrations', 3));
+            ->assertInertia(fn ($page) => $page->where('overview.headline.registrations', 3));
     }
 
     /**
@@ -425,23 +453,23 @@ class ExportScopingTest extends TestCase
             ->get('/admin/analytics')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('demographics.sex', fn ($rows) => $total($rows) === 1)
-                ->where('demographics.positionLevel', fn ($rows) => $total($rows) === 1)
+                ->where('overview.demographics.sex', fn ($rows) => $total($rows) === 1)
+                ->where('overview.demographics.positionLevel', fn ($rows) => $total($rows) === 1)
                 // The geographic cuts are scoped like every other one — a
                 // region chart that leaked the whole region would be the same
                 // disclosure as a name list.
-                ->where('demographics.region', fn ($rows) => $total($rows) === 1)
-                ->where('demographics.province', fn ($rows) => $total($rows) === 1)
-                ->where('topAgencies', fn ($rows) => $total($rows) === 1)
+                ->where('overview.demographics.region', fn ($rows) => $total($rows) === 1)
+                ->where('overview.demographics.province', fn ($rows) => $total($rows) === 1)
+                ->where('overview.topAgencies', fn ($rows) => $total($rows) === 1)
             );
 
         $this->actingAs($this->staffFor(null, Role::Admin))
             ->get('/admin/analytics')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('demographics.sex', fn ($rows) => $total($rows) === 3)
-                ->where('demographics.region', fn ($rows) => $total($rows) === 3)
-                ->where('topAgencies', fn ($rows) => $total($rows) === 3)
+                ->where('overview.demographics.sex', fn ($rows) => $total($rows) === 3)
+                ->where('overview.demographics.region', fn ($rows) => $total($rows) === 3)
+                ->where('overview.topAgencies', fn ($rows) => $total($rows) === 3)
             );
     }
 
@@ -465,7 +493,7 @@ class ExportScopingTest extends TestCase
             ->get('/admin/analytics')
             ->assertOk()
             ->assertInertia(function ($page) {
-                $demographics = $page->toArray()['props']['demographics'];
+                $demographics = $page->toArray()['props']['overview']['demographics'];
                 $totals = array_map(
                     fn ($rows) => array_sum(array_column($rows, 'count')),
                     $demographics,
@@ -488,7 +516,7 @@ class ExportScopingTest extends TestCase
             ->get('/admin/analytics')
             ->assertOk()
             ->assertInertia(function ($page) {
-                $labels = array_column($page->toArray()['props']['demographics']['ageBand'], 'label');
+                $labels = array_column($page->toArray()['props']['overview']['demographics']['ageBand'], 'label');
 
                 $this->assertSame(['18-25', '26-35', '36-45', '46-55', '56-65', 'Over 65'], $labels);
             });
@@ -501,12 +529,12 @@ class ExportScopingTest extends TestCase
         $this->actingAs($this->staffFor($this->officeA))
             ->get('/admin/analytics')
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('payments', null));
+            ->assertInertia(fn ($page) => $page->where('overview.payments', null));
 
         $this->actingAs($this->collectorFor(null))
             ->get('/admin/analytics')
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->has('payments.verified_total'));
+            ->assertInertia(fn ($page) => $page->has('overview.payments.verified_total'));
     }
 
     public function test_analytics_reports_an_attendance_rate(): void
@@ -524,9 +552,9 @@ class ExportScopingTest extends TestCase
             ->get('/admin/analytics')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('attendance.total', 2)
+                ->where('overview.attendance.total', 2)
                 // One Present, one Absent — JSON renders the 50.0 as 50.
-                ->where('attendance.rate', 50)
+                ->where('overview.attendance.rate', 50)
             );
     }
 }

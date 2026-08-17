@@ -7,6 +7,7 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
+import AppTextarea from '@/Components/AppTextarea.vue';
 
 const props = defineProps({
     office: { type: Object, default: null },
@@ -122,6 +123,16 @@ const submit = () => {
                             on existing records but cannot be newly chosen.
                         </span>
                     </label>
+                </AppCard>
+
+                <AppCard title="Remarks">
+                    <AppTextarea
+                        v-model="form.remarks"
+                        label="Remarks"
+                        hint="Internal notes, shown on the office detail page."
+                        :error="form.errors.remarks"
+                        maxlength="1000"
+                    />
                 </AppCard>
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">

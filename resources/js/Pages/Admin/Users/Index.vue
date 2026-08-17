@@ -5,6 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 
@@ -12,6 +13,10 @@ const props = defineProps({
     users: { type: Object, required: true },
     filters: { type: Object, required: true },
     roles: { type: Array, required: true },
+    // HRD sees the same directory without the controls — administering the
+    // accounts is superadmin's. The routes enforce it; this keeps the page
+    // from offering buttons that would 403.
+    canManage: { type: Boolean, default: false },
 });
 
 const page = usePage();
@@ -38,7 +43,42 @@ watch([search, role], () => {
     }, 300);
 });
 
-const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { preserveScroll: true });
+const confirming = ref(null);
+const processing = ref(false);
+
+const dialog = computed(() => {
+    if (!confirming.value) return null;
+
+    const user = confirming.value;
+    const who = user.name ?? user.email;
+
+    return user.is_active
+        ? {
+              title: `Deactivate ${who}?`,
+              description: 'They will not be able to sign in. Their role and office assignment are kept.',
+              confirmLabel: 'Deactivate',
+          }
+        : {
+              title: `Activate ${who}?`,
+              description: 'They will be able to sign in again.',
+              confirmLabel: 'Activate',
+          };
+});
+
+const confirm = () => {
+    processing.value = true;
+    router.post(
+        `/admin/users/${confirming.value.id}/toggle`,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                processing.value = false;
+                confirming.value = null;
+            },
+        }
+    );
+};
 </script>
 
 <template>
@@ -69,17 +109,23 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                     </select>
                 </div>
 
-                        <AppButton href="/admin/users/create" icon="plus">New Staff Account</AppButton>
+                <AppButton v-if="canManage" href="/admin/users/create" icon="plus">
+                    New Staff Account
+                </AppButton>
             </div>
 
             <AppCard v-if="!users.data.length" :padded="false">
                 <AppEmptyState
                     title="No staff accounts found"
-                    description="Add an account, or clear the filters if you were searching."
+                    :description="
+                        canManage
+                            ? 'Add an account, or clear the filters if you were searching.'
+                            : 'Clear the filters if you were searching.'
+                    "
                     icon="users"
                 >
-                    <template #action>
-                <AppButton href="/admin/users/create" icon="plus">New Staff Account</AppButton>
+                    <template v-if="canManage" #action>
+                        <AppButton href="/admin/users/create" icon="plus">New Staff Account</AppButton>
                     </template>
                 </AppEmptyState>
             </AppCard>
@@ -135,18 +181,26 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                                     >
                                         {{ user.is_active ? 'Active' : 'Deactivated' }}
                                     </span>
+                                    <p v-if="user.last_login_at" class="mt-1.5 text-2xs text-csc-ink/55">
+                                        Last sign-in {{ user.last_login_at }}
+                                    </p>
                                 </td>
                                 <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                    <Link :href="user.edit_url" class="text-xs font-semibold text-csc-blue hover:underline">
+                                    <span v-if="!canManage" class="text-xs text-csc-ink/45">—</span>
+                                    <Link
+                                        v-if="canManage"
+                                        :href="user.edit_url"
+                                        class="text-xs font-semibold text-csc-blue hover:underline"
+                                    >
                                         Edit
                                     </Link>
-                                    <template v-if="!user.is_self">
+                                    <template v-if="canManage && !user.is_self">
                                         <span class="px-2 text-csc-line">|</span>
                                         <button
                                             type="button"
                                             class="rounded text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                             :class="user.is_active ? 'text-danger' : 'text-success'"
-                                            @click="toggle(user)"
+                                            @click="confirming = user"
                                         >
                                             {{ user.is_active ? 'Deactivate' : 'Activate' }}
                                         </button>
@@ -177,16 +231,19 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                                 {{ user.is_active ? 'Active' : 'Off' }}
                             </span>
                         </div>
+                        <p v-if="user.last_login_at" class="mt-2 text-xs text-csc-ink/55">
+                            Last sign-in {{ user.last_login_at }}
+                        </p>
                         <div class="mt-3 flex items-center justify-between border-t border-csc-line pt-3">
                             <span class="text-xs text-csc-ink/60">{{ user.field_office ?? '—' }}</span>
-                            <span class="flex gap-3">
+                            <span v-if="canManage" class="flex gap-3">
                                 <Link :href="user.edit_url" class="text-xs font-semibold text-csc-blue">Edit</Link>
                                 <button
                                     v-if="!user.is_self"
                                     type="button"
                                     class="text-xs font-semibold"
                                     :class="user.is_active ? 'text-danger' : 'text-success'"
-                                    @click="toggle(user)"
+                                    @click="confirming = user"
                                 >
                                     {{ user.is_active ? 'Deactivate' : 'Activate' }}
                                 </button>
@@ -198,5 +255,16 @@ const toggle = (user) => router.post(`/admin/users/${user.id}/toggle`, {}, { pre
                 <AppPagination :pagination="users" label="staff accounts" class="pt-2" />
             </template>
         </div>
+
+        <AppConfirmModal
+            v-if="dialog"
+            :open="Boolean(confirming)"
+            :title="dialog.title"
+            :description="dialog.description"
+            :confirm-label="dialog.confirmLabel"
+            :processing="processing"
+            @confirm="confirm"
+            @close="confirming = null"
+        />
     </AuthenticatedLayout>
 </template>

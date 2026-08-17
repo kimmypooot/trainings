@@ -11,7 +11,9 @@ const props = defineProps({
 const nav = [
     { key: 'home', label: 'Home', href: '/' },
     { key: 'about', label: 'About', href: '/#about' },
-    { key: 'programs', label: 'Programs', href: '/#upcoming' },
+    // A real page now, not the landing page's six-card teaser. An anchor could
+    // only ever reach the teaser, and gave no way to see the rest of the calendar.
+    { key: 'programs', label: 'Programs', href: '/programs' },
     { key: 'contact', label: 'Contact', href: '/#contact' },
 ];
 
@@ -36,7 +38,10 @@ const footerSeals = [
 
 const quickLinks = [
     { label: 'Home', href: '/' },
-    { label: 'Programs', href: '/#programs' },
+    // /programs, matching the header nav. The footer used to send "Programs" to
+    // #programs — the feature grid — so the same word in two places landed a
+    // visitor in two different sections, neither of them obviously wrong.
+    { label: 'Programs', href: '/programs' },
     { label: 'About TIMS', href: '/#about' },
     { label: 'Create an account', href: '/register' },
     { label: 'Sign in', href: '/login' },

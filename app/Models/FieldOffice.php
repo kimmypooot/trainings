@@ -38,6 +38,16 @@ class FieldOffice extends Model
         return $this->hasMany(Profile::class);
     }
 
+    /**
+     * The staff whose own assignment is this office — the `users.field_office_id`
+     * side of the relationship, distinct from `profiles.field_office_id` which
+     * is the participant's office.
+     */
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

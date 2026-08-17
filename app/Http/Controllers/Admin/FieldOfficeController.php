@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\FieldOffice;
+use App\Models\Registration;
+use App\Support\RevenueService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -31,6 +34,8 @@ class FieldOfficeController extends Controller
                 'head_position' => $office->head_position,
                 'is_active' => $office->is_active,
                 'participants' => $office->profiles_count,
+                'staff' => $office->users_count,
+                'view_url' => route('admin.field-offices.show', $office),
                 'edit_url' => route('admin.field-offices.edit', $office),
             ])->all(),
             'types' => collect(FieldOffice::TYPES)
@@ -46,6 +51,65 @@ class FieldOfficeController extends Controller
             'office' => null,
             'types' => collect(FieldOffice::TYPES)
                 ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+                ->values()
+                ->all(),
+        ]);
+    }
+
+    /**
+     * The office's own dashboard. Everything is derived from the participant
+     * profiles that point at it (and, for staff, the users assigned to it) —
+     * the office is an administrative grouping, not a table of events.
+     */
+    public function show(FieldOffice $fieldOffice): Response
+    {
+        $fieldOffice->loadCount(['profiles', 'users']);
+
+        $registrations = Registration::with(['training', 'payments', 'user'])
+            ->whereHas('user.profile', fn ($query) => $query->where('field_office_id', $fieldOffice->getKey()))
+            ->get();
+
+        $settled = $registrations->filter(fn (Registration $r) => $r->hasSettledFee())->count();
+        $revenue = $this->revenueFor($registrations);
+
+        return Inertia::render('Admin/FieldOffices/Show', [
+            'office' => [
+                'id' => $fieldOffice->id,
+                'code' => $fieldOffice->code,
+                'name' => $fieldOffice->name,
+                'type_label' => $fieldOffice->typeLabel(),
+                'province' => $fieldOffice->province,
+                'jurisdiction' => $fieldOffice->jurisdiction ?? [],
+                'address' => $fieldOffice->address,
+                'contact_number' => $fieldOffice->contact_number,
+                'email' => $fieldOffice->email,
+                'head_name' => $fieldOffice->head_name,
+                'head_position' => $fieldOffice->head_position,
+                'remarks' => $fieldOffice->remarks,
+                'is_active' => $fieldOffice->is_active,
+                'edit_url' => route('admin.field-offices.edit', $fieldOffice),
+            ],
+            'stats' => [
+                'participants' => $fieldOffice->profiles_count,
+                'staff' => $fieldOffice->users_count,
+                'registrations' => $registrations->count(),
+                'settled' => $settled,
+                'outstanding' => $registrations->count() - $settled,
+                'collected' => $revenue['collected'],
+                'promissory' => $revenue['promissory'],
+            ],
+            'recent' => $registrations
+                ->sortByDesc('created_at')
+                ->take(8)
+                ->map(fn (Registration $registration) => [
+                    'id' => $registration->id,
+                    'participant' => $registration->user->name,
+                    'training' => $registration->training->title,
+                    'status' => $registration->status->value,
+                    'status_label' => $registration->status->label(),
+                    'registered_at' => $registration->created_at?->format('d M Y'),
+                    'roster_url' => route('admin.trainings.roster', $registration->training),
+                ])
                 ->values()
                 ->all(),
         ]);
@@ -106,6 +170,23 @@ class FieldOfficeController extends Controller
             'success',
             "“{$fieldOffice->name}” is now ".($fieldOffice->is_active ? 'active' : 'inactive').'.'
         );
+    }
+
+    /**
+     * What this office's registrations actually brought in.
+     *
+     * Same rules as the training-level report: only verified payments count,
+     * and a promissory note is money promised, not money arrived — counted
+     * apart so the outstanding balance stays visible.
+     */
+    private function revenueFor($registrations): array
+    {
+        $verified = $registrations->flatMap(
+            fn (Registration $registration) => $registration->payments
+                ->filter(fn ($payment) => $payment->status === PaymentStatus::Verified)
+        );
+
+        return RevenueService::summarize($verified);
     }
 
     /**

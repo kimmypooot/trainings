@@ -9,6 +9,7 @@ use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\CancellationRequest;
 use App\Models\FieldOffice;
 use App\Models\Payment;
 use App\Models\Profile;
@@ -296,7 +297,9 @@ class AdminAreaTest extends TestCase
     {
         // Runs today so the participant can actually be checked in — completion
         // now follows the attendance record rather than a bare staff decision.
-        $training = Training::factory()->startingToday()->create();
+        // Charged, so the registration lands at pending and there is a decision
+        // to make; a free run is confirmed on registration.
+        $training = Training::factory()->startingToday()->paid()->create();
         $registration = RegistrationService::register($this->participant(), $training);
         $staff = $this->staff();
 
@@ -332,7 +335,7 @@ class AdminAreaTest extends TestCase
 
     public function test_rejection_requires_a_reason(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
 
         $this->actingAs($this->staff())
             ->from('/admin/trainings')
@@ -538,6 +541,64 @@ class AdminAreaTest extends TestCase
         $this->actingAs($staff)->post("/admin/participants/{$participant->id}/password-reset")->assertForbidden();
     }
 
+    /*
+     * ── Management is oversight, and only oversight ───────────────────────
+     *
+     * The role carries no route grant of its own; it used to reach anything
+     * no group happened to narrow, which quietly included recording
+     * attendance and deciding request-queue items. These pin the boundary so
+     * a new every-staff route cannot hand it a pen by omission again.
+     */
+
+    public function test_management_cannot_do_venue_work(): void
+    {
+        $staff = $this->staff(Role::Management);
+        $training = Training::factory()->create();
+        $registration = $this->registrationFor($training);
+
+        $this->actingAs($staff)
+            ->post("/admin/registrations/{$registration->id}/attendance")
+            ->assertForbidden();
+        $this->actingAs($staff)
+            ->post("/admin/registrations/{$registration->id}/attendance/check-out")
+            ->assertForbidden();
+        $this->actingAs($staff)
+            ->post("/admin/registrations/{$registration->id}/supervisory-document")
+            ->assertForbidden();
+
+        $this->actingAs($staff)->get('/admin/scanner')->assertForbidden();
+        $this->actingAs($staff)->post('/admin/scanner/sync')->assertForbidden();
+        $this->actingAs($staff)
+            ->post("/admin/trainings/{$training->id}/scan-links")
+            ->assertForbidden();
+    }
+
+    public function test_management_reads_the_request_queue_but_does_not_decide_it(): void
+    {
+        $staff = $this->staff(Role::Management);
+        $registration = $this->registrationFor(Training::factory()->create());
+
+        $cancellation = CancellationRequest::factory()->for($registration)->create();
+
+        $this->actingAs($staff)->get('/admin/requests')->assertOk();
+
+        $this->actingAs($staff)
+            ->post("/admin/requests/cancellations/{$cancellation->id}")
+            ->assertForbidden();
+    }
+
+    public function test_management_keeps_the_reading_it_is_there_for(): void
+    {
+        $staff = $this->staff(Role::Management);
+        $training = Training::factory()->create();
+
+        $this->actingAs($staff)->get('/admin')->assertOk();
+        $this->actingAs($staff)->get('/admin/trainings')->assertOk();
+        $this->actingAs($staff)->get("/admin/trainings/{$training->id}/roster")->assertOk();
+        $this->actingAs($staff)->get('/admin/analytics')->assertOk();
+        $this->actingAs($staff)->get('/admin/certificates')->assertOk();
+    }
+
     public function test_staff_accounts_are_not_reachable_through_the_participant_routes(): void
     {
         $other = $this->staff(Role::CollectingOfficer);
@@ -616,7 +677,7 @@ class AdminAreaTest extends TestCase
 
     public function test_hrd_can_cancel_a_registration_and_take_it_back(): void
     {
-        $training = Training::factory()->create(['capacity' => 1]);
+        $training = Training::factory()->paid()->create(['capacity' => 1]);
         $participant = $this->participant();
         $registration = RegistrationService::register($participant, $training);
         $staff = $this->staff();
@@ -653,7 +714,7 @@ class AdminAreaTest extends TestCase
 
     public function test_a_cancellation_must_carry_a_reason(): void
     {
-        $registration = RegistrationService::register($this->participant(), Training::factory()->create());
+        $registration = RegistrationService::register($this->participant(), Training::factory()->paid()->create());
 
         $this->actingAs($this->staff())
             ->post("/admin/registrations/{$registration->id}/cancel", ['reason' => 'nope'])

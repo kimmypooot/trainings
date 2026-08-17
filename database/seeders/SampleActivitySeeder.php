@@ -112,28 +112,38 @@ class SampleActivitySeeder extends Seeder
      */
     private function blueprint(): array
     {
+        // [title, category, start offset in days, length in days, status,
+        //  capacity, charges a fee, is a Supervisory Development Course]
         return [
             // Finished — the source of attendance and certificates.
-            ['Records Management Seminar', 'Technical', -14, 2, TrainingStatus::Completed, 30, false],
-            ['Public Service Ethics Workshop', 'Foundation', -35, 1, TrainingStatus::Completed, 40, false],
-            ['Gender and Development Orientation', 'Foundation', -60, 1, TrainingStatus::Completed, 50, false],
-            ['Strategic Performance Management System', 'Technical', -21, 3, TrainingStatus::Completed, 25, true],
+            ['Records Management Seminar', 'Technical', -14, 2, TrainingStatus::Completed, 30, false, false],
+            ['Public Service Ethics Workshop', 'Foundation', -35, 1, TrainingStatus::Completed, 40, false, false],
+            ['Gender and Development Orientation', 'Foundation', -60, 1, TrainingStatus::Completed, 50, false, false],
+            ['Strategic Performance Management System', 'Technical', -21, 3, TrainingStatus::Completed, 25, true, false],
 
             // Running right now — the QR scanner has something to check in.
-            ['Basic Computer Literacy', 'Technical', 0, 3, TrainingStatus::Published, 25, false],
+            ['Basic Computer Literacy', 'Technical', 0, 3, TrainingStatus::Published, 25, false, false],
 
             // Upcoming — registrations awaiting review.
-            ['Leadership Development Program', 'Leadership and Management', 21, 5, TrainingStatus::Published, 20, true],
-            ['Frontline Service Excellence', 'Foundation', 35, 2, TrainingStatus::Published, 45, false],
-            ['Data Privacy for Public Servants', 'Technical', 49, 1, TrainingStatus::Published, null, false],
-            ['Supervisory Development Course', 'Leadership and Management', 70, 5, TrainingStatus::Published, 30, true],
+            ['Leadership Development Program', 'Leadership and Management', 21, 5, TrainingStatus::Published, 20, true, false],
+            ['Frontline Service Excellence', 'Foundation', 35, 2, TrainingStatus::Published, 45, false, false],
+            ['Data Privacy for Public Servants', 'Technical', 49, 1, TrainingStatus::Published, null, false, false],
+            /*
+             * The one supervisory run, and the only reason the flag column
+             * exists in this blueprint. Nothing seeded used to set
+             * is_supervisory, so SupervisoryEligibility — the salary-grade bar
+             * and the designation-document upload it gates — never fired on
+             * demo data at all, and the badge never appeared. Kept upcoming and
+             * open so a demo can actually walk the registration path.
+             */
+            ['Supervisory Development Course', 'Leadership and Management', 70, 5, TrainingStatus::Published, 30, true, true],
 
             // Not yet announced.
-            ['Project Management Fundamentals', 'Technical', 90, 4, TrainingStatus::Draft, 30, false],
-            ['Records Disposal and Archiving', 'Technical', 105, 2, TrainingStatus::Draft, 25, false],
+            ['Project Management Fundamentals', 'Technical', 90, 4, TrainingStatus::Draft, 30, false, false],
+            ['Records Disposal and Archiving', 'Technical', 105, 2, TrainingStatus::Draft, 25, false, false],
 
             // Called off — participants keep a cancelled registration.
-            ['Disaster Preparedness Briefing', 'Foundation', 28, 1, TrainingStatus::Cancelled, 60, false],
+            ['Disaster Preparedness Briefing', 'Foundation', 28, 1, TrainingStatus::Cancelled, 60, false, false],
         ];
     }
 
@@ -142,7 +152,7 @@ class SampleActivitySeeder extends Seeder
      */
     private function training(array $spec): void
     {
-        [$title, $category, $offsetDays, $days, $status, $capacity, $paid] = $spec;
+        [$title, $category, $offsetDays, $days, $status, $capacity, $paid, $supervisory] = $spec;
 
         $starts = Carbon::today()->addDays($offsetDays)->setTime(8, 30);
         $ends = $starts->copy()->addDays($days - 1)->setTime(16, 30);
@@ -173,6 +183,7 @@ class SampleActivitySeeder extends Seeder
                 'target_participants' => 'Second-level personnel of national and local government agencies.',
                 'payment_required' => $paid,
                 'payment_amount' => $paid ? fake()->randomElement([850, 1200, 1500, 2500]) : null,
+                'is_supervisory' => $supervisory,
                 'status' => $status,
                 'created_by' => $creator->getKey(),
             ]
@@ -366,14 +377,36 @@ class SampleActivitySeeder extends Seeder
             ]
         );
 
-        // Counters are not mass-assignable, so a little history is forced on.
-        $verifications = fake()->numberBetween(0, 6);
+        /*
+         * Verification history, and the counter derived from it.
+         *
+         * Seeding the count on its own used to leave the certificate page
+         * contradicting itself — "3 public verifications" above a panel saying
+         * nobody had ever looked it up. CertificateService::recordVerification()
+         * writes the row and bumps the counter together, so the only faithful
+         * way to seed it is to write the rows and count them.
+         */
+        // times() rather than range(): range(1, 0) counts *down* and yields
+        // [1, 0], so a certificate meant to have no lookups would quietly get
+        // one and never appear as un-verified in the data.
+        $lookups = Collection::times(
+            fake()->numberBetween(0, 6),
+            fn () => $issuedAt->copy()->addDays(fake()->numberBetween(1, 40))
+        )->sort()->values();
+
+        $lookups->each(fn ($at) => $certificate->verifications()->create([
+            'verified_at' => $at,
+            'ip_address' => fake()->ipv4(),
+            'user_agent' => fake()->userAgent(),
+        ]));
+
+        // Downloads have no history table — the counter is all there is.
         $downloads = fake()->numberBetween(0, 4);
 
         $certificate->forceFill([
-            'verification_count' => $verifications,
+            'verification_count' => $lookups->count(),
             'download_count' => $downloads,
-            'last_verified_at' => $verifications ? $issuedAt->copy()->addDays(fake()->numberBetween(1, 40)) : null,
+            'last_verified_at' => $lookups->last(),
             'last_downloaded_at' => $downloads ? $issuedAt->copy()->addDays(fake()->numberBetween(1, 30)) : null,
         ])->save();
 
@@ -440,7 +473,19 @@ class SampleActivitySeeder extends Seeder
 
         $this->count('payments');
 
-        if ($status->isRefundable() && fake()->boolean(20)) {
+        /*
+         * The first refundable payment always draws a claim, and only then
+         * does it go random — the same reasoning as the payment statuses
+         * above. On a pure 20% draw a run could produce no refund at all,
+         * leaving the refund queue empty and
+         * SampleActivitySeederTest::test_refunds_only_claim_against_verified_payments
+         * looping over nothing, which PHPUnit rightly calls risky: the test
+         * passed without checking anything. Reproduce the old behaviour with
+         * SAMPLE_DATA_SEED=4.
+         */
+        $noRefundYet = ($this->tally['refund requests'] ?? 0) === 0;
+
+        if ($status->isRefundable() && ($noRefundYet || fake()->boolean(20))) {
             $this->refund($payment);
         }
     }

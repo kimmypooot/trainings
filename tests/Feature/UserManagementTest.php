@@ -24,19 +24,68 @@ class UserManagementTest extends TestCase
         ]);
     }
 
-    public function test_only_superadmins_reach_the_page(): void
+    /*
+     * The directory is HRD's to read and superadmin's to act on.
+     *
+     * v1's admin/hrd/collecting-officers page was exactly this — a read-only
+     * list of the active field-office and HRD accounts, reachable by HRD —
+     * and knowing which office has a collecting officer is how a payment gets
+     * routed to the right desk. Only the administering half is superadmin's.
+     */
+
+    public function test_hrd_and_superadmins_reach_the_directory(): void
     {
         $participant = User::factory()->create(['profile_completed_at' => now()]);
         Profile::factory()->for($participant)->create();
 
         $this->actingAs($participant)->get('/admin/users')->assertForbidden();
 
-        foreach ([Role::FieldOffice, Role::Admin, Role::Management] as $role) {
+        foreach ([Role::FieldOffice, Role::Management] as $role) {
             $staff = User::factory()->create(['role' => $role, 'profile_completed_at' => now()]);
             $this->actingAs($staff)->get('/admin/users')->assertForbidden();
         }
 
+        $admin = User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]);
+
+        $this->actingAs($admin)->get('/admin/users')->assertOk();
         $this->actingAs($this->superAdmin())->get('/admin/users')->assertOk();
+    }
+
+    public function test_hrd_reads_the_directory_without_being_offered_the_controls(): void
+    {
+        $admin = User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]);
+
+        $this->actingAs($admin)
+            ->get('/admin/users')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('canManage', false)
+                // No edit screen to link to — that route is superadmin's.
+                ->where('users.data.0.edit_url', null)
+                ->etc()
+            );
+
+        $this->actingAs($this->superAdmin())
+            ->get('/admin/users')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('canManage', true)
+                ->etc()
+            );
+    }
+
+    public function test_administering_an_account_stays_superadmin_only(): void
+    {
+        $admin = User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]);
+        $target = User::factory()->create(['role' => Role::FieldOffice, 'profile_completed_at' => now()]);
+
+        $this->actingAs($admin)->get('/admin/users/create')->assertForbidden();
+        $this->actingAs($admin)->post('/admin/users', [])->assertForbidden();
+        $this->actingAs($admin)->get("/admin/users/{$target->id}/edit")->assertForbidden();
+        $this->actingAs($admin)->put("/admin/users/{$target->id}", [])->assertForbidden();
+        $this->actingAs($admin)->post("/admin/users/{$target->id}/toggle")->assertForbidden();
+
+        // The designation the directory reports is set on the edit screen, so
+        // it stays out of HRD's reach along with it.
+        $this->assertFalse($target->refresh()->is_collecting_officer);
     }
 
     public function test_the_list_shows_staff_only(): void
@@ -51,6 +100,23 @@ class UserManagementTest extends TestCase
                 ->component('Admin/Users/Index')
                 // The acting superadmin plus the admin — never the participant.
                 ->has('users.data', 2)
+            );
+    }
+
+    public function test_the_list_shows_last_sign_in(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Zoe Lastlogin',
+            'role' => Role::Admin,
+            'profile_completed_at' => now(),
+            'last_login_at' => now(),
+        ]);
+
+        $this->actingAs($this->superAdmin())
+            ->get('/admin/users?search=Zoe')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('users.data', 1)
+                ->where('users.data.0.last_login_at', now()->format('d M Y, g:i A'))
             );
     }
 

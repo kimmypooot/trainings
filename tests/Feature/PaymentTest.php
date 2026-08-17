@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\RefundStatus;
+use App\Enums\RegistrationStatus;
 use App\Enums\Role;
 use App\Models\FieldOffice;
 use App\Models\Payment;
@@ -15,6 +16,7 @@ use App\Models\Training;
 use App\Models\User;
 use App\Notifications\PaymentReviewed;
 use App\Notifications\RefundReviewed;
+use App\Notifications\RegistrationReviewed;
 use App\Support\PaymentService;
 use App\Support\RefundService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -788,6 +790,18 @@ class PaymentTest extends TestCase
             );
     }
 
+    public function test_the_queue_carries_the_officers_remarks(): void
+    {
+        Payment::factory()->verified()->create(['remarks' => 'Paid at the branch counter.']);
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments?status=verified')
+            ->assertInertia(fn ($page) => $page
+                ->has('payments.data', 1)
+                ->where('payments.data.0.remarks', 'Paid at the branch counter.')
+            );
+    }
+
     public function test_the_queue_honours_the_search_and_method_filters(): void
     {
         $target = Payment::factory()->create([
@@ -1148,6 +1162,129 @@ class PaymentTest extends TestCase
 
         $this->assertFalse($payment->prime_hrm_discount);
         $this->assertSame('0.00', $payment->discount_amount);
+    }
+
+    // --- Settling the fee confirms the slot --------------------------------
+
+    /** A pending registration on a paid training, with a payment awaiting review. */
+    private function pendingWithPayment(PaymentMethod $method = PaymentMethod::Cash): Payment
+    {
+        $participant = $this->participant();
+        $registration = Registration::factory()->create([
+            'user_id' => $participant->getKey(),
+            'status' => RegistrationStatus::Pending,
+            'training_id' => Training::factory()->create([
+                'payment_required' => true,
+                'payment_amount' => 1500,
+            ])->getKey(),
+        ]);
+
+        return Payment::factory()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $participant->getKey(),
+            'training_id' => $registration->training_id,
+            'amount' => 1500,
+            'payment_method' => $method,
+            'status' => PaymentStatus::Pending,
+        ]);
+    }
+
+    public function test_verifying_a_payment_confirms_the_slot(): void
+    {
+        Notification::fake();
+
+        $payment = $this->pendingWithPayment();
+
+        PaymentService::verify($payment, $this->officer(Role::Admin), null, ['or_number' => 'OR-AUTO-01']);
+
+        $registration = $payment->registration->fresh();
+
+        $this->assertSame(RegistrationStatus::Approved, $registration->status);
+        // The officer who took the money is the one on record for the decision.
+        $this->assertNotNull($registration->reviewed_by);
+        $this->assertStringContainsString('fee was settled', $registration->review_remarks);
+        // The participant hears they are confirmed, as with any approval.
+        Notification::assertSentTo($payment->user, RegistrationReviewed::class);
+    }
+
+    /**
+     * A note is not money, but the office has accepted it — so it confirms the
+     * slot on the same terms. The certificate is still withheld until the money
+     * actually arrives, which hasClearedFee() enforces separately.
+     */
+    public function test_a_verified_promissory_note_also_confirms_the_slot(): void
+    {
+        $payment = $this->pendingWithPayment(PaymentMethod::Promissory);
+
+        PaymentService::verify($payment, $this->officer(Role::Admin));
+
+        $registration = $payment->registration->fresh();
+
+        $this->assertSame(RegistrationStatus::Approved, $registration->status);
+        $this->assertTrue($registration->hasSettledFee());
+        // Settled, but not cleared — no certificate on a promise.
+        $this->assertFalse($registration->fresh()->load('payments')->hasClearedFee());
+    }
+
+    public function test_a_waitlisted_registration_is_not_approved_by_paying(): void
+    {
+        $payment = $this->pendingWithPayment();
+        $payment->registration->forceFill(['status' => RegistrationStatus::Waitlisted])->save();
+
+        PaymentService::verify($payment, $this->officer(Role::Admin), null, ['or_number' => 'OR-AUTO-02']);
+
+        // A waitlisted registration holds no slot, so approving it here would
+        // put the training over capacity. That is the office's call to make.
+        $this->assertSame(RegistrationStatus::Waitlisted, $payment->registration->fresh()->status);
+        // The money is still a fact — verification is not undone.
+        $this->assertSame(PaymentStatus::Verified, $payment->fresh()->status);
+    }
+
+    public function test_paying_cannot_reverse_a_rejection(): void
+    {
+        $payment = $this->pendingWithPayment();
+        $payment->registration->forceFill([
+            'status' => RegistrationStatus::Rejected,
+            'review_remarks' => 'Agency has already sent its maximum nominees.',
+        ])->save();
+
+        PaymentService::verify($payment, $this->officer(Role::Admin), null, ['or_number' => 'OR-AUTO-03']);
+
+        $registration = $payment->registration->fresh();
+
+        $this->assertSame(RegistrationStatus::Rejected, $registration->status);
+        $this->assertSame('Agency has already sent its maximum nominees.', $registration->review_remarks);
+    }
+
+    public function test_an_already_approved_registration_is_left_alone(): void
+    {
+        $payment = $this->pendingWithPayment();
+        $payment->registration->forceFill([
+            'status' => RegistrationStatus::Approved,
+            'review_remarks' => 'Approved by HRD on the nomination list.',
+        ])->save();
+
+        PaymentService::verify($payment, $this->officer(Role::Admin), null, ['or_number' => 'OR-AUTO-04']);
+
+        // The original reviewer's note survives — the fee did not re-decide it.
+        $this->assertSame(
+            'Approved by HRD on the nomination list.',
+            $payment->registration->fresh()->review_remarks
+        );
+    }
+
+    public function test_a_rejected_registration_is_not_asked_to_pay(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+        $registration->forceFill(['status' => RegistrationStatus::Rejected])->save();
+
+        // Being shown a bank account for a training you were refused is wrong
+        // on its own, and doubly so now that settling confirms the slot.
+        $this->actingAs($participant)
+            ->get('/my/payments')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('awaitingPayment', 0));
     }
 
     // --- Revenue reporting -------------------------------------------------

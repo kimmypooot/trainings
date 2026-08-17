@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\PaymentStatus;
+use App\Enums\RegistrationStatus;
 use App\Models\Payment;
 use App\Models\Registration;
 use App\Models\Training;
@@ -78,7 +79,51 @@ class PaymentService
             self::applyPrimeHrmDiscount($payment);
         }
 
-        return self::decide($payment, PaymentStatus::Verified, $officer, $remarks, $receipt);
+        $payment = self::decide($payment, PaymentStatus::Verified, $officer, $remarks, $receipt);
+
+        self::confirmSlotOnSettlement($payment, $officer);
+
+        return $payment;
+    }
+
+    /**
+     * A settled fee confirms the slot.
+     *
+     * The office's rule: once a field office or HRD has accepted the money —
+     * or the promissory note standing in for it — the participant is on the
+     * final roster, and nobody should have to approve them a second time. The
+     * human decision is still there; it has just moved to the point where the
+     * payment is verified, which is where a person actually looks at the case.
+     *
+     * Deliberately narrow:
+     *
+     * - Pending only. A waitlisted registration holds no slot, so approving it
+     *   here would put the training over capacity; the office has to decide
+     *   whether to make room. Rejected and cancelled are decisions someone
+     *   made on purpose, and paying must not quietly reverse them — which
+     *   matters because the participant's payment screen still lists those
+     *   registrations as owing.
+     * - Runs after the payment is committed, and never throws. The money is a
+     *   fact once verified; a registration that cannot be approved leaves the
+     *   payment standing and waits for a human, rather than failing the
+     *   verification the officer just made.
+     * - Free trainings have no payment to verify, so they are still approved
+     *   by hand. That is not an oversight — there is nothing to settle.
+     */
+    private static function confirmSlotOnSettlement(Payment $payment, User $officer): void
+    {
+        $registration = $payment->loadMissing('registration')->registration;
+
+        if ($registration?->status !== RegistrationStatus::Pending) {
+            return;
+        }
+
+        RegistrationService::review(
+            $registration,
+            RegistrationStatus::Approved,
+            $officer,
+            'Approved automatically when the fee was settled.',
+        );
     }
 
     /**
@@ -155,13 +200,20 @@ class PaymentService
             ]);
         }
 
-        // Not merely "no verified payment": a promissory note already settles
-        // the registration, and recording money against it here would leave the
-        // note standing as a second open obligation. Clearing a note is the
-        // participant's own payment flow, which supersedes it properly.
-        if ($registration->hasSettledFee()) {
+        /*
+         * Cleared, not merely settled.
+         *
+         * A promissory note settles the registration — it holds the slot — but
+         * the money has not arrived, and the commonest way it arrives is the
+         * participant walking up to the counter with cash. Refusing that
+         * because the note "already settled" would leave the office unable to
+         * record the very payment the note was written against, and the
+         * certificate withheld forever. Only an actually-paid fee is a reason
+         * to turn a second payment away.
+         */
+        if ($registration->hasClearedFee()) {
             throw ValidationException::withMessages([
-                'payment' => 'This registration has already been settled.',
+                'payment' => 'This registration has already been paid.',
             ]);
         }
 

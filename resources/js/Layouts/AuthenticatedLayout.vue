@@ -242,7 +242,9 @@ const navGroups = [
                 key: 'admin-users',
                 label: 'Users & Roles',
                 href: '/admin/users',
-                roles: ['superadmin'],
+                // HRD reads the directory; superadmin administers it. The page
+                // drops its own controls for anyone who cannot.
+                roles: ['admin', 'superadmin'],
                 icon: 'users',
             },
             {
@@ -581,8 +583,13 @@ const confirmSignOut = () => {
                                 @click="accountOpen = !accountOpen"
                             >
                                 <AppAvatar :name="user.name" :src="user.avatar" size="sm" />
-                                <span class="hidden text-sm font-medium whitespace-nowrap text-csc-ink sm:inline">
-                                    {{ user.name ?? user.email }}
+                                <span class="hidden flex-col items-start sm:flex">
+                                    <span class="text-sm leading-tight font-medium whitespace-nowrap text-csc-ink">
+                                        {{ user.name ?? user.email }}
+                                    </span>
+                                    <span class="mt-0.5 rounded-full bg-csc-blue-tint px-2 py-0.5 text-2xs font-medium text-csc-blue">
+                                        {{ user.role_label }}
+                                    </span>
                                 </span>
                                 <AppIcon
                                     name="chevron-down"
@@ -630,9 +637,6 @@ const confirmSignOut = () => {
                                             Not Verified
                                         </span>
                                     </div>
-                                    <p class="mt-1.5 inline-block rounded-full bg-csc-blue-tint px-2 py-0.5 text-2xs font-medium text-csc-blue">
-                                        {{ user.role_label }}
-                                    </p>
                                 </div>
                                 <Link
                                     href="/profile"

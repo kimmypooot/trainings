@@ -261,6 +261,11 @@ class TrainingController extends Controller
                     'day' => $day['day'],
                     'label' => $day['date']->format('d M'),
                     'is_today' => $day['date']->isToday(),
+                    // Lets the roster land on the right day without parsing
+                    // dates in the browser: today while the run is on, the last
+                    // day that happened once it is over, and day one before it
+                    // starts.
+                    'is_past' => $day['date']->isPast() && ! $day['date']->isToday(),
                 ], $training->trainingDays()),
             ],
             'scopedTo' => $request->user()->fieldOffice?->name,

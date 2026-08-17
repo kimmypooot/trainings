@@ -13,6 +13,8 @@ use App\Models\Payment;
 use App\Models\Profile;
 use App\Models\Registration;
 use App\Models\Training;
+use App\Support\ReportScope;
+use App\Support\RevenueService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -22,28 +24,50 @@ use Inertia\Response;
 /**
  * Ports v1's `admin/hrd/analytics.php`.
  *
+ * The page has three views: a live Overview (the original dashboard), a report
+ * for one selected training, and a report covering all trainings conducted in
+ * a calendar period (monthly, quarterly, annual). Each report comes in two
+ * forms — revenue, which includes the PRIME-HRM discount line, and a
+ * demographic breakdown.
+ *
  * Every figure honours the same field-office scoping as the listings — a field
- * office looking at "attendance rate" must be seeing its own, not the region's.
+ * office looking at "attendance rate" or "revenue" must be seeing its own, not
+ * the region's. The one deliberate exception is the Overview money block,
+ * which is global because none of the financial roles are office-scoped.
  */
 class AnalyticsController extends Controller
 {
     public function __invoke(Request $request): Response
     {
         $officeId = $request->user()->scopedFieldOfficeId();
-        $months = max(3, min(24, (int) $request->integer('months', 12)));
-        $since = now()->subMonths($months - 1)->startOfMonth();
+        $canSeeMoney = $request->user()->collectsPayments();
+
+        $view = $request->string('view', 'overview')->toString();
+        $view = in_array($view, ['overview', 'training', 'period'], true) ? $view : 'overview';
+
+        $scope = ReportScope::fromRequest($request);
 
         return Inertia::render('Admin/Analytics', [
-            'range' => ['months' => $months, 'since' => $since->format('M Y')],
-            'headline' => $this->headline($officeId),
-            'registrationsByMonth' => $this->registrationsByMonth($officeId, $since),
-            'byCategory' => $this->byCategory($officeId),
-            'byFieldOffice' => $this->byFieldOffice($officeId),
-            'attendance' => $this->attendance($officeId),
-            'payments' => $this->payments($request),
-            'demographics' => $this->demographics($officeId),
-            'topAgencies' => $this->topAgencies($officeId),
+            'view' => $view,
             'scopedTo' => $request->user()->fieldOffice?->name,
+            // Money is gated on the collecting-officer designation, the same
+            // gate the overview block and the payment exports use.
+            'canSeeMoney' => $canSeeMoney,
+            'trainingOptions' => $this->trainingOptions(),
+            'selectedTrainingId' => $scope->trainingId,
+            'period' => [
+                'value' => $scope->period,
+                'year' => $scope->year,
+                'month' => $scope->month,
+                'quarter' => $scope->quarter,
+            ],
+            'overview' => $this->overview($request, $officeId),
+            'trainingReport' => $view === 'training'
+                ? $this->trainingReport($scope, $officeId, $canSeeMoney)
+                : null,
+            'periodReport' => $view === 'period'
+                ? $this->periodReport($scope, $officeId, $canSeeMoney)
+                : null,
         ]);
     }
 
@@ -56,6 +80,29 @@ class AnalyticsController extends Controller
             'user.profile',
             fn ($profile) => $profile->where('field_office_id', $officeId)
         ));
+    }
+
+    // --- Overview ----------------------------------------------------------
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function overview(Request $request, ?int $officeId): array
+    {
+        $months = max(3, min(24, $request->integer('months', 12)));
+        $since = now()->subMonths($months - 1)->startOfMonth();
+
+        return [
+            'range' => ['months' => $months, 'since' => $since->format('M Y')],
+            'headline' => $this->headline($officeId),
+            'registrationsByMonth' => $this->registrationsByMonth($officeId, $since),
+            'byCategory' => $this->byCategory($officeId),
+            'byFieldOffice' => $this->byFieldOffice($officeId),
+            'attendance' => $this->attendance($officeId),
+            'payments' => $this->payments($request),
+            'demographics' => $this->demographics($officeId),
+            'topAgencies' => $this->topAgencies($officeId),
+        ];
     }
 
     /**
@@ -243,6 +290,35 @@ class AnalyticsController extends Controller
     }
 
     /**
+     * A yes/no profile flag, in the order a reader expects: the answer, then
+     * the unanswered. Kept apart from tally() because "No" is an answer here,
+     * not a blank to collapse into "Not stated".
+     *
+     * @param  Collection<int, Profile>  $profiles
+     * @return array<int, array{label: string, count: int}>
+     */
+    private function tallyYesNo($profiles, string $column): array
+    {
+        $counts = array_fill_keys(['Yes', 'No', 'Not stated'], 0);
+
+        foreach ($profiles as $profile) {
+            if ($profile->{$column} === null) {
+                $counts['Not stated']++;
+            } else {
+                $counts[$profile->{$column} ? 'Yes' : 'No']++;
+            }
+        }
+
+        return array_values(array_map(
+            fn (string $label) => ['label' => $label, 'count' => $counts[$label]],
+            array_filter(
+                array_keys($counts),
+                fn (string $label) => $counts[$label] > 0,
+            ),
+        ));
+    }
+
+    /**
      * Age at the time the report is run, in the bands v1 used.
      *
      * @param  Collection<int, Profile>  $profiles
@@ -342,5 +418,186 @@ class AnalyticsController extends Controller
             'pending_count' => (clone $query)->where('status', PaymentStatus::Pending)->count(),
             'rejected_count' => (clone $query)->where('status', PaymentStatus::Rejected)->count(),
         ];
+    }
+
+    // --- Reports -----------------------------------------------------------
+
+    /**
+     * @return array<int, array{value: int, label: string}>
+     */
+    private function trainingOptions(): array
+    {
+        return Training::orderByDesc('starts_at')
+            ->get(['id', 'title', 'starts_at'])
+            ->map(fn (Training $training) => [
+                'value' => $training->getKey(),
+                'label' => $training->starts_at
+                    ? $training->title.' — '.$training->starts_at->format('M Y')
+                    : $training->title,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The report for one selected training.
+     *
+     * The payments are derived from the scoped registrations rather than
+     * queried independently: a payment belongs to a registration, so scoping
+     * the registrations scopes the money with no second whereHas.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function trainingReport(ReportScope $scope, ?int $officeId, bool $canSeeMoney): ?array
+    {
+        $training = Training::find($scope->trainingId);
+
+        if ($training === null) {
+            return null;
+        }
+
+        $registrations = $this->scope(
+            Registration::with(['user.profile', 'payments']),
+            $officeId
+        )->where('training_id', $training->getKey())->get();
+
+        return [
+            'training' => [
+                'id' => $training->getKey(),
+                'title' => $training->title,
+                'starts_at' => $training->starts_at?->format('d M Y'),
+                'payment_amount' => $training->payment_amount,
+            ],
+            'revenue' => $canSeeMoney ? $this->revenueBlock($registrations) : null,
+            'breakdown' => $this->breakdownBlock($registrations),
+        ];
+    }
+
+    /**
+     * The report over all trainings conducted in the period.
+     *
+     * @return array<string, mixed>
+     */
+    private function periodReport(ReportScope $scope, ?int $officeId, bool $canSeeMoney): array
+    {
+        $trainings = $scope->trainingsQuery()->get();
+        $trainingIds = $trainings->pluck('id');
+
+        $registrations = $trainingIds->isEmpty()
+            ? collect()
+            : $this->scope(
+                Registration::with(['user.profile', 'payments']),
+                $officeId
+            )->whereIn('training_id', $trainingIds)->get();
+
+        return [
+            'period' => $scope->period,
+            'label' => $scope->periodLabel(),
+            'conducted' => $trainings->count(),
+            'participants' => $registrations->count(),
+            'revenue' => $canSeeMoney ? $this->revenueBlock($registrations) : null,
+            'breakdown' => $this->breakdownBlock($registrations),
+            // The money earned per month inside the period, so an annual view
+            // shows the seasonal shape rather than one lump.
+            'byPeriod' => $canSeeMoney ? $this->revenueByPeriod($trainings, $registrations, $scope) : null,
+        ];
+    }
+
+    /**
+     * The money figures for a set of registrations.
+     *
+     * Pending and rejected are counted from the same payment rows so the
+     * report's three statuses always add up to the same payments.
+     *
+     * @param  Collection<int, Registration>  $registrations
+     * @return array<string, mixed>
+     */
+    private function revenueBlock(Collection $registrations): array
+    {
+        $payments = $registrations->flatMap(
+            fn (Registration $registration) => $registration->payments
+        );
+
+        $verified = $payments->filter(fn (Payment $payment) => $payment->status === PaymentStatus::Verified);
+
+        return [
+            ...RevenueService::summarize($verified),
+            'pending_count' => $payments->filter(fn (Payment $payment) => $payment->status === PaymentStatus::Pending)->count(),
+            'rejected_count' => $payments->filter(fn (Payment $payment) => $payment->status === PaymentStatus::Rejected)->count(),
+            'discounted' => RevenueService::discountedList($verified),
+        ];
+    }
+
+    /**
+     * The demographic cuts of a set of registrations.
+     *
+     * @param  Collection<int, Registration>  $registrations
+     * @return array<string, mixed>
+     */
+    private function breakdownBlock(Collection $registrations): array
+    {
+        $profiles = $registrations->map(fn (Registration $registration) => $registration->user->profile)->filter();
+
+        return [
+            'total' => $registrations->count(),
+            'sex' => $this->tally($profiles, 'sex'),
+            'pwd' => $this->tallyYesNo($profiles, 'is_pwd'),
+            'positionLevel' => $this->tally($profiles, 'position_level'),
+            'employmentStatus' => $this->tally($profiles, 'employment_status'),
+            'sector' => $this->tally($profiles, 'sector'),
+            'ageBand' => $this->ageBands($profiles),
+        ];
+    }
+
+    /**
+     * Verified revenue per month inside the period, earned where the training
+     * started. A payment recorded late still belongs to the run that earned it.
+     *
+     * @param  Collection<int, Training>  $trainings
+     * @param  Collection<int, Registration>  $registrations
+     * @return array<int, array{label: string, gross: float, discount: float, collected: float, promissory: float, count: int}>
+     */
+    private function revenueByPeriod($trainings, $registrations, ReportScope $scope): array
+    {
+        $byTraining = $registrations->groupBy('training_id');
+
+        $rows = array_fill_keys(
+            array_map(
+                fn (CarbonImmutable $month) => $month->format('Y-m'),
+                $scope->monthsInPeriod(),
+            ),
+            ['gross' => 0.0, 'discount' => 0.0, 'collected' => 0.0, 'promissory' => 0.0, 'count' => 0],
+        );
+
+        foreach ($trainings as $training) {
+            $verified = collect($byTraining->get($training->getKey(), []))
+                ->flatMap(fn (Registration $registration) => $registration->payments)
+                ->filter(fn (Payment $payment) => $payment->status === PaymentStatus::Verified);
+
+            $key = $training->starts_at?->format('Y-m') ?? '';
+
+            if (! array_key_exists($key, $rows)) {
+                continue;
+            }
+
+            $rows[$key]['count'] += $verified->count();
+            $rows[$key]['gross'] += $verified->sum(fn (Payment $payment) => $payment->grossAmount());
+            $rows[$key]['discount'] += $verified->sum(fn (Payment $payment) => (float) $payment->discount_amount);
+            $rows[$key]['collected'] += $verified->sum(fn (Payment $payment) => $payment->payment_method->isSettlement() ? (float) $payment->amount : 0.0);
+            $rows[$key]['promissory'] += $verified->sum(fn (Payment $payment) => $payment->payment_method->isSettlement() ? 0.0 : (float) $payment->amount);
+        }
+
+        return array_map(
+            fn (string $key, array $row) => [
+                'label' => CarbonImmutable::createFromFormat('Y-m', $key)->format('M Y'),
+                'gross' => round($row['gross'], 2),
+                'discount' => round($row['discount'], 2),
+                'collected' => round($row['collected'], 2),
+                'promissory' => round($row['promissory'], 2),
+                'count' => $row['count'],
+            ],
+            array_keys($rows),
+            array_values($rows),
+        );
     }
 }

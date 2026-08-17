@@ -8,6 +8,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import AppStat from '@/Components/AppStat.vue';
 
@@ -211,9 +212,18 @@ const confirm = () => {
                                 :class="participant.is_active ? '' : 'opacity-60'"
                             >
                                 <td class="px-5 py-3.5">
-                                    <Link :href="participant.url" class="font-medium text-csc-blue hover:underline">
-                                        {{ participant.name ?? participant.email }}
-                                    </Link>
+                                    <div class="flex items-center gap-1.5">
+                                        <Link :href="participant.url" class="font-medium text-csc-blue hover:underline">
+                                            {{ participant.name ?? participant.email }}
+                                        </Link>
+                                        <AppIcon
+                                            v-if="participant.email_verified"
+                                            name="check-circle"
+                                            class="shrink-0 cursor-help text-success"
+                                            aria-hidden="true"
+                                            title="Email verified"
+                                        />
+                                    </div>
                                     <p class="mt-0.5 text-xs text-csc-ink/60">{{ participant.email }}</p>
                                     <p v-if="participant.mobile" class="mt-0.5 text-xs text-csc-ink/60">
                                         {{ participant.mobile }}
@@ -241,10 +251,7 @@ const confirm = () => {
                                         :status="participant.is_active ? 'verified' : 'cancelled'"
                                         :label="participant.is_active ? 'Active' : 'Deactivated'"
                                     />
-                                    <AppBadge
-                                        :status="participant.email_verified ? 'verified' : 'pending'"
-                                        :label="participant.email_verified ? 'Email verified' : 'Email unverified'"
-                                    />
+                                    <AppBadge v-if="!participant.email_verified" status="pending" label="Email unverified" />
                                 </td>
                                 <td class="px-5 py-3.5 text-csc-ink/75">
                                     {{ participant.registrations }}

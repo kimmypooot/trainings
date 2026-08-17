@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 use Throwable;
 
 class GoogleController extends Controller
@@ -27,6 +28,26 @@ class GoogleController extends Controller
 
     /** How long a started connect flow stays valid. */
     private const LINK_INTENT_TTL_MINUTES = 10;
+
+    /**
+     * Marks that a sign-in has already been restarted once after a lost state.
+     *
+     * Socialite compares a `state` value it parked in the session against the
+     * one Google echoes back, and the comparison fails whenever the callback
+     * lands on a *different* session than the one that began the flow — most
+     * often because the browser was on a different host than the configured
+     * redirect URI (127.0.0.1 vs localhost in development), so the cookie the
+     * state lives in is simply not sent. Nothing is wrong with the account and
+     * nothing is wrong with the consent; the round trip merely has to be made
+     * again from the host the callback actually arrives on, which the restart
+     * below does silently. Without it the participant meets the login page,
+     * clicks the same button a second time, and it works — which reads as the
+     * system asking them to sign in twice.
+     *
+     * The marker is what stops that recovery from becoming a redirect loop
+     * against Google when the cause is something a retry cannot fix.
+     */
+    private const STATE_RETRY = 'google.state_retry';
 
     /**
      * Send the user to Google's consent screen.
@@ -98,9 +119,13 @@ class GoogleController extends Controller
         // when the account was connected and has been the participant's own
         // photo ever since — disconnecting a sign-in method is no reason to
         // delete it. They can remove it themselves on the same page.
+        // The URL goes even though the photo stays: it points at an account
+        // this one is no longer connected to, and keeping a Google address for
+        // a disconnected identity is retaining a record of it for nothing.
         $user->forceFill([
             'google_id' => null,
             'google_email' => null,
+            'google_avatar_url' => null,
         ])->save();
 
         return back()->with('success', 'Your Google account has been disconnected.');
@@ -130,10 +155,25 @@ class GoogleController extends Controller
                     ->with('error', 'We could not complete the connection to Google. Please try again.');
             }
 
+            // A lost state is recoverable, so recover from it rather than
+            // handing the participant an error and letting them do by hand
+            // what we can do for them. `pull` both reads and clears: a second
+            // failure in a row falls through to the message below, so the
+            // restart happens at most once per attempt.
+            if ($e instanceof InvalidStateException && ! $request->session()->pull(self::STATE_RETRY, false)) {
+                $request->session()->put(self::STATE_RETRY, true);
+
+                return redirect()->route('auth.google');
+            }
+
             return redirect()->route('login')->withErrors([
                 'form' => 'We could not complete the Google sign-in. Please try again.',
             ]);
         }
+
+        // Spent. Leaving it set would cost the *next* lost state its one
+        // restart, turning an otherwise recoverable failure into an error.
+        $request->session()->forget(self::STATE_RETRY);
 
         if ($intent) {
             return $this->completeLink($request, $intent, $googleUser);
@@ -175,6 +215,7 @@ class GoogleController extends Controller
             'email' => $user->email ?: $googleUser->getEmail(),
             'google_id' => $googleUser->getId(),
             'google_email' => $googleUser->getEmail(),
+            'google_avatar_url' => $googleUser->getAvatar(),
             // Same rule as the connect flow: a Google account only vouches for
             // the TIMS address when it carries that address *and* Google says
             // it confirmed it. A participant signing in with a personal Gmail
@@ -195,7 +236,21 @@ class GoogleController extends Controller
         }
 
         Auth::login($user, remember: true);
-        request()->session()->regenerate();
+        $request->session()->regenerate();
+
+        // Kept in step with LoginController: the column is what tells staff a
+        // account has gone dormant, and it would quietly stop being true for
+        // anyone who signs in with Google rather than a password.
+        $user->forceFill(['last_login_at' => now()])->save();
+
+        // Staff have their own shell and are not asked to complete a
+        // participant profile, so they are sent to it before the gate below —
+        // exactly as the password sign-in does. Some staff authenticate with
+        // Google (EnsureSiteIsAvailable exempts the route for that reason),
+        // and without this they land on the participant dashboard.
+        if ($user->role->isStaff()) {
+            return redirect()->intended(route('admin.dashboard'));
+        }
 
         // A Google sign-up never sees the registration form, so it lands on the
         // same profile gate as an email sign-up.
@@ -252,6 +307,7 @@ class GoogleController extends Controller
         $user->forceFill([
             'google_id' => $googleUser->getId(),
             'google_email' => $googleUser->getEmail(),
+            'google_avatar_url' => $googleUser->getAvatar(),
             // Only a Google account carrying the *same* address, confirmed by
             // Google, proves control of that address. Connecting a personal
             // Gmail proves control of the Gmail and says nothing about the
