@@ -516,6 +516,9 @@ const rejectRefund = (refund) => {
                                             <p v-if="payment.rejection_reason" class="mt-1 max-w-48 text-xs text-csc-red-ink">
                                                 {{ payment.rejection_reason }}
                                             </p>
+                                            <p v-if="payment.remarks" class="mt-1 max-w-48 text-xs text-csc-ink/55">
+                                                {{ payment.remarks }}
+                                            </p>
                                         </td>
                                         <td class="px-5 py-3.5 text-right whitespace-nowrap">
                                             <a
@@ -577,6 +580,10 @@ const rejectRefund = (refund) => {
 
                                 <p v-if="payment.rejection_reason" class="mt-3 text-sm text-csc-red-ink">
                                     {{ payment.rejection_reason }}
+                                </p>
+
+                                <p v-if="payment.remarks" class="mt-1.5 text-xs text-csc-ink/55">
+                                    {{ payment.remarks }}
                                 </p>
 
                                 <p v-if="payment.or_number" class="mt-2 text-sm text-csc-ink">

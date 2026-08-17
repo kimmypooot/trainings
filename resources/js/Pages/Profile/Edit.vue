@@ -300,6 +300,35 @@ const lastSaved = computed(() => {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 });
 
+// --- Profile completeness ---------------------------------------------------
+//
+// A lightweight gauge for the Identity summary card. It counts the same core
+// fields the profile form asks for — not every column, just the ones that
+// matter for registration and reporting — so an incomplete profile is visible
+// at a glance and the fix is one click away.
+const completeness = computed(() => {
+    const profile = props.profile ?? {};
+
+    const checks = [
+        ['Full name', Boolean(profile.first_name && profile.last_name)],
+        ['Date of birth', Boolean(profile.date_of_birth)],
+        ['Sex', Boolean(profile.sex)],
+        ['Civil status', Boolean(profile.civil_status)],
+        ['Mobile number', Boolean(profile.mobile_number)],
+        ['Sector', Boolean(profile.sector)],
+        ['Employment details', Boolean(profile.position_level || profile.position_title || profile.organization_name)],
+        ['Location', Boolean(profile.region && profile.province && profile.city_municipality)],
+    ];
+
+    const missing = checks.filter(([, filled]) => !filled).map(([label]) => label);
+
+    return {
+        percent: Math.round(((checks.length - missing.length) * 100) / checks.length),
+        complete: missing.length === 0,
+        missing,
+    };
+});
+
 // --- Profile photo ----------------------------------------------------------
 //
 // Its own form, posted the moment a file is chosen: a photo is a single
@@ -484,6 +513,93 @@ onBeforeUnmount(() => {
 
     <AuthenticatedLayout title="My Profile" current="profile">
         <div class="mx-auto max-w-7xl space-y-5">
+            <!-- Identity summary -->
+            <AppCard>
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="min-w-0">
+                        <p class="flex min-w-0 items-center gap-1.5 text-lg font-semibold text-csc-blue">
+                            <span class="truncate">{{ user.name ?? '—' }}</span>
+                            <svg
+                                v-if="user.is_verified"
+                                viewBox="0 0 24 24"
+                                class="size-5 shrink-0 text-csc-blue"
+                                role="img"
+                                aria-label="Verified email"
+                                title="Verified email"
+                            >
+                                <circle cx="12" cy="12" r="10" fill="currentColor" />
+                                <path
+                                    d="M8.5 12.2l2.4 2.4 4.6-5"
+                                    fill="none"
+                                    stroke="#fff"
+                                    stroke-width="2.4"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                />
+                            </svg>
+                        </p>
+                        <p class="truncate text-sm text-csc-ink/70">{{ user.email }}</p>
+                        <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span
+                                class="inline-block rounded-full bg-csc-blue-tint px-2.5 py-0.5 text-xs font-medium text-csc-blue"
+                            >
+                                {{ user.role_label }}
+                            </span>
+                            <p
+                                class="flex items-center gap-1 text-xs text-csc-ink/60"
+                                :title="
+                                    user.is_verified
+                                        ? 'Your email is verified.'
+                                        : 'Your email still needs verification.'
+                                "
+                            >
+                                <AppIcon :name="user.is_verified ? 'shield' : 'lock'" class="size-3.5" />
+                                {{ user.is_verified ? 'Verified email' : 'Email not yet verified' }}
+                                · Cannot be changed here.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="w-full shrink-0 sm:w-96 sm:border-l sm:border-csc-line sm:pl-5">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <p class="text-xs font-medium text-csc-ink/60">Profile completeness</p>
+                            <p
+                                class="text-sm font-semibold"
+                                :class="completeness.complete ? 'text-success' : 'text-csc-blue'"
+                            >
+                                {{ completeness.percent }}%
+                            </p>
+                        </div>
+                        <div class="mt-2 h-2 overflow-hidden rounded-full bg-csc-blue-tint" role="progressbar" :aria-valuenow="completeness.percent" aria-valuemin="0" aria-valuemax="100">
+                            <div
+                                class="h-full rounded-full transition-all duration-300"
+                                :class="completeness.complete ? 'bg-success' : 'bg-csc-blue'"
+                                :style="{ width: `${completeness.percent}%` }"
+                            />
+                        </div>
+
+                        <div
+                            v-if="!completeness.complete"
+                            class="mt-2.5 rounded-lg bg-info-soft px-3 py-2"
+                        >
+                            <p class="text-xs font-medium text-info">Missing</p>
+                            <p class="mt-0.5 text-xs leading-relaxed text-csc-ink/70">
+                                {{ completeness.missing.join(', ') }}
+                            </p>
+                        </div>
+                        <p v-else class="mt-2.5 flex items-center gap-1.5 text-xs text-success">
+                            <AppIcon name="check" class="size-3.5" />
+                            All set.
+                        </p>
+
+                        <p v-if="lastSaved" class="mt-2.5 flex shrink-0 items-center gap-1.5 text-xs text-csc-ink/50">
+                            <AppIcon name="clock" class="size-3.5" />
+                            Last saved {{ lastSaved }}
+                        </p>
+                    </div>
+                </div>
+            </AppCard>
+
             <!--
                 Account settings, paired: who you are and how you sign in. They
                 sit side by side because the Google connection is what feeds the
@@ -491,31 +607,38 @@ onBeforeUnmount(() => {
                 They stack on narrow screens, where the pairing cannot be seen
                 anyway.
             -->
-            <div class="grid items-start gap-5 lg:grid-cols-2">
+            <div class="grid items-stretch gap-5 lg:grid-cols-2">
                 <AppCard title="Profile Photo" subtitle="Shown beside your name across TIMS.">
-                    <div class="flex items-start gap-4">
+                    <div class="flex items-center gap-4">
                         <!--
                             The avatar doubles as the upload control: clicking
                             it opens the file picker, which is where people
                             reach for first. The buttons below spell the same
                             action out for keyboard and screen-reader users.
+
+                            The photo sits in its own fixed-width column so it
+                            reads as a distinct block beside the copy. The
+                            button is locked to the same square as the avatar
+                            so the circle can never be stretched into an oval.
                         -->
-                        <button
-                            type="button"
-                            class="group relative shrink-0 rounded-full focus:outline-2 focus:outline-offset-2 focus:outline-csc-blue"
-                            :disabled="photoBusy"
-                            :aria-label="user.avatar ? 'Change your profile photo' : 'Add a profile photo'"
-                            @click="choosePhoto"
-                        >
-                            <AppAvatar :name="user.name" :src="photoUrl" size="lg" />
-                            <span
-                                class="absolute inset-0 flex items-center justify-center rounded-full bg-csc-blue/70 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100"
-                                :class="photoBusy && 'opacity-100'"
-                                aria-hidden="true"
+                        <div class="flex w-36 shrink-0 items-center justify-center">
+                            <button
+                                type="button"
+                                class="group relative flex size-28 shrink-0 items-center justify-center rounded-full focus:outline-2 focus:outline-offset-2 focus:outline-csc-blue"
+                                :disabled="photoBusy"
+                                :aria-label="user.avatar ? 'Change your profile photo' : 'Add a profile photo'"
+                                @click="choosePhoto"
                             >
-                                <AppIcon :name="photoBusy ? 'clock' : 'upload'" class="size-5" />
-                            </span>
-                        </button>
+                                <AppAvatar :name="user.name" :src="photoUrl" size="xl" />
+                                <span
+                                    class="absolute inset-0 flex items-center justify-center rounded-full bg-csc-blue/70 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100"
+                                    :class="photoBusy && 'opacity-100'"
+                                    aria-hidden="true"
+                                >
+                                    <AppIcon :name="photoBusy ? 'clock' : 'upload'" class="size-5" />
+                                </span>
+                            </button>
+                        </div>
 
                         <input
                             ref="photoInput"
@@ -678,60 +801,6 @@ onBeforeUnmount(() => {
                     </p>
                 </AppCard>
             </div>
-
-            <!-- Identity summary -->
-            <AppCard>
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="min-w-0">
-                        <p class="flex min-w-0 items-center gap-1.5 text-lg font-semibold text-csc-blue">
-                            <span class="truncate">{{ user.name ?? '—' }}</span>
-                            <svg
-                                v-if="user.is_verified"
-                                viewBox="0 0 24 24"
-                                class="size-5 shrink-0 text-csc-blue"
-                                role="img"
-                                aria-label="Verified email"
-                                title="Verified email"
-                            >
-                                <circle cx="12" cy="12" r="10" fill="currentColor" />
-                                <path
-                                    d="M8.5 12.2l2.4 2.4 4.6-5"
-                                    fill="none"
-                                    stroke="#fff"
-                                    stroke-width="2.4"
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                />
-                            </svg>
-                        </p>
-                        <p class="truncate text-sm text-csc-ink/70">{{ user.email }}</p>
-                        <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span
-                                class="inline-block rounded-full bg-csc-blue-tint px-2.5 py-0.5 text-xs font-medium text-csc-blue"
-                            >
-                                {{ user.role_label }}
-                            </span>
-                            <p
-                                class="flex items-center gap-1 text-xs text-csc-ink/60"
-                                :title="
-                                    user.is_verified
-                                        ? 'Your email is verified.'
-                                        : 'Your email still needs verification.'
-                                "
-                            >
-                                <AppIcon :name="user.is_verified ? 'shield' : 'lock'" class="size-3.5" />
-                                {{ user.is_verified ? 'Verified email' : 'Email not yet verified' }}
-                                · Cannot be changed here.
-                            </p>
-                        </div>
-                    </div>
-
-                    <p v-if="lastSaved" class="flex shrink-0 items-center gap-1.5 text-xs text-csc-ink/50">
-                        <AppIcon name="clock" class="size-3.5" />
-                        Last saved {{ lastSaved }}
-                    </p>
-                </div>
-            </AppCard>
 
             <!-- Read-only summary: the default view of the profile -->
             <template v-if="viewing">

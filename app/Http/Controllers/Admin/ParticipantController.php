@@ -61,7 +61,7 @@ class ParticipantController extends Controller
         return Inertia::render('Admin/Participants/Index', [
             'participants' => $participants->through(fn (User $user) => [
                 'id' => $user->id,
-                'name' => $user->name,
+                'name' => $user->profile?->directoryName() ?? $user->name,
                 'email' => $user->email,
                 'mobile' => $user->profile?->mobile_number,
                 'organization' => $user->profile?->organization_name,

@@ -15,8 +15,10 @@ const props = defineProps({
     filters: { type: Object, required: true },
     stats: { type: Object, required: true },
     trainings: { type: Array, default: () => [] },
+    years: { type: Array, default: () => [] },
     can: { type: Object, required: true },
     scopedTo: { type: String, default: null },
+    exportUrl: { type: String, required: true },
 });
 
 const page = usePage();
@@ -25,9 +27,10 @@ const error = computed(() => page.props.errors?.certificate);
 const search = ref(props.filters.search ?? '');
 const training = ref(props.filters.training ?? '');
 const emailed = ref(props.filters.emailed ?? '');
+const year = ref(props.filters.year ?? '');
 
 let debounce;
-watch([search, training, emailed], () => {
+watch([search, training, emailed, year], () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => {
         router.get(
@@ -36,6 +39,7 @@ watch([search, training, emailed], () => {
                 search: search.value || undefined,
                 training: training.value || undefined,
                 emailed: emailed.value || undefined,
+                year: year.value || undefined,
                 page: 1,
             },
             { preserveState: true, replace: true }
@@ -92,7 +96,7 @@ const copyVerifyUrl = async (certificate) => {
                 <AppStat label="Public Verifications" :value="stats.verifications" />
             </div>
 
-            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <input
                     v-model="search"
                     type="search"
@@ -119,6 +123,22 @@ const copyVerifyUrl = async (certificate) => {
                     <option value="1">Emailed</option>
                     <option value="0">Not yet emailed</option>
                 </select>
+                <select
+                    v-model="year"
+                    aria-label="Filter by issue year"
+                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                >
+                    <option value="">All years</option>
+                    <option v-for="option in years" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                    </option>
+                </select>
+            </div>
+
+            <div class="flex justify-end">
+                <AppButton :href="exportUrl" external variant="ghost" icon="download" class="shrink-0">
+                    Export
+                </AppButton>
             </div>
 
             <AppCard v-if="!certificates.data.length" :padded="false">

@@ -483,6 +483,22 @@ class CertificateTest extends TestCase
             );
     }
 
+    public function test_the_register_filters_by_issue_year(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+        $certificate->forceFill(['generated_at' => now()->subYear()])->save();
+
+        $this->actingAs($this->staff())
+            ->get('/admin/certificates?year='.now()->subYear()->year)
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('certificates.data', 1)
+                ->where('certificates.data.0.number', $certificate->certificate_number)
+                ->where('years.0.value', (string) now()->subYear()->year)
+                ->where('exportUrl', route('admin.exports.certificates', ['year' => now()->subYear()->year]))
+            );
+    }
+
     public function test_staff_can_download_an_issued_certificate(): void
     {
         $certificate = CertificateService::release($this->completedRegistration(), $this->staff());

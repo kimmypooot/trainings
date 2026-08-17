@@ -790,6 +790,18 @@ class PaymentTest extends TestCase
             );
     }
 
+    public function test_the_queue_carries_the_officers_remarks(): void
+    {
+        Payment::factory()->verified()->create(['remarks' => 'Paid at the branch counter.']);
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments?status=verified')
+            ->assertInertia(fn ($page) => $page
+                ->has('payments.data', 1)
+                ->where('payments.data.0.remarks', 'Paid at the branch counter.')
+            );
+    }
+
     public function test_the_queue_honours_the_search_and_method_filters(): void
     {
         $target = Payment::factory()->create([

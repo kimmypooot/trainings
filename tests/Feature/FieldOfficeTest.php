@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Enums\Role;
 use App\Models\FieldOffice;
 use App\Models\Profile;
+use App\Models\Training;
 use App\Models\User;
+use App\Support\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -67,6 +69,49 @@ class FieldOfficeTest extends TestCase
         $this->actingAs($this->staff(Role::Management))->get('/admin/field-offices')->assertForbidden();
         $this->actingAs($this->staff())->get('/admin/field-offices')->assertOk();
         $this->actingAs($this->staff(Role::SuperAdmin))->get('/admin/field-offices')->assertOk();
+    }
+
+    public function test_show_is_restricted_to_admins(): void
+    {
+        $office = FieldOffice::where('code', 'nsfo')->first();
+
+        $this->actingAs(User::factory()->create())->get("/admin/field-offices/{$office->id}")->assertForbidden();
+        $this->actingAs($this->staff(Role::FieldOffice))->get("/admin/field-offices/{$office->id}")->assertForbidden();
+        $this->actingAs($this->staff(Role::Management))->get("/admin/field-offices/{$office->id}")->assertForbidden();
+        $this->actingAs($this->staff())->get("/admin/field-offices/{$office->id}")->assertOk();
+        $this->actingAs($this->staff(Role::SuperAdmin))->get("/admin/field-offices/{$office->id}")->assertOk();
+    }
+
+    public function test_show_reports_office_stats(): void
+    {
+        $office = FieldOffice::where('code', 'nsfo')->first();
+        $office->update(['email' => 'nsfo@csc.gov.ph', 'remarks' => 'Covers Northern Samar.']);
+
+        $participant = User::factory()->create(['profile_completed_at' => now()]);
+        Profile::factory()->for($participant)->create(['field_office_id' => $office->id]);
+
+        $staff = User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => $office->id,
+            'profile_completed_at' => now(),
+        ]);
+
+        $training = Training::factory()->create(['payment_required' => false]);
+        RegistrationService::register($participant, $training);
+
+        $this->actingAs($this->staff())
+            ->get("/admin/field-offices/{$office->id}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Admin/FieldOffices/Show')
+                ->where('stats.participants', 1)
+                ->where('stats.staff', 1)
+                ->where('stats.registrations', 1)
+                ->where('stats.settled', 1)
+                ->where('office.email', 'nsfo@csc.gov.ph')
+                ->where('office.remarks', 'Covers Northern Samar.')
+                ->has('recent', 1)
+            );
     }
 
     public function test_admin_can_add_an_office(): void

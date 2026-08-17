@@ -42,6 +42,7 @@ class CertificateController extends Controller
             'search' => $request->string('search')->toString(),
             'training' => $request->string('training')->toString(),
             'emailed' => $request->string('emailed')->toString(),
+            'year' => $request->string('year')->toString(),
         ];
 
         $officeId = $request->user()->scopedFieldOfficeId();
@@ -59,6 +60,7 @@ class CertificateController extends Controller
             ->when($filters['training'], fn ($query, $id) => $query->where('training_id', $id))
             ->when($filters['emailed'] === '1', fn ($query) => $query->whereNotNull('email_sent_at'))
             ->when($filters['emailed'] === '0', fn ($query) => $query->whereNull('email_sent_at'))
+            ->when($filters['year'], fn ($query, $year) => $query->whereYear('generated_at', $year))
             ->latest('generated_at')
             ->paginate(25)
             ->withQueryString();
@@ -83,8 +85,20 @@ class CertificateController extends Controller
             'filters' => $filters,
             'stats' => $this->stats($officeId),
             'trainings' => $this->issuingTrainings($officeId),
+            // The years that have actually issued something, so the filter never
+            // offers an empty one.
+            'years' => $this->scoped($officeId)
+                ->selectRaw('YEAR(generated_at) as year')
+                ->distinct()
+                ->orderByDesc('year')
+                ->pluck('year')
+                ->map(fn ($year) => ['value' => (string) $year, 'label' => (string) $year])
+                ->all(),
             'can' => ['resend' => $this->mayResend($request)],
             'scopedTo' => $request->user()->fieldOffice?->name,
+            // The export honours the same filters the register is showing, and
+            // the field-office scope, so what staff download is what they see.
+            'exportUrl' => route('admin.exports.certificates', array_filter($filters)),
         ]);
     }
 
