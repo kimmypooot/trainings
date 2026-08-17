@@ -58,8 +58,15 @@ function commit() {
             view: 'period',
             period: periodType.value,
             year: year.value,
-            month: periodType.value === 'monthly' ? month.value : undefined,
-            quarter: periodType.value === 'quarterly' ? quarter.value : undefined,
+            // Both travel on every visit, whichever period type is showing.
+            // Sending only the one in use let ReportScope fall back to today
+            // for the other, and the watch above then wrote that default over
+            // what was selected — so picking March, glancing at a quarter and
+            // coming back landed on the current month instead of March. The
+            // server clamps both and ignores whichever the period does not
+            // need, so there is nothing to gain by withholding one.
+            month: month.value,
+            quarter: quarter.value,
         },
         { preserveState: true, replace: true }
     );
