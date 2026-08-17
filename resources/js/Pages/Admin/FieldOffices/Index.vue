@@ -14,9 +14,6 @@ const props = defineProps({
 const confirming = ref(null);
 const processing = ref(false);
 
-const toggle = (office) =>
-    router.post(`/admin/field-offices/${office.id}/toggle`, {}, { preserveScroll: true });
-
 const dialog = computed(() => {
     if (!confirming.value) return null;
 

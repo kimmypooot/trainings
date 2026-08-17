@@ -41,7 +41,12 @@ class RefundRequest extends Model
      */
     public function statusLogs(): HasMany
     {
-        return $this->hasMany(RefundStatusLog::class)->orderBy('changed_at');
+        // Tie-broken on id: `changed_at` is second-accurate, so two entries
+        // written in one transaction would otherwise read back in whatever
+        // order the database chose.
+        return $this->hasMany(RefundStatusLog::class)
+            ->orderBy('changed_at')
+            ->orderBy('id');
     }
 
     /** Anything still moving through the pipeline. */

@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\FieldOffice;
+use App\Models\Payment;
 use App\Models\Registration;
 use App\Support\RevenueService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -17,7 +19,10 @@ class FieldOfficeController extends Controller
 {
     public function index(): Response
     {
-        $offices = FieldOffice::withCount('profiles')->orderBy('name')->get();
+        // Both counts, because the row renders both. `users_count` was read
+        // below without being loaded, which Eloquent answers with null rather
+        // than an error — so the Staff column was simply blank.
+        $offices = FieldOffice::withCount(['profiles', 'users'])->orderBy('name')->get();
 
         return Inertia::render('Admin/FieldOffices/Index', [
             'offices' => $offices->map(fn (FieldOffice $office) => [
@@ -65,12 +70,34 @@ class FieldOfficeController extends Controller
     {
         $fieldOffice->loadCount(['profiles', 'users']);
 
-        $registrations = Registration::with(['training', 'payments', 'user'])
-            ->whereHas('user.profile', fn ($query) => $query->where('field_office_id', $fieldOffice->getKey()))
-            ->get();
+        // Counted in the database rather than by hydrating the office's whole
+        // history to call ->count() on it. A mature office has thousands of
+        // registrations and this page shows six numbers and eight rows; pulling
+        // every model (with its training, payments and user) to produce that is
+        // a cost that grows with the office for no gain.
+        $total = $this->registrationsIn($fieldOffice)->count();
 
-        $settled = $registrations->filter(fn (Registration $r) => $r->hasSettledFee())->count();
-        $revenue = $this->revenueFor($registrations);
+        // The SQL reading of Registration::hasSettledFee(): a free training is
+        // settled by definition, otherwise the fee needs a verified payment.
+        $settled = $this->registrationsIn($fieldOffice)
+            ->where(fn ($query) => $query
+                ->whereHas('training', fn ($training) => $training->where('payment_required', false))
+                ->orWhereHas('payments', fn ($payment) => $payment->where('status', PaymentStatus::Verified))
+            )
+            ->count();
+
+        $revenue = $this->revenueFor($fieldOffice);
+
+        $recent = $this->registrationsIn($fieldOffice)
+            ->with(['training', 'user'])
+            // registered_at, not created_at: the row's insert time is the
+            // import's clock, not the participant's. SampleActivitySeeder
+            // backdates one and leaves the other, so ordering by created_at
+            // put every seeded office's "recent" list in one undifferentiated
+            // block dated today.
+            ->orderByDesc('registered_at')
+            ->limit(8)
+            ->get();
 
         return Inertia::render('Admin/FieldOffices/Show', [
             'office' => [
@@ -92,22 +119,20 @@ class FieldOfficeController extends Controller
             'stats' => [
                 'participants' => $fieldOffice->profiles_count,
                 'staff' => $fieldOffice->users_count,
-                'registrations' => $registrations->count(),
+                'registrations' => $total,
                 'settled' => $settled,
-                'outstanding' => $registrations->count() - $settled,
+                'outstanding' => $total - $settled,
                 'collected' => $revenue['collected'],
                 'promissory' => $revenue['promissory'],
             ],
-            'recent' => $registrations
-                ->sortByDesc('created_at')
-                ->take(8)
+            'recent' => $recent
                 ->map(fn (Registration $registration) => [
                     'id' => $registration->id,
                     'participant' => $registration->user->name,
                     'training' => $registration->training->title,
                     'status' => $registration->status->value,
                     'status_label' => $registration->status->label(),
-                    'registered_at' => $registration->created_at?->format('d M Y'),
+                    'registered_at' => $registration->registered_at?->format('d M Y'),
                     'roster_url' => route('admin.trainings.roster', $registration->training),
                 ])
                 ->values()
@@ -179,14 +204,34 @@ class FieldOfficeController extends Controller
      * and a promissory note is money promised, not money arrived — counted
      * apart so the outstanding balance stays visible.
      */
-    private function revenueFor($registrations): array
+    private function revenueFor(FieldOffice $office): array
     {
-        $verified = $registrations->flatMap(
-            fn (Registration $registration) => $registration->payments
-                ->filter(fn ($payment) => $payment->status === PaymentStatus::Verified)
-        );
+        // Only the verified payments are fetched, rather than every
+        // registration in order to reach them. Still a hydrate — the rules for
+        // what counts as collected live in RevenueService and are worth reading
+        // through rather than restating as SQL here, which is exactly the drift
+        // that made the money reports disagree in the first place.
+        $verified = Payment::where('status', PaymentStatus::Verified)
+            ->whereHas(
+                'registration.user.profile',
+                fn ($query) => $query->where('field_office_id', $office->getKey())
+            )
+            ->get();
 
         return RevenueService::summarize($verified);
+    }
+
+    /**
+     * The registrations belonging to an office, as a query rather than a
+     * result — so the caller can count them, or take eight, without the whole
+     * history passing through PHP.
+     */
+    private function registrationsIn(FieldOffice $office): Builder
+    {
+        return Registration::whereHas(
+            'user.profile',
+            fn ($query) => $query->where('field_office_id', $office->getKey())
+        );
     }
 
     /**

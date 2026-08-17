@@ -437,12 +437,27 @@ class TrainingController extends Controller
             'officeBreakdown' => $registrations
                 ->reject(fn (Registration $r) => $r->status === RegistrationStatus::Cancelled)
                 ->groupBy(fn (Registration $r) => $r->user->profile?->fieldOffice?->name ?? 'Unassigned')
-                ->map(fn ($group, $office) => [
-                    'label' => $office,
-                    'count' => $group->count(),
-                    'settled' => $group->filter(fn (Registration $r) => $r->hasSettledFee())->count(),
-                    'outstanding' => $group->reject(fn (Registration $r) => $r->hasSettledFee())->count(),
-                ])
+                ->map(function ($group, $office) {
+                    // Three buckets, as v1's geo breakdown had them: paid,
+                    // promised, and neither. hasSettledFee() is the wrong
+                    // question here — it treats a promissory note as settled,
+                    // which is right for letting someone through the door and
+                    // wrong for a column headed Outstanding. An office whose
+                    // participants had all merely promised showed nothing
+                    // owing, which is the opposite of what HRD needs to see.
+                    $cleared = $group->filter(fn (Registration $r) => $r->hasClearedFee());
+                    $promised = $group
+                        ->reject(fn (Registration $r) => $r->hasClearedFee())
+                        ->filter(fn (Registration $r) => $r->hasSettledFee());
+
+                    return [
+                        'label' => $office,
+                        'count' => $group->count(),
+                        'settled' => $cleared->count(),
+                        'promissory' => $promised->count(),
+                        'outstanding' => $group->count() - $cleared->count() - $promised->count(),
+                    ];
+                })
                 ->sortByDesc('count')
                 ->values()
                 ->all(),

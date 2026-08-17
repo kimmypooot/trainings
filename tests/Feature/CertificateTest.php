@@ -297,6 +297,34 @@ class CertificateTest extends TestCase
             );
     }
 
+    public function test_the_register_export_keeps_the_not_yet_emailed_filter(): void
+    {
+        $this->actingAs($this->staff())
+            ->get('/admin/certificates?emailed=0')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                // "0" is falsy, so a bare array_filter dropped it and the
+                // export quietly widened to every certificate in scope.
+                $this->assertStringContainsString(
+                    'emailed=0',
+                    $page->toArray()['props']['exportUrl'],
+                );
+            });
+    }
+
+    public function test_the_register_export_still_drops_filters_left_blank(): void
+    {
+        $this->actingAs($this->staff())
+            ->get('/admin/certificates')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $this->assertStringNotContainsString(
+                    'emailed=',
+                    $page->toArray()['props']['exportUrl'],
+                );
+            });
+    }
+
     public function test_the_public_verification_page_works_without_signing_in(): void
     {
         $registration = $this->completedRegistration();

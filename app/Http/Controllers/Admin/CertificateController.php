@@ -98,7 +98,16 @@ class CertificateController extends Controller
             'scopedTo' => $request->user()->fieldOffice?->name,
             // The export honours the same filters the register is showing, and
             // the field-office scope, so what staff download is what they see.
-            'exportUrl' => route('admin.exports.certificates', array_filter($filters)),
+            //
+            // Empty-string rather than falsy: the "Not yet emailed" option's
+            // value is "0", which a bare array_filter drops — so filtering the
+            // register to un-emailed certificates and pressing Export handed
+            // back every certificate instead, which is the one case where a
+            // silently wider download actually matters.
+            'exportUrl' => route(
+                'admin.exports.certificates',
+                array_filter($filters, fn (string $value) => $value !== ''),
+            ),
         ]);
     }
 

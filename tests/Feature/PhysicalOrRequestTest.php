@@ -12,6 +12,7 @@ use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\PhysicalOrRequestService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
@@ -373,15 +374,60 @@ class PhysicalOrRequestTest extends TestCase
 
         PhysicalOrRequestService::advance($request, PhysicalOrRequestStatus::PaymentVerified, $officer);
 
+        // The whole trail, in order, rather than "the latest one".
+        // `statusLogs()` carries its own orderBy, so a `latest('id')` tacked
+        // on becomes a *secondary* sort and quietly returns the oldest row —
+        // which passed only while all three entries shared a second, and
+        // failed whenever the clock ticked between filing and verifying.
         $this->assertSame(
-            PhysicalOrRequestStatus::PaymentVerified,
-            $request->fresh()->statusLogs()->latest('id')->value('to_status'),
+            [
+                PhysicalOrRequestStatus::RequestSubmitted,
+                PhysicalOrRequestStatus::PaymentVerificationPending,
+                PhysicalOrRequestStatus::PaymentVerified,
+            ],
+            $request->fresh()->statusLogs->pluck('to_status')->all(),
         );
         $this->assertDatabaseHas('activity_logs', [
             'subject_type' => (new PhysicalOrRequest)->getMorphClass(),
             'subject_id' => $request->getKey(),
             'action' => 'physical_or.payment_verified',
         ]);
+    }
+
+    public function test_the_trail_still_reads_in_order_when_a_second_ticks_mid_flow(): void
+    {
+        $participant = $this->participant();
+        $payment = $this->receiptedPayment($participant);
+
+        // Filing writes two entries in one transaction, so they share a
+        // `changed_at` to the second. Verifying then happens on the far side
+        // of a tick. That gap is what made this file fail intermittently in a
+        // full-suite run and pass on its own — the timing was incidental to
+        // the test, so nothing pointed at it.
+        $this->travelTo(CarbonImmutable::parse('2026-08-17 09:00:00'));
+        $request = PhysicalOrRequestService::request($payment, $participant, 'physical-or-proofs/paid.png');
+
+        $this->travelTo(CarbonImmutable::parse('2026-08-17 09:00:01'));
+        PhysicalOrRequestService::advance($request->fresh(), PhysicalOrRequestStatus::PaymentVerified, $this->officer());
+
+        $this->travelBack();
+
+        $logs = $request->fresh()->statusLogs;
+
+        $this->assertSame(
+            [
+                PhysicalOrRequestStatus::RequestSubmitted,
+                PhysicalOrRequestStatus::PaymentVerificationPending,
+                PhysicalOrRequestStatus::PaymentVerified,
+            ],
+            $logs->pluck('to_status')->all(),
+        );
+
+        // The two that share a second keep their insertion order, which is the
+        // tie-break the relation now spells out rather than leaving to the
+        // database. Filing must read before the proof that followed it.
+        $this->assertTrue($logs[0]->changed_at->equalTo($logs[1]->changed_at));
+        $this->assertLessThan($logs[1]->getKey(), $logs[0]->getKey());
     }
 
     // --- Participant cancellation ----------------------------------------

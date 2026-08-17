@@ -57,7 +57,11 @@ class AgencyRequest extends Model
 
     public function documents(): HasMany
     {
-        return $this->hasMany(AgencyRequestDocument::class)->orderBy('created_at');
+        // Tie-broken on id, for the same reason the status trails are: several
+        // documents can be attached in one submission and share a timestamp.
+        return $this->hasMany(AgencyRequestDocument::class)
+            ->orderBy('created_at')
+            ->orderBy('id');
     }
 
     /**

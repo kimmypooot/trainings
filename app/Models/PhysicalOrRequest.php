@@ -54,7 +54,15 @@ class PhysicalOrRequest extends Model
      */
     public function statusLogs(): HasMany
     {
-        return $this->hasMany(PhysicalOrRequestStatusLog::class)->orderBy('changed_at');
+        // Tie-broken on id, because `changed_at` is only accurate to the
+        // second and a single transaction writes two entries — filing a
+        // request with its proof attached logs both "filed" and "proof
+        // uploaded" at the same instant. Without the tie-break the order
+        // between them is whatever the database feels like, and the trail is
+        // rendered to an officer as the history of the request.
+        return $this->hasMany(PhysicalOrRequestStatusLog::class)
+            ->orderBy('changed_at')
+            ->orderBy('id');
     }
 
     /** Anything still moving through the pipeline. */
