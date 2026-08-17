@@ -996,7 +996,13 @@ const printedAt = new Date().toLocaleString();
                                 <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
                                     Participants
                                 </th>
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">Settled</th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">Paid</th>
+                                <!-- Money promised but not received. Kept as its
+                                     own column, as v1 had it: folded into Paid it
+                                     reads as an office that owes nothing. -->
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                    On Note
+                                </th>
                                 <th scope="col" class="py-2 text-right font-semibold text-csc-ink/70">Outstanding</th>
                             </tr>
                         </thead>
@@ -1005,6 +1011,12 @@ const printedAt = new Date().toLocaleString();
                                 <td class="py-2.5 pr-4 text-csc-ink/80">{{ office.label }}</td>
                                 <td class="py-2.5 pr-4 text-right font-medium text-csc-ink">{{ office.count }}</td>
                                 <td class="py-2.5 pr-4 text-right text-csc-ink/70">{{ office.settled }}</td>
+                                <td
+                                    class="py-2.5 pr-4 text-right font-medium"
+                                    :class="office.promissory ? 'text-info' : 'text-csc-ink/50'"
+                                >
+                                    {{ office.promissory }}
+                                </td>
                                 <td
                                     class="py-2.5 text-right font-medium"
                                     :class="office.outstanding ? 'text-warning' : 'text-csc-ink/50'"

@@ -664,6 +664,45 @@ class AdminAreaTest extends TestCase
             );
     }
 
+    public function test_the_office_breakdown_keeps_a_promissory_note_out_of_paid(): void
+    {
+        $training = Training::factory()->paid(1500)->create();
+        $office = FieldOffice::query()->first();
+
+        $paid = $this->participant();
+        $promised = $this->participant();
+        $owing = $this->participant();
+
+        foreach ([$paid, $promised, $owing] as $participant) {
+            $participant->profile->update(['field_office_id' => $office->getKey()]);
+            RegistrationService::register($participant, $training);
+        }
+
+        foreach ([[$paid, PaymentMethod::Cash], [$promised, PaymentMethod::Promissory]] as [$who, $method]) {
+            Payment::factory()->verified()->create([
+                'registration_id' => Registration::where('user_id', $who->getKey())->sole()->getKey(),
+                'user_id' => $who->getKey(),
+                'training_id' => $training->getKey(),
+                'amount' => 1500,
+                'payment_method' => $method,
+            ]);
+        }
+
+        $this->actingAs($this->staff())
+            ->get("/admin/trainings/{$training->id}/roster")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('officeBreakdown.0.count', 3)
+                // Only the cash is money in. A verified promissory note is
+                // verified, not paid — folded into Paid it reported an office
+                // that had collected nothing as owing nothing.
+                ->where('officeBreakdown.0.settled', 1)
+                ->where('officeBreakdown.0.promissory', 1)
+                ->where('officeBreakdown.0.outstanding', 1)
+                ->etc()
+            );
+    }
+
     public function test_staff_who_cannot_take_money_are_not_offered_the_dialog(): void
     {
         $training = Training::factory()->create(['payment_required' => true, 'payment_amount' => 1500]);
