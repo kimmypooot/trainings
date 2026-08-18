@@ -8,6 +8,7 @@ use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -39,16 +40,50 @@ class ScanStationService
      *
      * @return array<string, mixed>
      */
-    public static function roster(Training $training, ?int $officeId): array
+    public static function roster(Training $training, ?int $officeId, ?CarbonImmutable $since = null): array
     {
-        $registrations = Registration::with(['user.profile.fieldOffice', 'attendances'])
+        /*
+         * The watermark is taken before the query, not after.
+         *
+         * It is what the device sends back as `since` next time, so anything
+         * written while this query runs has to fall on the *later* side of it
+         * or it would be missed forever. Stamping the response at the end
+         * would silently swallow exactly the rows a busy door is producing.
+         */
+        $watermark = CarbonImmutable::now();
+
+        $scoped = fn ($query) => $query
             ->where('training_id', $training->getKey())
+            ->when($officeId !== null, fn ($inner) => $inner->whereHas(
+                'user.profile',
+                fn ($profile) => $profile->where('field_office_id', $officeId)
+            ));
+
+        $registrations = Registration::with(['user.profile.fieldOffice', 'attendances'])
+            ->where($scoped)
             // Only a registration that holds a place can be marked, so anything
             // else is dead weight on a device that has to work from memory.
             ->whereIn('status', [RegistrationStatus::Approved, RegistrationStatus::Completed])
-            ->when($officeId !== null, fn ($query) => $query->whereHas(
-                'user.profile',
-                fn ($profile) => $profile->where('field_office_id', $officeId)
+            /*
+             * A delta carries what changed, which is two different things.
+             *
+             * The registration row moves when somebody is admitted, approved or
+             * completed. The attendance rows move when another station marks
+             * them, and that leaves the registration untouched — so a delta
+             * that only watched registrations would keep re-serving a
+             * participant as unmarked long after the door across the room had
+             * marked them.
+             *
+             * Compared with >= rather than >, because MySQL stores these to the
+             * second: a row written in the same second as the watermark would
+             * otherwise fall through the gap between two deltas. The cost is
+             * occasionally re-sending a row the device already has, and the
+             * merge is by registration id, so that costs nothing.
+             */
+            ->when($since !== null, fn ($query) => $query->where(fn ($inner) => $inner
+                ->where('registrations.updated_at', '>=', $since)
+                ->orWhereHas('attendances', fn ($attendance) => $attendance
+                    ->where('attendances.updated_at', '>=', $since))
             ))
             ->orderBy('registered_at')
             ->get();
@@ -83,8 +118,57 @@ class ScanStationService
                 ], $training->trainingDays()),
             ],
             'participants' => $participants,
-            'downloaded_at' => CarbonImmutable::now()->toIso8601String(),
+            /*
+             * Who stopped counting.
+             *
+             * A registration cancelled mid-session disappears from the query
+             * above — it no longer holds a place — and on a full download that
+             * is the whole story, because the device replaces its list. A delta
+             * merges instead, so absence says nothing: without this the device
+             * would happily go on admitting somebody whose registration was
+             * pulled an hour ago. Only meaningful alongside `since`, so it is
+             * omitted entirely from a full bundle rather than sent empty.
+             */
+            ...($since === null ? [] : [
+                'removed' => Registration::where($scoped)
+                    ->whereNotIn('status', [RegistrationStatus::Approved, RegistrationStatus::Completed])
+                    ->where('registrations.updated_at', '>=', $since)
+                    ->pluck('id')
+                    ->all(),
+                // Tells the station to merge rather than replace. Sent as a
+                // flag rather than inferred from the request, so a bundle read
+                // back out of IndexedDB hours later still knows what it is.
+                'partial' => true,
+            ]),
+            'downloaded_at' => $watermark->toIso8601String(),
         ];
+    }
+
+    /**
+     * The `since` watermark a station sends to ask for a delta.
+     *
+     * Lives here rather than on either controller because both doors parse it
+     * identically, and this class exists precisely to stop the public station
+     * drifting from the staff one.
+     *
+     * Unparseable input falls back to null — a full bundle — rather than
+     * erroring. The station is the party a 422 would strand, and a full
+     * download is always a correct answer to "what has changed"; it is merely
+     * a more expensive one.
+     */
+    public static function since(Request $request): ?CarbonImmutable
+    {
+        $raw = $request->string('since')->toString();
+
+        if ($raw === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($raw);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

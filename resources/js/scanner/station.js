@@ -248,7 +248,42 @@ export function useScanStation({
         syncMessage.value = null;
 
         try {
-            const bundle = await downloadRoster(rosterUrl, { grant: unref(grant) });
+            /*
+             * A refresh mid-session asks only for what changed.
+             *
+             * The first download of a training is necessarily whole. Every one
+             * after it is a station catching up on walk-ins admitted at the
+             * desk and people marked by the door across the hall, and on a
+             * thousand-seat event re-sending the entire roster to learn about
+             * three of them is the thing that actually falls over. The server
+             * decides: it answers a `since` it cannot read with a full bundle,
+             * and the reply says which it sent.
+             */
+            /*
+             * Which held bundle this refresh is catching up on.
+             *
+             * The staff scanner passes a training id, which is the storage key,
+             * so the lookup is direct. The public station passes its link
+             * token — not a key, and it is not told the training id up front —
+             * but it is pinned to exactly one training by that link, so its
+             * active roster is by definition the one being refreshed. That
+             * fallback is gated on `restoreLast` being off, which is the flag
+             * that already means "pinned station": on the staff scanner it
+             * would be wrong, because there `download()` is routinely called
+             * for a training other than the active one, and merging across two
+             * trainings is the one mistake here that would be hard to see.
+             */
+            const held =
+                (await getRoster(id)) ??
+                (restoreLast ? null : await getRoster(roster.value?.training_id));
+
+            const bundle = mergeRoster(
+                held,
+                await downloadRoster(rosterUrl, {
+                    grant: unref(grant),
+                    since: held?.downloaded_at ?? null,
+                })
+            );
 
             // The public station is handed a roster for one training and is not
             // told its id up front, so the bundle is the authority on it.
@@ -751,6 +786,52 @@ export function useScanStation({
         admitWalkIn,
         sync,
         retry,
+    };
+}
+
+/**
+ * Fold a freshly fetched bundle into the one the device already holds.
+ *
+ * A full bundle replaces outright — that is what "full" means, and it is also
+ * the only correct answer when there is nothing held to merge into.
+ *
+ * A delta merges three ways, and all three are needed:
+ *
+ *  - rows that came back *replace* their held counterpart by registration id,
+ *    which is what makes the server's >= overlap free: re-sending a row the
+ *    device already has costs one object assignment;
+ *  - rows that did not come back are *kept*, because a delta says nothing
+ *    about what has not changed;
+ *  - ids in `removed` are *dropped*, because that is the one thing absence
+ *    cannot express — without it a cancelled registration would go on being
+ *    scannable at a door for the rest of the session.
+ *
+ * The `training` block is taken from the reply rather than merged, so a run
+ * switched to accept walk-ins mid-morning reaches the station on its next
+ * refresh.
+ */
+export function mergeRoster(held, incoming) {
+    if (!held || !incoming.partial) {
+        return incoming;
+    }
+
+    const removed = new Set(incoming.removed ?? []);
+    const byId = new Map(
+        held.participants
+            .filter((participant) => !removed.has(participant.registration_id))
+            .map((participant) => [participant.registration_id, participant])
+    );
+
+    incoming.participants.forEach((participant) => {
+        if (!removed.has(participant.registration_id)) {
+            byId.set(participant.registration_id, participant);
+        }
+    });
+
+    return {
+        ...held,
+        ...incoming,
+        participants: [...byId.values()],
     };
 }
 

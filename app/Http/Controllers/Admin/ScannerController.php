@@ -98,7 +98,11 @@ class ScannerController extends Controller
     public function roster(Request $request, Training $training): JsonResponse
     {
         return response()->json([
-            ...ScanStationService::roster($training, $request->user()->scopedFieldOfficeId()),
+            ...ScanStationService::roster(
+                $training,
+                $request->user()->scopedFieldOfficeId(),
+                ScanStationService::since($request),
+            ),
             'scoped_to' => $request->user()->fieldOffice?->name,
         ]);
     }

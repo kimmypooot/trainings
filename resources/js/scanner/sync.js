@@ -184,7 +184,23 @@ export class SyncError extends Error {
  * same bargain: this is the only moment the station needs a network before the
  * session starts.
  */
-export async function downloadRoster(rosterUrl, { grant = null } = {}) {
+export async function downloadRoster(rosterUrl, { grant = null, since = null } = {}) {
+    /*
+     * `since` asks for a delta rather than the whole bundle.
+     *
+     * It is the `downloaded_at` the server stamped on the last successful
+     * fetch, sent straight back — never a time the device made up. The two
+     * clocks in a function room are rarely the same one, and a watermark
+     * derived from the tablet's would silently skip whatever fell into the
+     * difference.
+     */
+    if (since) {
+        const url = new URL(rosterUrl, window.location.origin);
+
+        url.searchParams.set('since', since);
+        rosterUrl = url.pathname + url.search;
+    }
+
     const response = await fetch(rosterUrl, {
         credentials: 'same-origin',
         headers: {

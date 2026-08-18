@@ -124,7 +124,15 @@ class ScanLinkController extends Controller
         $link->loadMissing(['training', 'issuer']);
 
         return response()->json([
-            ...ScanStationService::roster($link->training, $link->issuer->scopedFieldOfficeId()),
+            // The same delta the staff station gets, parsed the same way. A
+            // volunteer door on a thousand-seat event needs this more than the
+            // staff one, not less: it is the door standing open while walk-ins
+            // are still being admitted at a desk across the hall.
+            ...ScanStationService::roster(
+                $link->training,
+                $link->issuer->scopedFieldOfficeId(),
+                ScanStationService::since($request),
+            ),
             'scoped_to' => $link->issuer->fieldOffice?->name,
         ]);
     }
