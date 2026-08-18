@@ -408,6 +408,15 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             Route::get('/payments', [AdminPaymentController::class, 'index'])->name('payments.index');
             Route::post('/payments/{payment}/review', [AdminPaymentController::class, 'review'])
                 ->name('payments.review');
+            /*
+             * Clearing a batch of promissory notes, which is what a walk-in
+             * event leaves behind. Notes only — see the controller for why a
+             * batch cannot issue official receipts — so this adds throughput,
+             * not a second way to verify money.
+             */
+            Route::post('/payments/bulk', [AdminPaymentController::class, 'bulk'])
+                ->name('payments.bulk');
+
             Route::post('/refunds/{refundRequest}/review', [AdminPaymentController::class, 'reviewRefund'])
                 ->name('refunds.review');
             // The bank account participants are told to deposit into. Held by

@@ -173,7 +173,44 @@ const post = (url, payload) =>
     });
 
 /*
- * Verifying is a short form rather than a bare confirmation: the officer is
+ * Clearing a batch of promissory notes.
+ *
+ * Selection is deliberately limited to notes that are still pending, because
+ * those are the only rows the endpoint will act on. Offering a checkbox beside
+ * a cash payment and then reporting it as "skipped" afterwards teaches an
+ * officer to distrust the count; the affordance is simply absent instead.
+ */
+const selected = ref([]);
+
+const clearable = computed(() =>
+    sortedPayments.value.filter((payment) => payment.status === 'pending' && payment.is_promissory)
+);
+
+const allClearableSelected = computed(
+    () => clearable.value.length > 0 && selected.value.length === clearable.value.length
+);
+
+const toggleAllClearable = () => {
+    selected.value = allClearableSelected.value ? [] : clearable.value.map((payment) => payment.id);
+};
+
+const bulkForm = useForm({ ids: [], remarks: '' });
+
+const submitBulk = () => {
+    bulkForm.ids = selected.value;
+
+    bulkForm.post('/admin/payments/bulk', {
+        preserveScroll: true,
+        onSuccess: () => {
+            selected.value = [];
+            bulkForm.reset();
+        },
+    });
+};
+
+/*
+ * Verifying is a short form rather than a bare confirmation:
+ the officer is
  * holding the official receipt at that moment, and capturing its number then is
  * the only time it is free. Chasing it later means reopening a settled payment.
  *
@@ -422,11 +459,61 @@ const rejectRefund = (refund) => {
                     />
 
                     <template v-else>
+                        <!--
+                            The batch bar appears only once something is
+                            selected, so the screen is unchanged for an officer
+                            working the queue one payment at a time — which is
+                            still the normal day. It is a walk-in event that
+                            leaves two hundred notes behind, not a Tuesday.
+                        -->
+                        <div
+                            v-if="selected.length"
+                            class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-info/30 bg-info-soft px-4 py-3"
+                        >
+                            <p class="text-sm font-semibold text-csc-ink">
+                                {{ selected.length }} promissory note{{ selected.length === 1 ? '' : 's' }} selected
+                            </p>
+
+                            <AppInput
+                                v-model="bulkForm.remarks"
+                                class="min-w-56 flex-1"
+                                placeholder="Remarks (optional)"
+                                aria-label="Remarks recorded on every note in this batch"
+                            />
+
+                            <AppButton :disabled="bulkForm.processing" @click="submitBulk">
+                                {{ bulkForm.processing ? 'Verifying…' : 'Verify selected' }}
+                            </AppButton>
+
+                            <AppButton variant="ghost" @click="selected = []">Cancel</AppButton>
+
+                            <!--
+                                Said before the click, not after. Verifying a
+                                note confirms the slot and mails the
+                                participant, and unlike the roster's bulk
+                                actions there is no undo window behind it.
+                            -->
+                            <p class="w-full text-xs text-csc-ink/60">
+                                Each note is verified and its registration confirmed. The fee stays
+                                outstanding until the money is collected, and this cannot be undone.
+                            </p>
+                        </div>
+
                         <!-- Desktop table -->
                         <div class="-mx-5 hidden overflow-x-auto sm:-mx-6 md:block">
                             <table class="w-full min-w-200 text-left text-sm">
                                 <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                                     <tr>
+                                        <th scope="col" class="w-10 px-5 py-3">
+                                            <input
+                                                v-if="clearable.length"
+                                                type="checkbox"
+                                                class="size-4 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                                                :checked="allClearableSelected"
+                                                :aria-label="allClearableSelected ? 'Clear selection' : 'Select every pending promissory note'"
+                                                @change="toggleAllClearable"
+                                            />
+                                        </th>
                                         <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
                                             <button
                                                 type="button"
@@ -470,6 +557,16 @@ const rejectRefund = (refund) => {
                                 </thead>
                                 <tbody class="divide-y divide-csc-line">
                                     <tr v-for="payment in sortedPayments" :key="payment.id">
+                                        <td class="px-5 py-3.5">
+                                            <input
+                                                v-if="payment.status === 'pending' && payment.is_promissory"
+                                                v-model="selected"
+                                                type="checkbox"
+                                                :value="payment.id"
+                                                class="size-4 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                                                :aria-label="`Select the promissory note for ${payment.participant}`"
+                                            />
+                                        </td>
                                         <td class="px-5 py-3.5">
                                             <p class="font-medium text-csc-ink">{{ payment.participant }}</p>
                                             <p v-if="payment.reference_number" class="mt-0.5 text-xs text-csc-ink/55">

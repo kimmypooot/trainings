@@ -99,6 +99,10 @@ class PaymentController extends Controller
                 'discount_amount' => $payment->discount_amount,
                 'gross_amount' => $payment->grossAmount(),
                 'method' => $payment->payment_method->label(),
+                // The machine-readable half of the line above. A batch may only
+                // clear promissory notes — see bulk() — and the page has to know
+                // which rows those are without matching on a display label.
+                'is_promissory' => $payment->payment_method === PaymentMethod::Promissory,
                 'reference_number' => $payment->reference_number,
                 'payment_date' => $payment->payment_date->format('d M Y'),
                 'payment_date_ts' => $payment->payment_date->timestamp,
@@ -228,7 +232,78 @@ class PaymentController extends Controller
     }
 
     /**
+     * Verify a batch of promissory notes in one action.
+     *
+     * A thousand-seat event admits walk-ins on notes all morning, and clearing
+     * them one dialog at a time is the queue this exists to remove.
+     *
+     * Notes only, and that is the whole design rather than a first cut.
+     * Verifying real money issues an official receipt, `or_number` is unique
+     * across payments, and finance reconciles on it — so a batch could only
+     * verify cash by leaving every receipt blank, which is precisely the
+     * control the OR exists to be. A promissory note is the one payment
+     * verified *without* a receipt, because no money has arrived yet; there is
+     * nothing for a batch to skip over. Anything else in the selection is
+     * counted and reported rather than silently passed by.
+     *
+     * No undo, deliberately. The roster's bulk actions offer one because a
+     * review is an opinion; a verified note has approved a registration and
+     * mailed the participant about it. Taking money decisions back is a
+     * reversal with its own trail, not a thirty-second window.
+     */
+    public function bulk(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['integer'],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        /*
+         * Re-resolved under the office scope rather than taken on trust, the
+         * same way the counter payment re-resolves its registration: a list of
+         * ids posted from a page must never become a way to act on a payment
+         * the officer cannot see.
+         */
+        $payments = Payment::with(['registration.training', 'user'])
+            ->whereIn('id', $validated['ids'])
+            ->when($officeId !== null, fn ($query) => $query->whereHas(
+                'user.profile',
+                fn ($profile) => $profile->where('field_office_id', $officeId)
+            ))
+            ->get();
+
+        $verified = 0;
+        $skipped = 0;
+
+        foreach ($payments as $payment) {
+            if ($payment->status !== PaymentStatus::Pending
+                || $payment->payment_method !== PaymentMethod::Promissory) {
+                $skipped++;
+
+                continue;
+            }
+
+            PaymentService::verify($payment, $request->user(), $validated['remarks'] ?? null);
+            $verified++;
+        }
+
+        // Ids that resolved to nothing are counted too. Silence there would
+        // hide an office-scope mismatch behind a cheerful total.
+        $skipped += count($validated['ids']) - $payments->count();
+
+        $message = "{$verified} promissory note(s) verified.";
+
+        return back()->with('success', $skipped === 0
+            ? $message
+            : "{$message} {$skipped} skipped (not a pending promissory note — verify those individually).");
+    }
+
+    /**
      * Record money taken at the counter, ported from v1's `payment-actions.php`.
+
      *
      * The participant paid cash at the desk and left with the receipt, so there
      * is no upload to review — the officer enters what is on the OR stub. The
