@@ -199,6 +199,7 @@ class TrainingController extends Controller
                 'payment_required' => $training->payment_required,
                 'payment_amount' => $training->payment_amount,
                 'accepts_promissory' => $training->accepts_promissory,
+                'accepts_walk_ins' => $training->accepts_walk_ins,
                 'is_supervisory' => $training->is_supervisory,
                 'status' => $training->status->value,
             ],
@@ -257,6 +258,7 @@ class TrainingController extends Controller
                     ? (float) $training->payment_amount
                     : null,
                 'accepts_promissory' => $training->accepts_promissory,
+                'accepts_walk_ins' => $training->accepts_walk_ins,
                 'days' => array_map(fn (array $day) => [
                     'day' => $day['day'],
                     'label' => $day['date']->format('d M'),
@@ -904,6 +906,15 @@ class TrainingController extends Controller
             // Whether the collecting officer will hold a slot against a
             // promissory note. Only consulted on a paid training.
             'accepts_promissory' => ['boolean'],
+            /*
+             * Whether somebody may be admitted at the venue after the deadline
+             * has passed. Unlike the flag above this is not only about money:
+             * it also waives the capacity cap, because a walk-in the office has
+             * decided to seat is already in the room and refusing the record
+             * would only hide them from the register. So it stays off unless an
+             * organiser turns it on for a specific event.
+             */
+            'accepts_walk_ins' => ['boolean'],
             // An SDC obliges the participant to submit an output before the
             // certificate is defensible.
             'is_supervisory' => ['boolean'],

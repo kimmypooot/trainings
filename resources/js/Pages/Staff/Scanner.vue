@@ -24,6 +24,9 @@ import { toneDots, useScanStation, verdictStyles } from '@/scanner/station';
 const props = defineProps({
     trainings: { type: Array, default: () => [] },
     syncUrl: { type: String, required: true },
+    // Null for a station that may scan but not admit, which is how the walk-in
+    // affordance stays absent rather than present and refused.
+    walkInUrl: { type: String, default: null },
     scopedTo: { type: String, default: null },
     operator: { type: String, default: null },
     canTest: { type: Boolean, default: false },
@@ -72,9 +75,11 @@ const {
     stopCamera,
     toggleTorch,
     markByHand,
+    admitWalkIn,
+    admitting,
     sync,
     retry,
-} = useScanStation({ syncUrl: props.syncUrl, testMode });
+} = useScanStation({ syncUrl: props.syncUrl, walkInUrl: props.walkInUrl, testMode });
 
 const panel = ref(null); // null | 'roster' | 'activity'
 const search = ref('');
@@ -379,6 +384,41 @@ async function confirmRelease() {
                                     ({{ verdict.existing.status_label }}) — no second record was made.
                                 </p>
                                 <p v-else class="mt-0.5 text-sm leading-relaxed">{{ verdict.message }}</p>
+
+                                <!--
+                                    The overrun, stated where the decision was
+                                    made. The organiser needs it now — chairs,
+                                    meals and kits are ordered against the cap —
+                                    and a number that first appears in a report
+                                    next week is one nobody acted on. It is
+                                    written to the activity log too, so it
+                                    survives the toast.
+                                -->
+                                <p
+                                    v-if="verdict.overCapacity"
+                                    class="mt-2 rounded-lg bg-black/25 px-2 py-1 text-2xs font-semibold"
+                                >
+                                    Over capacity by {{ verdict.overBy }}. Tell the organiser.
+                                </p>
+
+                                <!--
+                                    Admitting is a second, deliberate tap rather
+                                    than something the scan does by itself. The
+                                    station cannot tell a walk-in from the wrong
+                                    training being loaded — both look like a code
+                                    that is not on this roster — and only the
+                                    operator standing there knows which it is.
+                                -->
+                                <button
+                                    v-if="verdict.admittable"
+                                    type="button"
+                                    class="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-danger shadow-sm disabled:opacity-60"
+                                    :disabled="admitting"
+                                    @click="admitWalkIn(verdict.token)"
+                                >
+                                    <AppIcon :name="admitting ? 'clock' : 'plus'" size="sm" />
+                                    {{ admitting ? 'Admitting…' : 'Admit as walk-in' }}
+                                </button>
 
                                 <p
                                     v-if="verdict.participant?.food_restrictions"

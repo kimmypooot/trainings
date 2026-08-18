@@ -141,11 +141,13 @@ export function existingFor(participant, scans, day) {
  *                is the one caller allowed past it, since a rehearsal is rarely
  *                held on a training day — it lands on day 1 deliberately and
  *                flags the result as `simulatedDay`;
- *  - `unknown`   a valid CSC code that is not on *this* roster — usually the
- *                operator has the wrong training loaded, so the message says so;
+ *  - `unknown`   a valid CSC code that is not on *this* roster — either the
+ *                operator has the wrong training loaded or the person never
+ *                registered, and the station cannot tell which. Where walk-ins
+ *                are allowed it offers to admit them rather than guessing;
  *  - `invalid`   not a CSC participant code at all.
  */
-export async function resolveScan(text, roster, scans, { practice = false } = {}) {
+export async function resolveScan(text, roster, scans, { practice = false, canAdmit = false } = {}) {
     const token = tokenFrom(text);
 
     if (!token) {
@@ -156,9 +158,30 @@ export async function resolveScan(text, roster, scans, { practice = false } = {}
     const participant = roster.participants.find((row) => row.token_hash === hash);
 
     if (!participant) {
+        /*
+         * A valid CSC code that is not on this roster is the walk-in case — and
+         * it is equally the wrong-training-loaded case. The station cannot tell
+         * them apart: it holds digests, not identities, so it does not know
+         * whether this code belongs to anybody at all.
+         *
+         * So it offers rather than asserts. The token travels back with the
+         * verdict and admitting is a deliberate second action, taken by the one
+         * party who does know which case this is — the operator standing there.
+         * Three things must agree before the offer appears: the run was
+         * published for walk-ins, this station is allowed to admit (the
+         * volunteer door is not), and this is not a rehearsal. An offer with
+         * nothing behind it would be worse than none, because the card carrying
+         * it is deliberately the one that does not time out.
+         */
+        const admittable = canAdmit && Boolean(roster.training.accepts_walk_ins) && !practice;
+
         return {
             verdict: 'unknown',
-            message: `Not on the roster for “${roster.training.title}”. Check that the right training is loaded.`,
+            token,
+            admittable,
+            message: admittable
+                ? `Not registered for “${roster.training.title}”. Admit as a walk-in, or check that the right training is loaded.`
+                : `Not on the roster for “${roster.training.title}”. Check that the right training is loaded.`,
         };
     }
 

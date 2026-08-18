@@ -322,6 +322,25 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 Route::get('/scanner/trainings/{training}/roster', [ScannerController::class, 'roster'])
                     ->name('scanner.roster');
                 Route::post('/scanner/sync', [ScannerController::class, 'sync'])->name('scanner.sync');
+                /*
+                 * Admitting a walk-in. Sits with the scanner because that is
+                 * where it happens — the operator has just scanned a valid
+                 * code that is not on the roster, and this is the answer to
+                 * it — but it is a different kind of action from the three
+                 * above, which only ever record attendance for somebody
+                 * already approved. This one enrols a person and, on a paid
+                 * run, issues a promissory note in their name.
+                 *
+                 * That is why it is here and not on the volunteer station:
+                 * every other endpoint in this group is reachable by a signed
+                 * in staff member whose name lands on the record, and a
+                 * financial obligation must never be created by an
+                 * unauthenticated door link. See ScanLinkController, which
+                 * deliberately does not gain this.
+                 */
+                Route::post('/scanner/walk-in', [ScannerController::class, 'walkIn'])
+                    ->name('scanner.walk-in');
+
 
                 /*
                  * Issuing a station to someone without an account. Kept with

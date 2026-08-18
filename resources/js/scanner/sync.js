@@ -21,7 +21,7 @@ const BATCH_SIZE = 200;
  * stale. The XSRF-TOKEN cookie is whatever the browser holds right now, which is
  * the value the server will actually accept.
  */
-function csrfToken() {
+export function csrfToken() {
     const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/);
 
     return match ? decodeURIComponent(match[1]) : '';

@@ -6,7 +6,9 @@ use App\Enums\Role;
 use App\Enums\TrainingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Training;
+use App\Models\User;
 use App\Support\ScanStationService;
+use App\Support\WalkInService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,6 +76,7 @@ class ScannerController extends Controller
         return Inertia::render('Staff/Scanner', [
             'trainings' => $trainings,
             'syncUrl' => route('admin.scanner.sync'),
+            'walkInUrl' => route('admin.scanner.walk-in'),
             'scopedTo' => $request->user()->fieldOffice?->name,
             'operator' => $request->user()->name,
             // Whether this operator may rehearse. Sent so the toggle is simply
@@ -140,6 +143,76 @@ class ScannerController extends Controller
         return response()->json([
             'results' => $results,
             'synced_at' => CarbonImmutable::now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Admit a walk-in from the desk.
+     *
+     * The one endpoint here that is deliberately *online*.
+     *
+     * Everything else on this controller is built so a device can work with no
+     * signal, and a walk-in cannot be. The station holds one training's roster
+     * and nothing else, so a code belonging to somebody not on it is
+     * unidentifiable locally — the device is carrying digests, not names. The
+     * alternative, shipping every participant in the region to every tablet,
+     * would undo the reason the roster ships digests in the first place: a
+     * device left in a function room overnight is currently worth nothing to
+     * whoever picks it up.
+     *
+     * So this is the walk-in *desk*, not the door. Put it where there is
+     * signal, and leave the doors offline as they are.
+     */
+    public function walkIn(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'training_id' => ['required', 'integer', 'exists:trainings,id'],
+            // The raw token off the QR, not a digest: the desk is online, so
+            // there is no reason to make the server search by hash.
+            'token' => ['required', 'string', 'max:64'],
+        ]);
+
+        $training = Training::findOrFail($validated['training_id']);
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        /*
+         * Resolved under the actor's own office scope, exactly as the roster
+         * is. A field office admitting a walk-in from another office would be
+         * enrolling someone it cannot otherwise see, and the whole scoping
+         * invariant is that no surface hands over a participant outside it —
+         * a new one must not become the exception. Not-found rather than
+         * forbidden, so the answer does not confirm the code belongs to
+         * somebody real.
+         */
+        $participant = User::where('qr_token', $validated['token'])
+            ->when($officeId !== null, fn ($query) => $query->whereHas(
+                'profile',
+                fn ($profile) => $profile->where('field_office_id', $officeId)
+            ))
+            ->first();
+
+        if ($participant === null) {
+            return response()->json([
+                'message' => 'That code does not match a participant you can admit.',
+            ], 404);
+        }
+
+        $result = WalkInService::admit($participant, $training, $request->user());
+
+        return response()->json([
+            'admitted' => $result['admitted'],
+            'checked_in' => $result['checked_in'],
+            'over_capacity' => $result['over_capacity'],
+            'over_by' => $result['over_by'],
+            'message' => $result['message'],
+            /*
+             * The roster row, not a summary of it. The station appends this to
+             * the roster it already holds, so the walk-in is recognised by the
+             * next scan of the same badge instead of coming back as unknown a
+             * second time — and it must be byte-for-byte the shape a download
+             * would have produced, digest included.
+             */
+            'participant' => ScanStationService::participantRow($result['registration']),
         ]);
     }
 }

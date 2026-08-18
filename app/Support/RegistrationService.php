@@ -22,13 +22,26 @@ class RegistrationService
      * The training row is locked first so two people claiming the last slot at
      * the same moment cannot both pass the capacity check — without the lock,
      * both read "1 slot left" before either writes.
-     */
-    /**
+     *
+     * $walkIn admits somebody who is already at the venue.
+     *
+     * It relaxes exactly two guards — the registration window and the capacity
+     * cap — and nothing else. In particular a walk-in is still refused when the
+     * training is not published, when the participant is barred from a
+     * supervisory course, when that course needs a supporting document they
+     * cannot produce at a door, and when they are already registered. Those are
+     * statements about whether this person may attend at all, and standing in
+     * the room is not an argument against any of them.
+     *
      * @param  array{charge_to?: ?ChargeTo, needs_certificate?: bool, supporting_document_path?: ?string}  $details
      */
-    public static function register(User $user, Training $training, array $details = []): Registration
-    {
-        return DB::transaction(function () use ($user, $training, $details) {
+    public static function register(
+        User $user,
+        Training $training,
+        array $details = [],
+        bool $walkIn = false
+    ): Registration {
+        return DB::transaction(function () use ($user, $training, $details, $walkIn) {
             $locked = Training::whereKey($training->getKey())->lockForUpdate()->firstOrFail();
 
             if (! $locked->status->isOpenToParticipants()) {
@@ -54,16 +67,26 @@ class RegistrationService
                 ]);
             }
 
-            if (! $locked->registrationHasOpened()) {
-                throw ValidationException::withMessages([
-                    'registration' => 'Registration for this training has not opened yet.',
-                ]);
-            }
+            /*
+             * The registration window is the first thing a walk-in is, by
+             * definition, outside of — the deadline has passed, because the
+             * training is already running. Skipping the check is the whole
+             * point of admitting one, so it is skipped here rather than by
+             * loosening registrationHasClosed(), which would also reopen
+             * self-service registration to everybody on the internet.
+             */
+            if (! $walkIn) {
+                if (! $locked->registrationHasOpened()) {
+                    throw ValidationException::withMessages([
+                        'registration' => 'Registration for this training has not opened yet.',
+                    ]);
+                }
 
-            if ($locked->registrationHasClosed()) {
-                throw ValidationException::withMessages([
-                    'registration' => 'Registration for this training has closed.',
-                ]);
+                if ($locked->registrationHasClosed()) {
+                    throw ValidationException::withMessages([
+                        'registration' => 'Registration for this training has closed.',
+                    ]);
+                }
             }
 
             $existing = Registration::where('user_id', $user->getKey())
@@ -77,7 +100,23 @@ class RegistrationService
                 ]);
             }
 
-            if ($locked->isFull()) {
+            /*
+             * Capacity stops a registration, but it does not stop a walk-in.
+             *
+             * The office's call, and it is the right one: the person is
+             * physically standing in the room. Refusing the record would not
+             * send them home, it would only mean the room holds someone the
+             * system cannot see — no attendance, no certificate, and a seat
+             * count that reads as correct while being wrong. Admitting them
+             * over the cap keeps the register honest about who is present.
+             *
+             * The cost is that the organiser has to *know*, immediately, so
+             * they can call for more chairs and meals. WalkInService measures
+             * the overrun before this runs and reports it back to the desk;
+             * this is also written to the activity log, so "we went twelve
+             * over on day one" survives past the event.
+             */
+            if (! $walkIn && $locked->isFull()) {
                 throw ValidationException::withMessages([
                     'registration' => 'This training is already full.',
                 ]);
@@ -99,6 +138,7 @@ class RegistrationService
                     $user,
                     $details['supporting_document_path'] ?? $existing?->supporting_document_path,
                 ),
+                'is_walk_in' => $walkIn,
             ];
 
             /*
@@ -106,9 +146,10 @@ class RegistrationService
              *
              * On a paid run the slot is confirmed when the fee is settled — see
              * PaymentService::confirmSlotOnSettlement(). A free run has no fee
-             * to settle, so there is nothing left to wait for: capacity was
-             * already checked above, and holding the registration at pending
-             * would only mean somebody rubber-stamping a queue.
+             * to settle, so there is nothing left to wait for: capacity has
+             * been dealt with above — checked, or deliberately waived for a
+             * walk-in — and holding the registration at pending would only
+             * mean somebody rubber-stamping a queue.
              *
              * Staff keep the last word either way. A registration approved this
              * way can still be cancelled from the roster, with a reason, which

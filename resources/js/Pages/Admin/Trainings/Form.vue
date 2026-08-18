@@ -42,6 +42,9 @@ const form = useForm({
     payment_required: props.training?.payment_required ?? false,
     payment_amount: props.training?.payment_amount ?? '',
     accepts_promissory: props.training?.accepts_promissory ?? true,
+    // Off unless asked for. A walk-in waives both the deadline and the slot
+    // limit, so it is a decision about one event rather than a default.
+    accepts_walk_ins: props.training?.accepts_walk_ins ?? false,
     is_supervisory: props.training?.is_supervisory ?? false,
     status: props.training?.status ?? 'draft',
 });
@@ -309,6 +312,28 @@ const submit = () => {
                                 </span>
                             </label>
                         </template>
+
+                        <!--
+                            Outside the paid-only block above on purpose: a free
+                            training gets walk-ins too, and gating this on a fee
+                            would quietly make them impossible on exactly the
+                            events most likely to attract them.
+                        -->
+                        <label class="flex items-start gap-3">
+                            <input
+                                v-model="form.accepts_walk_ins"
+                                type="checkbox"
+                                class="mt-0.5 size-4 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                            />
+                            <span class="text-sm text-csc-ink">
+                                Accept walk-in participants
+                                <span class="mt-0.5 block text-xs text-csc-ink/60">
+                                    Staff can admit someone at the venue after registration closes, even
+                                    once the slots are taken. Going over the limit is allowed and flagged
+                                    at the desk, so plan for extra chairs and meals.
+                                </span>
+                            </span>
+                        </label>
                     </div>
                 </AppCard>
 

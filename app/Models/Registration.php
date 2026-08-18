@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'user_id', 'training_id', 'status', 'charge_to', 'needs_certificate',
     'supporting_document_path', 'supervisory_document_status',
     'supervisory_document_reviewed_by', 'supervisory_document_reviewed_at',
-    'supervisory_document_remarks', 'registered_at', 'cancelled_at', 'attended_at',
+    'supervisory_document_remarks', 'registered_at', 'is_walk_in', 'cancelled_at', 'attended_at',
     'reviewed_by', 'reviewed_at', 'review_remarks',
 ])]
 class Registration extends Model
@@ -34,6 +34,7 @@ class Registration extends Model
             'status' => RegistrationStatus::class,
             'charge_to' => ChargeTo::class,
             'needs_certificate' => 'boolean',
+            'is_walk_in' => 'boolean',
             'registered_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'attended_at' => 'datetime',

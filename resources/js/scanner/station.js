@@ -11,7 +11,7 @@ import {
     saveRoster,
     scansFor,
 } from './store';
-import { SyncError, downloadRoster, syncPending } from './sync';
+import { SyncError, csrfToken, downloadRoster, syncPending } from './sync';
 
 /**
  * Everything an attendance station does, minus how it looks.
@@ -28,6 +28,17 @@ import { SyncError, downloadRoster, syncPending } from './sync';
  */
 export function useScanStation({
     syncUrl,
+    /*
+     * Where to admit a walk-in, or null on a station that may not.
+     *
+     * The public door gets null and therefore gets no walk-in affordance at
+     * all. That is the authority boundary in one argument: admitting enrols a
+     * person and, on a paid run, issues a promissory note in their name, and
+     * an unauthenticated volunteer link must never do either. The server
+     * refuses it independently — this only keeps the offer off a screen that
+     * could not act on it.
+     */
+    walkInUrl = null,
     grant = null,
     storageKey = 'csc-tims-scanner:last-training',
     // A reopened tablet should land back on the training it was scanning. The
@@ -62,6 +73,8 @@ export function useScanStation({
 
     const verdict = ref(null);
     let verdictTimer = null;
+
+    const admitting = ref(false);
 
     const online = ref(navigator.onLine);
     const syncState = ref('idle'); // idle | syncing | error
@@ -364,6 +377,7 @@ export function useScanStation({
 
         const result = await resolveScan(text, roster.value, scans.value, {
             practice: unref(testMode),
+            canAdmit: Boolean(walkInUrl),
         });
 
         if (result.verdict === 'success') {
@@ -400,12 +414,114 @@ export function useScanStation({
 
         clearTimeout(verdictTimer);
 
+        /*
+         * A verdict the operator has to *act* on does not time out.
+         *
+         * Every other outcome here is information — checked in, already
+         * marked, wrong day — and clearing it keeps the next person from
+         * reading somebody else's name. A walk-in offer is a button, and a
+         * button that vanishes six seconds after it appears is one an operator
+         * reaches for and misses while a queue watches. It goes when the next
+         * scan replaces it.
+         */
+        if (result.admittable) {
+            return;
+        }
+
         // Long enough to read across a badge table, short enough that the next
         // person is not left looking at somebody else's name.
         verdictTimer = setTimeout(
             () => (verdict.value = null),
             result.verdict === 'success' ? 3500 : 6000
         );
+    }
+
+    /**
+     * Admit the walk-in the last scan could not place.
+     *
+     * The one action on this station that needs a network, and it says so
+     * rather than queueing. Everything else here is safe to defer because it
+     * only records something about a person already on the roster; this decides
+     * whether they are on it. A queued admission would leave an operator
+     * believing somebody had a seat while the request sat in IndexedDB, and the
+     * participant finding out otherwise at the certificate.
+     *
+     * On success the returned roster row is appended locally, so the same badge
+     * is recognised offline from the next scan onward without re-downloading
+     * the whole bundle.
+     */
+    async function admitWalkIn(token) {
+        if (!walkInUrl || !roster.value || !token || admitting.value) {
+            return false;
+        }
+
+        if (!online.value) {
+            show({
+                verdict: 'unknown',
+                token,
+                admittable: true,
+                message: 'Admitting a walk-in needs a network. Move to where there is signal and try again.',
+            });
+
+            return false;
+        }
+
+        admitting.value = true;
+
+        try {
+            const response = await fetch(walkInUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-XSRF-TOKEN': csrfToken(),
+                },
+                body: JSON.stringify({ training_id: roster.value.training_id, token }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                show({
+                    verdict: 'refused',
+                    message:
+                        payload.errors?.walk_in?.[0] ??
+                        payload.errors?.registration?.[0] ??
+                        payload.message ??
+                        `The server refused the admission (${response.status}).`,
+                });
+
+                return false;
+            }
+
+            roster.value = {
+                ...roster.value,
+                participants: [...roster.value.participants, payload.participant],
+            };
+
+            await saveRoster(roster.value.training_id, roster.value);
+
+            show({
+                verdict: payload.checked_in ? 'walk-in' : 'walk-in-pending',
+                participant: payload.participant,
+                message: payload.message,
+                overCapacity: payload.over_capacity,
+                overBy: payload.over_by,
+            });
+
+            return true;
+        } catch {
+            show({
+                verdict: 'refused',
+                message: 'Could not reach the server. The participant has not been admitted.',
+            });
+
+            return false;
+        } finally {
+            admitting.value = false;
+        }
     }
 
     /** Mark someone from the roster list, when their code cannot be read. */
@@ -603,6 +719,7 @@ export function useScanStation({
         torchOn,
         hasTorch,
         verdict,
+        admitting,
         online,
         syncState,
         syncMessage,
@@ -631,6 +748,7 @@ export function useScanStation({
         stopCamera,
         toggleTorch,
         markByHand,
+        admitWalkIn,
         sync,
         retry,
     };
@@ -638,6 +756,7 @@ export function useScanStation({
 
 /**
  * Shared presentation tables.
+
  *
  * Kept beside the composable because the verdict vocabulary is part of the
  * station's contract, not a per-page styling choice: "duplicate" must look the
@@ -649,6 +768,16 @@ export const verdictStyles = {
     'off-day': { tone: 'bg-danger text-white', icon: 'warning', title: 'Not running today' },
     unknown: { tone: 'bg-danger text-white', icon: 'warning', title: 'Not on this roster' },
     invalid: { tone: 'bg-danger text-white', icon: 'close', title: 'Unrecognised code' },
+    /*
+     * Walk-ins read as success because that is what they are: the person is in
+     * the room and on the register. The pending variant is warning rather than
+     * danger on purpose — nothing failed, the cashier has simply not been paid
+     * yet, and colouring it as an error sends the operator hunting a problem
+     * that does not exist.
+     */
+    'walk-in': { tone: 'bg-success text-white', icon: 'check', title: 'Walk-in admitted' },
+    'walk-in-pending': { tone: 'bg-warning text-white', icon: 'clock', title: 'Enrolled — fee due' },
+    refused: { tone: 'bg-danger text-white', icon: 'warning', title: 'Not admitted' },
 };
 
 export const toneDots = {

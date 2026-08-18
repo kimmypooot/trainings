@@ -53,38 +53,10 @@ class ScanStationService
             ->orderBy('registered_at')
             ->get();
 
-        $participants = $registrations->map(function (Registration $registration) {
-            $user = $registration->user;
-
-            // Minted here rather than at first scan: a participant who never
-            // opened their QR page still has to be recognisable at the door.
-            $token = $user->ensureQrToken();
-
-            return [
-                'registration_id' => $registration->id,
-                'name' => $user->name,
-                'organization' => $user->profile?->organization_name,
-                'position' => $user->profile?->position_title,
-                'field_office' => $user->profile?->fieldOffice?->name,
-                'food_restrictions' => $user->profile?->food_restrictions_details,
-                // Digests, never the codes themselves. A device left in a
-                // function room overnight carries proof of which codes it would
-                // have accepted, but no working check-in codes.
-                'token_hash' => hash('sha256', $token),
-                // What the server already knows, so a freshly downloaded roster
-                // recognises someone another station checked in this morning.
-                'attendance' => $registration->attendances
-                    ->filter(fn (Attendance $attendance) => $attendance->time_in !== null)
-                    ->mapWithKeys(fn (Attendance $attendance) => [
-                        (string) $attendance->training_day => [
-                            'status' => $attendance->status->value,
-                            'status_label' => $attendance->status->label(),
-                            'time_in' => $attendance->time_in,
-                        ],
-                    ])
-                    ->all(),
-            ];
-        })->values()->all();
+        $participants = $registrations
+            ->map(fn (Registration $registration) => self::participantRow($registration))
+            ->values()
+            ->all();
 
         return [
             'training' => [
@@ -92,6 +64,14 @@ class ScanStationService
                 'title' => $training->title,
                 'venue' => $training->venue,
                 'duration_days' => max(1, $training->duration_days ?? 1),
+                // Whether the station may offer "admit as walk-in" when a valid
+                // code turns out not to be on this roster. Shipped in the
+                // bundle so the offer is simply absent on a run that was not
+                // published for it, rather than present and refused by the
+                // server after the operator has already promised somebody a
+                // seat. The server checks it again regardless — see
+                // WalkInService::admit.
+                'accepts_walk_ins' => (bool) $training->accepts_walk_ins,
                 // The scheduled start time of day, which is what decides Present
                 // versus Late — the scanner applies the same rule offline.
                 'starts_at_time' => $training->starts_at->format('H:i'),
@@ -108,7 +88,56 @@ class ScanStationService
     }
 
     /**
+     * One participant, in the shape a station recognises.
+     *
+     * Extracted because a walk-in admitted mid-session has to be added to the
+     * device's roster, and the only safe row to add is the one the roster
+     * download would itself have produced. Building a second, nearly-identical
+     * shape at the walk-in endpoint is how a device ends up with a participant
+     * it can display but not match — the digest is the part that has to agree,
+     * and agreement is not something to leave to two copies of a hash call.
+     *
+     * @return array<string, mixed>
+     */
+    public static function participantRow(Registration $registration): array
+    {
+        $registration->loadMissing(['user.profile.fieldOffice', 'attendances']);
+
+        $user = $registration->user;
+
+        // Minted here rather than at first scan: a participant who never
+        // opened their QR page still has to be recognisable at the door.
+        $token = $user->ensureQrToken();
+
+        return [
+            'registration_id' => $registration->id,
+            'name' => $user->name,
+            'organization' => $user->profile?->organization_name,
+            'position' => $user->profile?->position_title,
+            'field_office' => $user->profile?->fieldOffice?->name,
+            'food_restrictions' => $user->profile?->food_restrictions_details,
+            // Digests, never the codes themselves. A device left in a
+            // function room overnight carries proof of which codes it would
+            // have accepted, but no working check-in codes.
+            'token_hash' => hash('sha256', $token),
+            // What the server already knows, so a freshly downloaded roster
+            // recognises someone another station checked in this morning.
+            'attendance' => $registration->attendances
+                ->filter(fn (Attendance $attendance) => $attendance->time_in !== null)
+                ->mapWithKeys(fn (Attendance $attendance) => [
+                    (string) $attendance->training_day => [
+                        'status' => $attendance->status->value,
+                        'status_label' => $attendance->status->label(),
+                        'time_in' => $attendance->time_in,
+                    ],
+                ])
+                ->all(),
+        ];
+    }
+
+    /**
      * Write a batch of offline scans back.
+
      *
      * Every scan carries the moment it happened at the door, not the moment it
      * reached us — a queue flushed at 5pm must still record the 8am arrival, and
