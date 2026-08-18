@@ -45,16 +45,29 @@ class PaymentTest extends TestCase
      * A staff member who may handle money.
      *
      * Collecting is a designation rather than a role, so the default here is a
-     * field-office account carrying it — which is both the commonest real case
-     * and the combination worth exercising: scoped to one office *and* able to
-     * take payments. Admins and superadmins reach the money screens by role.
+     * field-office account carrying it. This file's default officer is
+     * deliberately *not* that combination, though: every money screen is
+     * scoped to the officer's own office, so a field-office actor would make
+     * each workflow assertion here depend on which office a factory happened to
+     * put a participant in — and the assertion that failed would never be the
+     * one the test was written to make. The scoped case is exercised where it
+     * belongs, in FieldOfficeScopingTest. Admins and superadmins reach the
+     * money screens by role; a collecting officer reaches them by designation,
+     * which is what the default here exercises.
      */
-    private function officer(Role $role = Role::FieldOffice): User
+    private function officer(Role $role = Role::CollectingOfficer): User
     {
         return User::factory()->create([
             'role' => $role,
             'profile_completed_at' => now(),
-            'is_collecting_officer' => $role === Role::FieldOffice,
+            /*
+             * Set only for the roles that need it. Admin and superadmin reach
+             * the money screens through Role::financial(), and handing them the
+             * designation as well would quietly change what they may *see*:
+             * handlesPayments() unmasks refund account numbers, so a blanket
+             * true here would defeat the masking test below.
+             */
+            'is_collecting_officer' => in_array($role, [Role::CollectingOfficer, Role::FieldOffice], true),
         ]);
     }
 
@@ -275,7 +288,11 @@ class PaymentTest extends TestCase
         // The combination v1 has and v2 could not express: the same person is
         // scoped to their own office *and* takes money for it. Modelling the
         // designation as a role forced a choice between the two.
-        $officer = $this->officer();
+        //
+        // Named explicitly rather than leaning on the default, which is an
+        // unscoped collector so that the workflow tests are not all quietly
+        // office-dependent.
+        $officer = $this->officer(Role::FieldOffice);
 
         $this->actingAs($officer)->get('/admin/payments')->assertOk();
 

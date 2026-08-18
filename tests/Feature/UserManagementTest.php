@@ -105,6 +105,11 @@ class UserManagementTest extends TestCase
 
     public function test_the_list_shows_last_sign_in(): void
     {
+        // The stamp is written from now() and asserted against now() formatted
+        // a few milliseconds later, so a minute rolling over between the two
+        // fails a test that has nothing to do with clocks.
+        $this->freezeTime();
+
         $user = User::factory()->create([
             'name' => 'Zoe Lastlogin',
             'role' => Role::Admin,

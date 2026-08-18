@@ -2,9 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
+use App\Enums\PaymentStatus;
+use App\Enums\RegistrationStatus;
 use App\Enums\Role;
 use App\Models\FieldOffice;
+use App\Models\Payment;
 use App\Models\Profile;
+use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\RegistrationService;
@@ -178,5 +183,88 @@ class FieldOfficeScopingTest extends TestCase
         $this->actingAs($this->fieldOfficeStaff($this->leyte))
             ->get('/admin/participants')
             ->assertInertia(fn (AssertableInertia $page) => $page->has('participants.data', 0));
+    }
+
+    /**
+     * A payment belonging to one office, so the money screens have something
+     * to be scoped away from.
+     */
+    private function paymentIn(FieldOffice $office, string $email): Payment
+    {
+        $participant = $this->participantIn($office, $email);
+
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+        ]);
+
+        $registration = Registration::factory()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+            'status' => RegistrationStatus::Pending,
+        ]);
+
+        return Payment::create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::Cash,
+            'payment_date' => now()->toDateString(),
+        ]);
+    }
+
+    private function collectingOfficerIn(FieldOffice $office): User
+    {
+        return User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => $office->id,
+            'profile_completed_at' => now(),
+            'is_collecting_officer' => true,
+        ])->refresh();
+    }
+
+    /**
+     * The verification queue is a list like any other.
+     *
+     * It reached this file late: the screen is gated on the collecting-officer
+     * designation rather than a role, and a field office's own officer is a
+     * field-office user who keeps their scoping while taking payments.
+     */
+    public function test_the_payment_queue_shows_only_the_officers_own_office(): void
+    {
+        $mine = $this->paymentIn($this->leyte, 'leyte@example.com');
+        $this->paymentIn($this->samar, 'samar@example.com');
+
+        $this->actingAs($this->collectingOfficerIn($this->leyte))
+            ->get('/admin/payments')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('payments.data', 1)
+                ->where('payments.data.0.id', $mine->id)
+                // The chips and tallies narrow with the rows. Scoped rows over
+                // regional totals would describe work the officer cannot open.
+                ->where('summary.pending.count', 1)
+                ->where('summary.pending.amount', 1500)
+            );
+    }
+
+    /**
+     * Route model binding resolves by id alone, so the list hiding a payment
+     * is not the same as the officer being unable to act on it.
+     */
+    public function test_an_officer_cannot_review_another_offices_payment(): void
+    {
+        $theirs = $this->paymentIn($this->samar, 'samar@example.com');
+
+        $this->actingAs($this->collectingOfficerIn($this->leyte))
+            ->post("/admin/payments/{$theirs->id}/review", [
+                'decision' => 'verified',
+                'or_number' => 'OR-4242',
+                'or_date' => now()->toDateString(),
+            ])
+            ->assertNotFound();
+
+        $this->assertSame(PaymentStatus::Pending, $theirs->fresh()->status);
     }
 }

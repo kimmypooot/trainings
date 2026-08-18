@@ -31,7 +31,36 @@ class PaymentController extends Controller
         $method = $request->string('method')->toString();
         $search = $request->string('search')->toString();
 
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        /*
+         * A field office's collecting officer sees its own money and nobody
+         * else's.
+         *
+         * This screen is reached through EnsureUserCollectsPayments rather than
+         * a role list precisely because a field office's officer is a
+         * field-office user — the middleware's own comment says they "keep
+         * their office scoping while taking payments" — and record() beside
+         * this has always re-resolved its registration that way. The list did
+         * not, which made it the one payment surface that showed the region.
+         *
+         * Applied as closures because it has to reach six queries: the rows,
+         * the status chips, the three money tallies and both refund queries. A
+         * scoped list above unscoped counts would be worse than either, since
+         * the totals would then describe work the officer cannot open.
+         */
+        $scopePayments = fn ($query) => $query->when($officeId !== null, fn ($inner) => $inner->whereHas(
+            'user.profile',
+            fn ($profile) => $profile->where('field_office_id', $officeId)
+        ));
+
+        $scopeRefunds = fn ($query) => $query->when($officeId !== null, fn ($inner) => $inner->whereHas(
+            'payment.user.profile',
+            fn ($profile) => $profile->where('field_office_id', $officeId)
+        ));
+
         $payments = Payment::with(['user', 'training', 'verifier', 'collectingOfficer', 'registration'])
+            ->where($scopePayments)
             // The verification queue defaults to the work in front of the
             // officer; every other status has to be asked for.
             ->when($status ?: PaymentStatus::Pending->value, fn ($query, $s) => $query->where('status', $s))
@@ -50,18 +79,19 @@ class PaymentController extends Controller
         // rows below narrow — a chip whose count shrank as the officer typed
         // would read as "work disappeared".
         $paymentCounts = Payment::query()
+            ->where($scopePayments)
             ->select('status', DB::raw('count(*) as total'))
             ->groupBy('status')
             ->pluck('total', 'status');
 
         $summary = [
-            'pending' => $this->tally(Payment::where('status', PaymentStatus::Pending)),
-            'verified' => $this->tally(Payment::where('status', PaymentStatus::Verified)),
-            'rejected' => $this->tally(Payment::where('status', PaymentStatus::Rejected)),
+            'pending' => $this->tally(Payment::where($scopePayments)->where('status', PaymentStatus::Pending)),
+            'verified' => $this->tally(Payment::where($scopePayments)->where('status', PaymentStatus::Verified)),
+            'rejected' => $this->tally(Payment::where($scopePayments)->where('status', PaymentStatus::Rejected)),
             // Everything still moving, not just the untouched ones — a claim
             // parked at MSD is as much outstanding money as one nobody has
             // looked at yet.
-            'open_refunds' => $this->tally(RefundRequest::whereNotIn('status', [
+            'open_refunds' => $this->tally(RefundRequest::where($scopeRefunds)->whereNotIn('status', [
                 RefundStatus::Refunded->value, RefundStatus::Rejected->value,
             ])),
         ];
@@ -69,6 +99,7 @@ class PaymentController extends Controller
         $refundStatus = $request->string('refund_status')->toString();
 
         $refundCounts = RefundRequest::query()
+            ->where($scopeRefunds)
             ->select('status', DB::raw('count(*) as total'))
             ->groupBy('status')
             ->pluck('total', 'status');
@@ -78,6 +109,7 @@ class PaymentController extends Controller
         $refunds = RefundRequest::with([
             'payment.user', 'payment.training', 'reviewer', 'statusLogs.actor',
         ])
+            ->where($scopeRefunds)
             ->when($refundStatus, fn ($query, $s) => $query->where('status', $s))
             ->orderByRaw('CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END', [
                 RefundStatus::Refunded->value, RefundStatus::Rejected->value,
@@ -186,6 +218,30 @@ class PaymentController extends Controller
      *
      * @return array{count: int, amount: int|float}
      */
+    /**
+     * Re-resolve a route-bound payment inside the officer's own field office.
+     *
+     * Route model binding resolves by id alone, so without this a scoped
+     * officer could act on another office's payment simply by posting its id —
+     * the screen would never offer it, which is exactly why the guard cannot
+     * live on the screen. record() has always done this for its registration;
+     * the review endpoints had not.
+     *
+     * Not-found rather than forbidden, so the answer does not confirm that a
+     * payment with that id exists.
+     */
+    private function scopedPayment(Request $request, Payment $payment): Payment
+    {
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        return Payment::whereKey($payment->getKey())
+            ->when($officeId !== null, fn ($query) => $query->whereHas(
+                'user.profile',
+                fn ($profile) => $profile->where('field_office_id', $officeId)
+            ))
+            ->firstOr(fn () => abort(404));
+    }
+
     private function tally($query): array
     {
         return [
@@ -196,6 +252,8 @@ class PaymentController extends Controller
 
     public function review(Request $request, Payment $payment): RedirectResponse
     {
+        $payment = $this->scopedPayment($request, $payment);
+
         $validated = $request->validate([
             'decision' => ['required', Rule::in([PaymentStatus::Verified->value, PaymentStatus::Rejected->value])],
             'remarks' => ['nullable', 'string', 'max:1000'],
@@ -423,6 +481,15 @@ class PaymentController extends Controller
      */
     public function reviewRefund(Request $request, RefundRequest $refundRequest): RedirectResponse
     {
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        $refundRequest = RefundRequest::whereKey($refundRequest->getKey())
+            ->when($officeId !== null, fn ($query) => $query->whereHas(
+                'payment.user.profile',
+                fn ($profile) => $profile->where('field_office_id', $officeId)
+            ))
+            ->firstOr(fn () => abort(404));
+
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['advance', 'reject'])],
             // Required only when advancing: the screen sends the stage it
