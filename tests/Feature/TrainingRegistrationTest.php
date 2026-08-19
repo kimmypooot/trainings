@@ -303,6 +303,171 @@ class TrainingRegistrationTest extends TestCase
         $this->assertSame(1, $training->fresh()->slotsRemaining());
     }
 
+    /*
+     * ── What the participant is told afterwards ───────────────────────────
+     *
+     * The message used to be one fixed sentence about awaiting CSC approval,
+     * which was wrong on a free run (already approved) and unhelpful on a paid
+     * one (the fee, not a person, is what the slot is waiting on).
+     */
+
+    public function test_a_free_registration_is_not_reported_as_awaiting_approval(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create(['payment_required' => false]);
+
+        $this->actingAs($user)
+            ->post("/trainings/{$training->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => true,
+            ])
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, 'You are registered')
+                && ! str_contains($message, 'awaiting approval')
+            );
+
+        $this->assertSame(RegistrationStatus::Approved, Registration::sole()->status);
+    }
+
+    public function test_a_paid_registration_lands_on_the_payments_page(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+        ]);
+
+        $this->actingAs($user)
+            ->from("/trainings/{$training->slug}")
+            ->post("/trainings/{$training->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+            ])
+            // Not back to the catalogue: the slot is held, not seated, and
+            // settling the fee is the next thing to actually do.
+            ->assertRedirect('/my/payments')
+            ->assertSessionHas('success', fn (string $message) => str_contains($message, '1,500.00')
+                && str_contains($message, 'confirm your slot')
+            );
+
+        $this->assertSame(RegistrationStatus::Pending, Registration::sole()->status);
+    }
+
+    /**
+     * And the page it lands on is already showing the thing it sent them for —
+     * a redirect into an empty list would be worse than the message was.
+     */
+    public function test_the_payments_page_is_already_showing_that_registration(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create([
+            'payment_required' => true,
+            'payment_amount' => 1500,
+        ]);
+
+        $this->actingAs($user)->post("/trainings/{$training->id}/register", [
+            'charge_to' => ChargeTo::Personal->value,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/my/payments')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('My/Payments')
+                ->has('awaitingPayment', 1)
+                ->where('awaitingPayment.0.training.title', $training->title)
+            );
+    }
+
+    /** A free run has nothing to settle, so it stays where it was. */
+    public function test_a_free_registration_does_not_divert_to_payments(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create(['payment_required' => false]);
+
+        $this->actingAs($user)
+            ->from("/trainings/{$training->slug}")
+            ->post("/trainings/{$training->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+            ])
+            ->assertRedirect("/trainings/{$training->slug}");
+    }
+
+    /**
+     * The catalogue modal registers on the spot rather than linking to the
+     * detail page, so the page has to ship what that form needs: the payee
+     * options, and the eligibility of *this* participant for the training whose
+     * card was opened.
+     */
+    public function test_the_catalogue_ships_what_the_modal_registration_form_needs(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create();
+
+        $this->actingAs($user)
+            ->get("/trainings?details={$training->id}")
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Trainings/Index')
+                ->has('chargeOptions', count(ChargeTo::cases()))
+                ->has('details.eligibility', fn (AssertableInertia $eligibility) => $eligibility
+                    ->has('barred')
+                    ->has('barred_reason')
+                    ->has('needs_supporting_document')
+                    ->has('supporting_document_hint')
+                )
+            );
+    }
+
+    /**
+     * The payee has no default any more — not on the form, and not here. A
+     * submission that never answered it is rejected rather than quietly
+     * receipted to the individual.
+     */
+    public function test_the_payee_must_be_answered(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create(['payment_required' => true, 'payment_amount' => 900]);
+
+        $this->actingAs($user)
+            ->post("/trainings/{$training->id}/register", [])
+            ->assertSessionHasErrors('charge_to');
+
+        $this->assertSame(0, Registration::count());
+    }
+
+    /**
+     * The certificate question is no longer asked, so the field stops arriving.
+     * Everyone attending gets one, which is what the column has always
+     * defaulted to — the absence must not read as "no certificate".
+     */
+    public function test_a_registration_without_the_certificate_field_still_asks_for_one(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create();
+
+        $this->actingAs($user)
+            ->post("/trainings/{$training->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertTrue(Registration::sole()->needs_certificate);
+    }
+
+    /** Staff and roster tooling still set it deliberately, so it stays accepted. */
+    public function test_the_certificate_field_is_still_honoured_when_sent(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create();
+
+        $this->actingAs($user)
+            ->post("/trainings/{$training->id}/register", [
+                'charge_to' => ChargeTo::Personal->value,
+                'needs_certificate' => false,
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertFalse(Registration::sole()->needs_certificate);
+    }
+
     public function test_registration_records_who_the_fee_is_billed_to(): void
     {
         $user = $this->participant();

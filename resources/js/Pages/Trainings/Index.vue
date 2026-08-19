@@ -6,16 +6,19 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppSkeleton from '@/Components/AppSkeleton.vue';
+import TrainingRegistrationForm from '@/Components/TrainingRegistrationForm.vue';
 
 const props = defineProps({
     trainings: { type: Object, required: true },
     filters: { type: Object, required: true },
     filterOptions: { type: Object, required: true },
     registeredCount: { type: Number, required: true },
+    chargeOptions: { type: Array, required: true },
     // Arrives only on the partial reload that asks for it: the full picture of
     // the training whose card the participant opened.
     details: { type: Object, default: null },
@@ -444,9 +447,7 @@ const slotsDetail = (training) =>
                             v-if="modalTraining.is_supervisory"
                             class="flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70"
                         >
-                            <svg class="mt-0.5 size-4 shrink-0 text-csc-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M12 16v-4M12 8h.01M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z" />
-                            </svg>
+                            <AppIcon name="info" size="sm" class="mt-0.5 shrink-0 text-csc-blue" />
                             This is a Supervisory Development Course. You will be asked to submit an output
                             before your completion is credited.
                         </p>
@@ -467,9 +468,30 @@ const slotsDetail = (training) =>
                     <p v-else-if="modalTraining.is_full" class="text-sm font-medium text-danger">
                         This training is full.
                     </p>
-                    <AppButton v-else :href="modalTraining.url" size="lg" block icon="clipboard">
-                        Register for this training
-                    </AppButton>
+                    <!--
+                        The form itself, not a link to the page that has it.
+                        Sending the participant to Trainings/Show from here
+                        meant reading the same details twice before reaching a
+                        single short form. It appears only once the detail
+                        payload has landed, because eligibility travels with it
+                        and a form that does not yet know whether to ask for a
+                        supporting document must not be offered.
+                    -->
+                    <!--
+                        Its own scroll, because AppModal's footer is shrink-0
+                        inside an overflow-hidden dialog: on a short viewport
+                        (a phone held sideways) the questions are taller than
+                        the space left over, and without this the Submit button
+                        is clipped off the bottom with no way to reach it.
+                    -->
+                    <div v-else-if="detailLoaded" class="max-h-[60vh] overflow-y-auto">
+                        <TrainingRegistrationForm
+                            :training="modalTraining"
+                            :eligibility="modalTraining.eligibility"
+                            :charge-options="chargeOptions"
+                            @registered="closeModal"
+                        />
+                    </div>
                 </template>
             </AppModal>
         </div>

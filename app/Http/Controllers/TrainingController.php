@@ -135,6 +135,9 @@ class TrainingController extends Controller
             ],
             'registeredCount' => $registeredCount,
             'details' => $details,
+            // Static for everyone, so it rides on the page rather than on each
+            // detail payload the modal fetches.
+            'chargeOptions' => ChargeTo::options(),
         ]);
     }
 
@@ -190,18 +193,7 @@ class TrainingController extends Controller
                 // participant and the link, rather than a blanket "not yet".
                 'fee_settled' => $registration->hasSettledFee(),
             ] : null,
-            // What the registration form has to ask this particular
-            // participant. Resolved here because it depends on their salary
-            // grade, which the page has no business receiving.
-            'eligibility' => [
-                'barred' => SupervisoryEligibility::isBarred($training, $request->user()),
-                'barred_reason' => SupervisoryEligibility::barredMessage(),
-                'needs_supporting_document' => SupervisoryEligibility::requiresSupportingDocument(
-                    $training,
-                    $request->user(),
-                ),
-                'supporting_document_hint' => SupervisoryEligibility::documentHint(),
-            ],
+            'eligibility' => self::eligibility($training, $request->user()),
             'chargeOptions' => ChargeTo::options(),
         ]);
     }
@@ -403,6 +395,26 @@ class TrainingController extends Controller
      *
      * @return array<string, mixed>
      */
+    /**
+     * What the registration form has to ask this particular participant.
+     *
+     * Resolved on the server because it depends on their salary grade, which
+     * the page has no business receiving. Shared by show() and by the
+     * catalogue modal's detail payload so a participant cannot be barred on one
+     * surface and invited on the other.
+     *
+     * @return array<string, mixed>
+     */
+    private static function eligibility(Training $training, User $user): array
+    {
+        return [
+            'barred' => SupervisoryEligibility::isBarred($training, $user),
+            'barred_reason' => SupervisoryEligibility::barredMessage(),
+            'needs_supporting_document' => SupervisoryEligibility::requiresSupportingDocument($training, $user),
+            'supporting_document_hint' => SupervisoryEligibility::documentHint(),
+        ];
+    }
+
     private static function detail(Training $training, User $user): array
     {
         $training->loadCount([
@@ -422,6 +434,15 @@ class TrainingController extends Controller
             'level_label' => $training->level?->label(),
             'venue_details' => $training->venue_details,
             'is_supervisory' => $training->is_supervisory,
+            /*
+             * The same eligibility block show() builds, because the catalogue
+             * modal now carries the registration form itself rather than
+             * linking to the page that had it. It travels with the detail
+             * rather than the card summary: it depends on this participant's
+             * salary grade against this particular course, so it cannot be
+             * computed once for a page of twelve cards.
+             */
+            'eligibility' => self::eligibility($training, $user),
         ];
     }
 }

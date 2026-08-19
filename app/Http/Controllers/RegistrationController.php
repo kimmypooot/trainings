@@ -121,7 +121,11 @@ class RegistrationController extends Controller
 
         $validated = $request->validate([
             'charge_to' => ['required', Rule::enum(ChargeTo::class)],
-            'needs_certificate' => ['required', 'boolean'],
+            // No longer asked at registration — everyone attending gets a
+            // certificate, which is what the column has always defaulted to.
+            // Kept accepted rather than rejected so the roster tooling and the
+            // walk-in path, which do set it deliberately, keep working.
+            'needs_certificate' => ['sometimes', 'boolean'],
             'supporting_document' => [
                 $needsDocument ? 'required' : 'nullable',
                 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx',
@@ -130,14 +134,37 @@ class RegistrationController extends Controller
 
         RegistrationService::register($request->user(), $training, [
             'charge_to' => ChargeTo::from($validated['charge_to']),
-            'needs_certificate' => $validated['needs_certificate'],
+            'needs_certificate' => $validated['needs_certificate'] ?? true,
             'supporting_document_path' => $request->file('supporting_document')
                 ?->store('supporting-documents', self::DISK),
         ]);
 
-        return back()->with(
+        /*
+         * Say what actually happened, which is not the same sentence twice.
+         *
+         * RegistrationService approves a free run outright — there is no fee to
+         * settle and nothing to queue behind — so telling those participants to
+         * await an approval that already happened left them watching for a
+         * decision that was never coming. They stay where they are.
+         *
+         * A paid run is not finished here. The slot is held at pending until
+         * PaymentService::confirmSlotOnSettlement sees the fee settled, and the
+         * settling is done on the payments page — so that is where the
+         * participant is taken, rather than being told about a page they then
+         * have to go and find. The registration just made is already the first
+         * row of that page's Awaiting Payment list (it occupies a slot and has
+         * no payment against it yet), so the landing is on the very thing they
+         * were sent to do.
+         */
+        if (! $training->payment_required) {
+            return back()->with('success', "You are registered for {$training->title}.");
+        }
+
+        return redirect()->route('payments.index')->with(
             'success',
-            "Your registration for {$training->title} has been submitted and is awaiting approval by CSC."
+            "Your registration for {$training->title} has been submitted. Settle the ₱"
+                .number_format((float) $training->payment_amount, 2)
+                .' fee below to confirm your slot.'
         );
     }
 
