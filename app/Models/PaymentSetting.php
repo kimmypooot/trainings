@@ -39,7 +39,12 @@ class PaymentSetting extends Model
 
         return static::create([
             'bank_name' => 'Land Bank of the Philippines',
-            'account_name' => 'Civil Service Commission Regional Office VIII',
+            // The account holder as the bank has it, which is the Commission
+            // itself — not the regional office that operates the account. It
+            // has to match what a depositor will be shown at the counter, so
+            // this is deliberately narrower than the office name used to sign
+            // off notifications.
+            'account_name' => 'Civil Service Commission',
             'account_number' => '000000000000',
             'instructions' => implode(' ', [
                 'Deposit the training fee to the bank account below, then upload',
