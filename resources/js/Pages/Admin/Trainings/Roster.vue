@@ -642,10 +642,13 @@ watch(
     }
 );
 
-// Mirrors PaymentMethod::requiresReference() and isSettlement(): cash leaves no
-// reference, and a promissory note has no receipt because no money arrived.
-const methodNeedsReference = computed(() =>
-    ['check', 'online', 'credit_card'].includes(paymentForm.payment_method)
+// Read off the method list the server sent, not restated here. This was a
+// hardcoded list of values, which meant adding a method left the reference
+// field hidden on a rule that still demanded it — the error then landing on an
+// input that is not on the page.
+const methodNeedsReference = computed(
+    () => props.paymentMethods.find((method) => method.value === paymentForm.payment_method)
+        ?.requires_reference ?? false
 );
 const methodIsSettlement = computed(() => paymentForm.payment_method !== 'promissory');
 

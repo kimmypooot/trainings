@@ -225,15 +225,23 @@ class PaymentController extends Controller
                     fn ($rule) => $rule->except(PaymentMethod::Promissory)
                 ),
             ],
-            // Cash is paid over the counter against a receipt; every other
-            // method leaves a reference that is the only proof there is.
-            'reference_number' => [
-                'nullable', 'string', 'max:64',
-                Rule::requiredIf(fn () => PaymentMethod::tryFrom(
-                    (string) $request->input('payment_method')
-                )?->requiresReference() ?? false),
-            ],
+            /*
+             * No longer asked for at the counter form, so no longer required.
+             *
+             * It stays accepted rather than rejected: the column holds the
+             * references of every payment recorded before this, the admin
+             * screens still read it, and staff recording a payment on a
+             * participant's behalf may still have one to enter. Requiring it
+             * here after the field was removed from the form would have failed
+             * every online payment with a message pinned to an input that is
+             * not on the page.
+             */
+            'reference_number' => ['nullable', 'string', 'max:64'],
             'payment_date' => ['required', 'date', 'before_or_equal:today'],
+            // Never refused for want of a document. An online transfer without
+            // a slip is accepted and then flagged in the verification queue —
+            // see PaymentMethod::expectsProof(). Blocking it here only moved
+            // the participants who cannot scan onto the counter.
             'proof' => ['nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
         ]);
 

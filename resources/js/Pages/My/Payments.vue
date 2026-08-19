@@ -28,17 +28,19 @@ const paying = ref(null);
 const form = useForm({
     amount: '',
     payment_method: 'online',
-    reference_number: '',
     payment_date: '',
     proof: null,
 });
 
-// Cash is settled over the counter against a receipt, and a promissory note is
-// its own document; every other method has a reference that is the only proof
-// there is.
-const needsReference = computed(() => !['cash', 'promissory'].includes(form.payment_method));
-
 const isPromissory = computed(() => form.payment_method === 'promissory');
+
+// Whether a document is expected with this method — asked for, never demanded.
+// A payment without one still goes through and is flagged for staff instead,
+// so this drives the wording only. Read off the method list the server sent so
+// the two cannot drift apart.
+const proofExpected = computed(
+    () => props.methods.find((method) => method.value === form.payment_method)?.expects_proof ?? false
+);
 
 // Offered only where the training was published as accepting one. The server
 // applies the same rule — this keeps the option from appearing where it would
@@ -145,7 +147,7 @@ const submitPhysicalOr = () =>
     <Head title="Payments" />
 
     <AuthenticatedLayout title="Payments" current="payments">
-        <div class="mx-auto max-w-4xl space-y-5">
+        <div class="mx-auto max-w-5xl space-y-5">
             <!-- Owed -->
             <AppCard v-if="awaitingPayment.length" title="Awaiting Payment">
                 <!--
@@ -210,7 +212,14 @@ const submitPhysicalOr = () =>
                             novalidate
                             @submit.prevent="submit"
                         >
-                            <div class="grid gap-5 sm:grid-cols-2">
+                            <!--
+                                The three answers, on one line. They fitted a
+                                two-column grid awkwardly while the reference
+                                number was among them; without it the row is
+                                exactly what a payment is — how much, how, and
+                                when.
+                            -->
+                            <div class="grid gap-5 sm:grid-cols-3">
                                 <AppInput
                                     v-model="form.amount"
                                     label="Amount Paid"
@@ -224,14 +233,6 @@ const submitPhysicalOr = () =>
                                     label="Method"
                                     :options="availableMethods"
                                     :error="form.errors.payment_method"
-                                    required
-                                />
-
-                                <AppInput
-                                    v-if="needsReference"
-                                    v-model="form.reference_number"
-                                    label="Reference Number"
-                                    :error="form.errors.reference_number"
                                     required
                                 />
 
@@ -262,6 +263,11 @@ const submitPhysicalOr = () =>
                                     @change="form.proof = $event.target.files[0]"
                                 />
                                 <p class="mt-1.5 text-xs text-csc-ink/60">
+                                    <template v-if="proofExpected">
+                                        Please attach the transfer slip if you have it — it is what CSC
+                                        matches against the bank statement. You can submit without one,
+                                        and staff will follow up.
+                                    </template>
                                     PDF or image, up to 5 MB. Only you and CSC finance staff can open it.
                                 </p>
                                 <p v-if="form.errors.proof" class="mt-1.5 text-xs font-medium text-csc-red-ink">

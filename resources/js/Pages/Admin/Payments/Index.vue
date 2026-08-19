@@ -628,8 +628,24 @@ const rejectRefund = (refund) => {
                                                 <AppIcon name="eye" size="sm" />
                                                 Proof
                                             </a>
+                                            <!--
+                                                An online transfer recorded with
+                                                no slip. Accepted from the
+                                                participant, raised here — icon
+                                                and label, never colour alone.
+                                            -->
+                                            <span
+                                                v-else-if="payment.proof_missing"
+                                                class="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning"
+                                            >
+                                                <AppIcon name="warning" size="sm" />
+                                                No proof
+                                            </span>
                                             <template v-if="payment.status === 'pending'">
-                                                <span v-if="payment.proof_url" class="px-2 text-csc-line">|</span>
+                                                <span
+                                                    v-if="payment.proof_url || payment.proof_missing"
+                                                    class="px-2 text-csc-line"
+                                                >|</span>
                                                 <AppButton size="sm" icon="check" @click="startVerifying(payment)">
                                                     Verify
                                                 </AppButton>
@@ -707,6 +723,15 @@ const rejectRefund = (refund) => {
                                         <AppIcon name="eye" size="sm" class="shrink-0" />
                                         View proof
                                     </a>
+
+                                    <!-- See the table above: expected, absent. -->
+                                    <span
+                                        v-else-if="payment.proof_missing"
+                                        class="inline-flex items-center gap-2 rounded-lg bg-warning-soft px-4 py-2 text-sm font-semibold text-warning"
+                                    >
+                                        <AppIcon name="warning" size="sm" class="shrink-0" />
+                                        No proof uploaded
+                                    </span>
 
                                     <template v-if="payment.status === 'pending'">
                                         <AppButton size="sm" icon="check" @click="startVerifying(payment)">

@@ -24,6 +24,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
@@ -150,7 +151,42 @@ class PaymentTest extends TestCase
         $this->assertSame(PaymentMethod::Promissory, Payment::sole()->payment_method);
     }
 
-    public function test_a_non_cash_payment_must_carry_a_reference_number(): void
+    /**
+     * The reference number is no longer asked for, so it can no longer be
+     * demanded — a rule requiring a field the form does not render would fail
+     * every online payment with a message that has nowhere to appear.
+     */
+    public function test_a_non_cash_payment_no_longer_needs_a_reference_number(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        // Check rather than Online: both used to demand a reference, and this
+        // is the one of the two that does not now demand proof instead, so the
+        // assertion stays about the reference alone.
+        $this->actingAs($participant)
+            ->from('/my/payments')
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Check->value,
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertNull(Payment::sole()->reference_number);
+    }
+
+    /**
+     * A missing slip is a gap for staff to chase, not a wall for the
+     * participant.
+     *
+     * Refusing the submission put everybody who cannot scan — no printer, a
+     * lost slip, a transfer somebody else made — through the counter, which is
+     * a lot of load to add for a document staff can ask for. So it goes
+     * through, and the queue is told.
+     */
+    public function test_an_online_transfer_without_proof_is_accepted(): void
     {
         $participant = $this->participant();
         $registration = $this->paidRegistration($participant);
@@ -162,9 +198,41 @@ class PaymentTest extends TestCase
                 'payment_method' => PaymentMethod::Online->value,
                 'payment_date' => now()->subDay()->toDateString(),
             ])
-            ->assertSessionHasErrors('reference_number');
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
 
-        // Cash is paid over the counter against a receipt, so it is exempt.
+        $this->assertNull(Payment::sole()->proof_path);
+    }
+
+    public function test_the_verification_queue_flags_a_missing_slip(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)->post("/my/registrations/{$registration->id}/payments", [
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::Online->value,
+            'payment_date' => now()->subDay()->toDateString(),
+        ]);
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Admin/Payments/Index')
+                ->where('payments.data.0.proof_missing', true)
+            );
+    }
+
+    /**
+     * Cash has a counter receipt and a promissory note is itself the document,
+     * so neither is ever missing anything — flagging them would train staff to
+     * ignore the flag.
+     */
+    public function test_a_method_that_expects_no_document_is_not_flagged(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
         $this->actingAs($participant)
             ->post("/my/registrations/{$registration->id}/payments", [
                 'amount' => 1500,
@@ -172,6 +240,62 @@ class PaymentTest extends TestCase
                 'payment_date' => now()->subDay()->toDateString(),
             ])
             ->assertSessionHas('success');
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('payments.data.0.proof_missing', false)
+            );
+    }
+
+    /**
+     * Card payments are no longer offered, but three of them are already in the
+     * table. The case has to survive so those rows still cast — it is the
+     * dropdown that stops listing it.
+     */
+    public function test_credit_card_is_retired_from_the_dropdown_but_still_reads(): void
+    {
+        $offered = array_column(PaymentMethod::options(), 'value');
+
+        $this->assertNotContains(PaymentMethod::CreditCard->value, $offered);
+        $this->assertContains(PaymentMethod::Lddap->value, $offered);
+
+        // The stored value still resolves, which is the whole point of keeping it.
+        $this->assertSame(PaymentMethod::CreditCard, PaymentMethod::from('credit_card'));
+    }
+
+    public function test_an_agency_can_settle_by_lddap(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Lddap->value,
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(PaymentMethod::Lddap, Payment::sole()->payment_method);
+    }
+
+    /** Still stored when something does send one — staff entry, imports, history. */
+    public function test_a_reference_number_is_kept_when_one_is_supplied(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Check->value,
+                'reference_number' => 'REF123456789',
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame('REF123456789', Payment::sole()->reference_number);
     }
 
     public function test_a_future_dated_payment_is_refused(): void

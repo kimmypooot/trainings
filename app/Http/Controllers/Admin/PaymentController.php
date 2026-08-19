@@ -152,6 +152,18 @@ class PaymentController extends Controller
                 // an agency charge is receipted to the agency, not the person.
                 'charge_to' => $payment->registration?->charge_to?->label(),
                 'proof_url' => $payment->proof_path ? route('payments.proof', $payment) : null,
+                /*
+                 * A payment that should have come with a document and did not.
+                 *
+                 * The participant's form accepts an online transfer with no
+                 * slip rather than turning them away, so the gap has to surface
+                 * somewhere a person will act on it — here, next to the verify
+                 * button. Only for methods that expect one: cash has a counter
+                 * receipt and a promissory note is itself the document, so
+                 * neither is ever missing anything.
+                 */
+                'proof_missing' => $payment->proof_path === null
+                    && $payment->payment_method->expectsProof(),
             ]),
             'paymentCounts' => $paymentCounts,
             'summary' => $summary,
