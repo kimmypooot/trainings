@@ -34,7 +34,15 @@ class ChangePasswordController extends Controller
         $isCreating = ! $user->hasPassword();
 
         $validated = $request->validate([
-            'current_password' => [Rule::requiredIf(! $isCreating), 'string'],
+            // 'nullable' matters more than it looks. The dialog hides the
+            // current-password field while creating, but useForm still sends
+            // the key as an empty string, which ConvertEmptyStringsToNull turns
+            // into null before validation runs. Without 'nullable' the 'string'
+            // rule then rejects that null — and the message lands on a field
+            // the creating dialog never renders, so the whole change failed in
+            // complete silence. 'required' still fires on null for an ordinary
+            // account, so the check itself is untouched.
+            'current_password' => [Rule::requiredIf(! $isCreating), 'nullable', 'string'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ]);
 

@@ -131,6 +131,47 @@ class ChangePasswordTest extends TestCase
     }
 
     /**
+     * The payload the dialog actually sends.
+     *
+     * useForm keeps `current_password` in its data even while the field is
+     * hidden, so the request carries it as an empty string — which
+     * ConvertEmptyStringsToNull turns into null before the rules run. Every
+     * other test here omits the key entirely, and an *absent* attribute skips
+     * non-implicit rules while a *present but null* one does not. That gap is
+     * what let 'string' reject the null and fail the whole change, with the
+     * message pinned to a field the creating dialog never renders.
+     */
+    public function test_a_google_account_can_create_a_first_password_with_the_forms_empty_current_password(): void
+    {
+        $user = $this->googleOnlyUser();
+
+        $this->actingAs($user)->post('/change-password', [
+            'current_password' => '',
+            'password' => 'FirstPass123',
+            'password_confirmation' => 'FirstPass123',
+        ])->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $this->assertTrue(Hash::check('FirstPass123', $user->fresh()->password));
+    }
+
+    /**
+     * The same empty string must not become a way past the check for an account
+     * that does have a password — 'required' still has to fire on the null.
+     */
+    public function test_an_empty_current_password_still_fails_for_an_ordinary_account(): void
+    {
+        $user = $this->actor();
+
+        $this->actingAs($user)->post('/change-password', [
+            'current_password' => '',
+            'password' => 'SneakyPass123',
+            'password_confirmation' => 'SneakyPass123',
+        ])->assertSessionHasErrors('current_password');
+
+        $this->assertFalse(Hash::check('SneakyPass123', $user->fresh()->password));
+    }
+
+    /**
      * Creating the first password is what opens email sign-in; the Google
      * connection is untouched, so both ways in now work.
      */

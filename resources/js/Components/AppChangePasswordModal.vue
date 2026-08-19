@@ -57,6 +57,27 @@ const requirements = computed(() => {
     ];
 });
 
+/*
+ * Errors with nowhere to land.
+ *
+ * The dialog renders current_password only while rotating, so a server error
+ * on that field is invisible while creating — which is exactly how a rejected
+ * change once failed in complete silence: no toast, no field error, nothing at
+ * all. Anything the form did not put next to an input gets shown here instead,
+ * so a rule this dialog does not anticipate can never be swallowed again.
+ */
+const shownFields = computed(() =>
+    creating.value
+        ? ['password', 'password_confirmation']
+        : ['current_password', 'password', 'password_confirmation']
+);
+
+const unplacedErrors = computed(() =>
+    Object.entries(form.errors)
+        .filter(([field]) => !shownFields.value.includes(field))
+        .map(([, message]) => message)
+);
+
 const submit = () =>
     form.post('/change-password', {
         preserveScroll: true,
@@ -67,6 +88,18 @@ const submit = () =>
 <template>
     <AppModal :open="open" size="sm" :title="creating ? 'Create Password' : 'Change Password'" @close="close">
         <form class="space-y-4" novalidate @submit.prevent="submit">
+            <!-- See unplacedErrors: a rejection the fields cannot show. -->
+            <div
+                v-if="unplacedErrors.length"
+                class="flex items-start gap-2.5 rounded-lg bg-danger-soft px-3 py-2.5 text-sm text-danger"
+                role="alert"
+            >
+                <AppIcon name="warning" class="mt-0.5 shrink-0" size="sm" />
+                <span>
+                    <span v-for="message in unplacedErrors" :key="message" class="block">{{ message }}</span>
+                </span>
+            </div>
+
             <!--
                 An account created through Google has no password to re-enter.
                 That is not a restriction on it — email sign-in is still
