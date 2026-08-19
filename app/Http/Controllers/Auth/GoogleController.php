@@ -238,6 +238,11 @@ class GoogleController extends Controller
         Auth::login($user, remember: true);
         $request->session()->regenerate();
 
+        // Same hand-off as the password login: the app shell shows the branded
+        // splash over the first page and fades it out, so the round trip
+        // through Google does not slam straight into the dashboard.
+        $request->session()->flash('just_logged_in', true);
+
         // Kept in step with LoginController: the column is what tells staff a
         // account has gone dormant, and it would quietly stop being true for
         // anyone who signs in with Google rather than a password.

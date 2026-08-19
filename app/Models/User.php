@@ -136,6 +136,26 @@ class User extends Authenticatable implements MustVerifyEmailContract
         ]);
     }
 
+    /**
+     * The given name to greet this account by, or null if there is nothing to
+     * greet — callers drop the name rather than address an empty string.
+     *
+     * Read off `users.name` rather than the profile on purpose. The column is
+     * already composed from the profile as "First M. Last Suffix" (see
+     * ProfileController), so its first word is the given name for participants
+     * and works for staff and Google accounts too — and it is loaded with the
+     * user, so a greeting shared on every request costs no extra query.
+     *
+     * Title-cased because most accounts store the name upper-cased, which reads
+     * as shouting in a greeting.
+     */
+    public function firstName(): ?string
+    {
+        $given = Str::of($this->name)->trim()->explode(' ')->first();
+
+        return filled($given) ? Str::title($given) : null;
+    }
+
     public function isParticipant(): bool
     {
         return $this->role === Role::Participant;

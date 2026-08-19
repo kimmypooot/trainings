@@ -1,124 +1,91 @@
-<script setup>
-import AppLoadingDots from '@/Components/AppLoadingDots.vue';
-
-/**
- * Full-screen branded splash for auth transitions — shown while signing in
- * (Login) and signing out (AuthenticatedLayout).
- *
- * The backdrop blobs, spinning brand rings, and pulsing dots are folded in here
- * rather than split into three one-use components — this overlay is the only
- * surface that needs them. The message rides the default slot so callers own
- * the copy, and can swap it mid-flight (e.g. "Signing you in" then a welcome).
- *
- * Brand colours are fine on this surface: it is a transition between the app
- * and an auth screen, not an in-app panel, so the inside-app rule about
- * retiring the brand red does not apply.
- */
-defineProps({
-    visible: { type: Boolean, default: false },
-});
-</script>
-
 <template>
     <Teleport to="body">
-        <Transition
-            enter-active-class="transition-opacity duration-300 ease-out"
-            enter-from-class="opacity-0"
-            enter-to-class="opacity-100"
-            leave-active-class="transition-opacity duration-200 ease-in"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
-        >
-            <div
-                v-if="visible"
-                class="splash fixed inset-0 z-(--z-modal) flex items-center justify-center overflow-hidden"
-            >
-                <!-- Ambient brand blobs, drifting behind the card -->
-                <div class="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-                    <span class="blob blob-1 absolute -top-20 -left-20 size-72 rounded-full opacity-20" />
-                    <span class="blob blob-2 absolute -right-16 -bottom-16 size-96 rounded-full opacity-15" />
-                    <span class="blob blob-3 absolute top-1/3 right-1/4 size-48 rounded-full opacity-10" />
-                </div>
+        <Transition enter-active-class="transition ease-out duration-300" enter-from-class="opacity-0" enter-to-class="opacity-100"
+                    leave-active-class="transition ease-in duration-200" leave-from-class="opacity-100" leave-to-class="opacity-0"
+                    @after-leave="releaseScroll">
+            <div v-if="splash.visible" class="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
+                style="background: linear-gradient(135deg, #f0eef9 0%, #e8eafa 50%, #fdeef0 100%);">
+                <AppAmbientBlobs />
 
-                <div
-                    class="relative mx-4 w-full max-w-sm rounded-2xl border border-white/40 bg-white/80 p-10 text-center shadow-lg backdrop-blur-xl"
-                >
-                    <!-- Spinning brand rings around the CSC seal -->
-                    <div class="relative mx-auto mb-6 size-28">
-                        <svg class="absolute inset-0 size-28 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10" stroke="var(--color-csc-line)" stroke-width="2.5" />
-                            <circle
-                                cx="12" cy="12" r="10"
-                                stroke="var(--color-csc-blue)" stroke-width="2.5"
-                                stroke-linecap="round" stroke-dasharray="62.832" stroke-dashoffset="20"
-                            />
-                        </svg>
-                        <svg
-                            class="absolute inset-2 size-24 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"
-                            style="animation-duration: 2s; animation-direction: reverse"
-                        >
-                            <circle cx="12" cy="12" r="8" stroke="var(--color-csc-line)" stroke-width="1.5" />
-                            <circle
-                                cx="12" cy="12" r="8"
-                                stroke="var(--color-csc-red)" stroke-width="1.5"
-                                stroke-linecap="round" stroke-dasharray="50.265" stroke-dashoffset="15"
-                            />
-                        </svg>
-                        <img
-                            src="/images/csc-logo-256.png"
-                            alt=""
-                            aria-hidden="true"
-                            class="absolute top-1/2 left-1/2 size-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white object-contain p-1.5 shadow-sm"
-                        />
-                    </div>
+                <div class="relative bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-white/40 p-10 text-center max-w-sm w-full mx-4">
+                    <AppBrandRings />
 
-                    <slot />
-                    <AppLoadingDots />
+                    <Transition name="pfade" mode="out-in">
+                        <div v-if="splash.stage === 'welcome'" key="welcome" class="space-y-2">
+                            <p class="text-sm font-medium tracking-wide uppercase text-accent">Welcome back</p>
+                            <p class="text-2xl font-bold text-gray-900">{{ splash.name ? `${splash.name}!` : '' }}</p>
+                            <p class="text-gray-500 text-sm">{{ splash.subtitle }}</p>
+                        </div>
+                        <div v-else-if="splash.stage === 'goodbye'" key="goodbye" class="space-y-2">
+                            <p class="text-xl font-semibold text-primary">Signing you out</p>
+                            <p class="text-gray-500 text-sm">{{ splash.subtitle }}</p>
+                        </div>
+                        <div v-else key="loading" class="space-y-2">
+                            <p class="text-xl font-semibold text-primary">Signing you in</p>
+                            <p class="text-gray-500 text-sm">{{ splash.subtitle }}</p>
+                        </div>
+                    </Transition>
+
+                    <AppPulsingDots />
                 </div>
             </div>
         </Transition>
     </Teleport>
 </template>
 
+<script setup>
+import { watch, onBeforeUnmount } from 'vue';
+import AppAmbientBlobs from '@/Components/AppAmbientBlobs.vue';
+import AppBrandRings from '@/Components/AppBrandRings.vue';
+import AppPulsingDots from '@/Components/AppPulsingDots.vue';
+import { authSplash as splash } from '@/authSplash';
+
+/*
+ * Full-screen "signing you in / out" splash — a direct port of the
+ * recruitment-system's AuthSplashOverlay, down to the backdrop gradient, the
+ * card's translucent blur, the 300ms/200ms fades and the `pfade` copy
+ * transition. The three message states are the ones that system shows: the
+ * uppercase "Welcome back" over the name on sign-in, and the plain title over
+ * "See you next time!" on sign-out.
+ *
+ * Two departures, both forced by the difference in navigation model and both
+ * invisible on screen:
+ *
+ *  - The copy comes from the shared module rather than a slot. There the
+ *    overlay is re-declared in each of four call sites, which can each own
+ *    their own text; here it is mounted once beside the app so that it can
+ *    outlive the page swap, which leaves nobody to pass a slot in.
+ *
+ *  - The body scroll is locked while it is up. There, every sequence ends in a
+ *    document navigation, so a scrollbar beside the overlay never has time to
+ *    matter; here the splash fades out over a live page that is usually taller
+ *    than the screen.
+ */
+const lockScroll = () => {
+    document.body.style.overflow = 'hidden';
+};
+
+const releaseScroll = () => {
+    document.body.style.overflow = '';
+};
+
+watch(() => splash.visible, (visible) => {
+    if (visible) lockScroll();
+}, { immediate: true });
+
+onBeforeUnmount(releaseScroll);
+</script>
+
 <style scoped>
 /*
- * Tinted spread of the brand palette, mirroring the auth screens' feel rather
- * than the flat app background — expressed in tokens so it tracks the theme.
+ * The originals' palette, written out rather than mapped onto this app's
+ * @theme tokens: `primary` and `accent` are the recruitment-system's own
+ * variables, and this overlay is meant to stay a copy of that surface.
  */
-.splash {
-    background: linear-gradient(
-        135deg,
-        var(--color-csc-blue-tint) 0%,
-        var(--color-csc-blue-tint) 50%,
-        var(--color-danger-soft) 100%
-    );
-}
+.text-primary { color: #2a338f; }
+.text-accent  { color: #ec1c2d; }
 
-.blob-1 {
-    background: radial-gradient(circle, var(--color-csc-blue) 0%, transparent 70%);
-    animation: brand-float 8s ease-in-out infinite;
-}
-
-.blob-2 {
-    background: radial-gradient(circle, var(--color-csc-red) 0%, transparent 70%);
-    animation: brand-float 10s ease-in-out infinite reverse;
-}
-
-.blob-3 {
-    background: radial-gradient(circle, var(--color-csc-blue) 0%, transparent 70%);
-    animation: brand-float 12s ease-in-out infinite 2s;
-}
-
-@keyframes brand-float {
-    0%,
-    100% {
-        transform: translate(0, 0) scale(1);
-    }
-    33% {
-        transform: translate(30px, -30px) scale(1.05);
-    }
-    66% {
-        transform: translate(-20px, 20px) scale(0.95);
-    }
-}
+.pfade-enter-active, .pfade-leave-active { transition: opacity 0.4s ease, transform 0.4s ease; }
+.pfade-enter-from { opacity: 0; transform: translateY(8px); }
+.pfade-leave-to   { opacity: 0; transform: translateY(-8px); }
 </style>

@@ -8,7 +8,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import AppToast from '@/Components/AppToast.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppButton from '@/Components/AppButton.vue';
-import AppAuthSplash from '@/Components/AppAuthSplash.vue';
+import { beginSignOut, signedOut } from '@/authSplash';
 
 const props = defineProps({
     title: { type: String, required: true },
@@ -383,10 +383,8 @@ onBeforeUnmount(() => {
 });
 
 // Sign-out is two steps on purpose: a confirm dialog, then the branded splash
-// while the session request is in flight. The splash lives in this layout so
-// it is up before the POST starts and the whole shell unmounts on arrival.
+// while the session request is in flight.
 const confirmingSignOut = ref(false);
-const signingOut = ref(false);
 const changePasswordOpen = ref(false);
 
 const openChangePassword = () => {
@@ -400,8 +398,11 @@ const signOut = () => {
 
 const confirmSignOut = () => {
     confirmingSignOut.value = false;
-    signingOut.value = true;
-    router.post('/logout');
+    // The splash is app chrome, so it stays up while this whole shell is
+    // replaced by the public home page — then holds out its 900ms and fades,
+    // exactly as the sign-out overlay does in the system this is ported from.
+    beginSignOut();
+    router.post('/logout', {}, { onFinish: signedOut });
 };
 </script>
 
@@ -766,12 +767,6 @@ const confirmSignOut = () => {
                 </div>
             </div>
         </AppModal>
-
-        <!-- Branded splash while the logout request is in flight -->
-        <AppAuthSplash :visible="signingOut">
-            <p class="mb-1 text-xl font-semibold text-csc-blue">Signing you out</p>
-            <p class="text-sm text-csc-ink/70">See you next time!</p>
-        </AppAuthSplash>
 
         <!-- Rotating the password from the account menu -->
         <AppChangePasswordModal :open="changePasswordOpen" @close="changePasswordOpen = false" />

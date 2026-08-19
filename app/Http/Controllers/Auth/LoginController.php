@@ -90,6 +90,12 @@ class LoginController extends Controller
         RateLimiter::clear($throttleKey);
         $request->session()->regenerate();
 
+        // One-shot flag read by app.js on boot. It only matters for a sign-in
+        // that arrives on a fresh document — the Google round trip — where the
+        // login page's splash died with the old JS context and the welcome beat
+        // has to be replayed from scratch. See resources/js/authSplash.js.
+        $request->session()->flash('just_logged_in', true);
+
         // A single column rather than a login row per sign-in. v1's activity
         // log was mostly login/logout pairs, and that volume is exactly what
         // buried the decisions worth auditing — this keeps the one part of it

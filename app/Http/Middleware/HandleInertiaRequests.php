@@ -36,6 +36,9 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user() ? [
                     'name' => $request->user()->name,
+                    // Just the given name, cased for prose — the auth splash
+                    // greets by it, and `name` is upper-cased for most accounts.
+                    'first_name' => $request->user()->firstName(),
                     'email' => $request->user()->email,
                     'avatar' => $request->user()->avatarUrl(),
                     'role' => $request->user()->role->value,
@@ -77,6 +80,12 @@ class HandleInertiaRequests extends Middleware
                 // copy of its code. Flashed rather than queried back because
                 // the plaintext is never stored — see Admin\ScanLinkController.
                 'scan_link' => fn () => $request->session()->get('scan_link'),
+                // Present on exactly the one request that lands right after a
+                // sign-in. Only a sign-in arriving on a *fresh document* — the
+                // Google round trip — needs it: that boots a new JS context
+                // where the login page's splash no longer exists, so app.js
+                // reads this to play the welcome beat itself.
+                'just_logged_in' => fn () => $request->session()->get('just_logged_in'),
             ],
         ];
     }

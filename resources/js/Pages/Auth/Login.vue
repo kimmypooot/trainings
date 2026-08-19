@@ -1,11 +1,11 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
-import AppAuthSplash from '@/Components/AppAuthSplash.vue';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
+import { beginRedirect, beginSignIn, dismiss, welcome } from '@/authSplash';
 
 const props = defineProps({
     status: { type: String, default: null },
@@ -63,32 +63,47 @@ const resend = () => {
     });
 };
 
-// The branded splash shows while the POST is in flight and flips to a welcome
-// the moment the server accepts the session. Success redirects into the app, so
-// this page (and the splash) unmounts on arrival; only a failed login turns it
-// off by hand.
-const showPreload = ref(false);
-const welcome = ref(false);
+// The splash is raised the moment the request leaves and flips to the welcome
+// once the server accepts the session. It is mounted beside the app rather than
+// on this page, so it keeps running after Inertia has swapped this component
+// out — the sequence and its timings live in @/authSplash.
+
+// Google sign-in is a plain document navigation, so the splash covers a browser
+// page load rather than an XHR. The browser tears this document down when the
+// redirect leaves, which is what ends it.
+const handoffToGoogle = () => {
+    if (!props.googleEnabled) return;
+    beginRedirect('Taking you to Google…');
+};
+
+// Backing out of Google restores this document from the back/forward cache
+// exactly as it was — splash included — which would leave the sign-in form
+// unreachable behind a permanent overlay. `persisted` is true only on that
+// restore, so this costs nothing on a normal load.
+const onPageShow = (event) => {
+    if (event.persisted) dismiss();
+};
+
+onMounted(() => window.addEventListener('pageshow', onPageShow));
+onBeforeUnmount(() => window.removeEventListener('pageshow', onPageShow));
 
 const submit = () => {
-    showPreload.value = true;
+    beginSignIn();
     form.post('/login', {
         onSuccess: (page) => {
             // A refused login (e.g. unverified email) redirects right back to
-            // this page, so Inertia reuses this component instance and the
-            // welcome splash would otherwise never unmount. Only play it when
-            // the login actually leaves for the app.
+            // this page rather than erroring, so success alone is not proof the
+            // sign-in took. Only play the welcome when it actually left.
             if (page.component === 'Auth/Login') {
-                showPreload.value = false;
-                welcome.value = false;
+                dismiss();
                 return;
             }
 
-            welcome.value = true;
+            // The redirect's own props carry the freshly signed-in user, so the
+            // greeting needs no extra request to learn the name.
+            welcome(page.props.auth?.user?.first_name ?? null);
         },
-        onError: () => {
-            showPreload.value = false;
-        },
+        onError: dismiss,
         onFinish: () => form.reset('password'),
     });
 };
@@ -167,11 +182,32 @@ const submit = () => {
                 <!-- Google OAuth — full page load, not an Inertia visit -->
                 <a
                     href="/auth/google"
-                    class="mt-8 inline-flex w-full items-center justify-center gap-3 rounded-lg border border-csc-line bg-white px-5 py-3 text-sm font-semibold text-csc-ink transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    class="relative mt-8 inline-flex w-full items-center justify-center gap-3 rounded-lg border border-csc-line bg-white px-5 py-3 text-sm font-semibold text-csc-ink transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                     :class="googleEnabled ? '' : 'pointer-events-none opacity-50'"
                     :aria-disabled="googleEnabled ? undefined : 'true'"
                     :tabindex="googleEnabled ? undefined : -1"
+                    @click="handoffToGoogle"
                 >
+                    <!--
+                        Blue, not red, and deliberately so. --color-csc-red-ink
+                        is the same hex as --color-danger, and the sign-in error
+                        banner sits a few pixels above this button wearing it —
+                        a red pill here would say something positive in the
+                        page's own error vocabulary. Blue is instead the colour
+                        of the primary action on this page (the Sign in button),
+                        which is the very claim the badge is making.
+
+                        It sits inside the anchor so it dims with the button
+                        when Google is not configured, and so its text joins the
+                        link's accessible name — "Continue with Google,
+                        Recommended" is exactly what it is there to say.
+                    -->
+                    <span
+                        class="absolute -top-2.5 right-4 rounded-full bg-csc-blue px-2 py-0.5 text-2xs font-semibold tracking-wide text-white uppercase shadow-sm"
+                    >
+                        Recommended
+                    </span>
+
                     <svg class="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                         <path
                             fill="#4285F4"
@@ -282,26 +318,4 @@ const submit = () => {
                     >.
                 </p>
     </AuthLayout>
-
-    <!-- Branded splash while the sign-in request is in flight -->
-    <AppAuthSplash :visible="showPreload">
-        <Transition
-            enter-active-class="transition-opacity duration-300 ease-out"
-            enter-from-class="opacity-0"
-            enter-to-class="opacity-100"
-            leave-active-class="transition-opacity duration-200 ease-in"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
-            mode="out-in"
-        >
-            <div v-if="welcome" key="welcome">
-                <p class="text-xl font-semibold text-csc-blue">Welcome back!</p>
-                <p class="mt-1 text-sm text-csc-ink/70">Taking you to your dashboard…</p>
-            </div>
-            <div v-else key="loading">
-                <p class="text-xl font-semibold text-csc-blue">Signing you in</p>
-                <p class="mt-1 text-sm text-csc-ink/70">Please wait a moment…</p>
-            </div>
-        </Transition>
-    </AppAuthSplash>
 </template>
