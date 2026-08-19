@@ -164,7 +164,21 @@ const stats = computed(() => [
                     <AppBadge :status="nextTraining.status" />
                 </template>
 
-                <dl class="grid gap-4 text-sm sm:grid-cols-2">
+                <!--
+                    Venue, date, mode and fee on one line once there is room for
+                    one. The card sits in a max-w-7xl column, so four abreast is
+                    comfortable from lg up; below that they would be four narrow
+                    slots with a wrapping venue in the first, which is harder to
+                    read than the pairs it falls back to.
+
+                    The columns are weighted rather than equal: the other three
+                    are a date, a two-word mode and a peso figure, all of known
+                    and similar length, while a venue is free text that runs to
+                    "CSC Regional Office VIII, Palo, Leyte" and longer. Giving
+                    it double the share spends the slack where it is needed
+                    instead of leaving it at the end of three short columns.
+                -->
+                <dl class="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
                     <div>
                         <dt class="text-white/60">Venue</dt>
                         <dd class="mt-0.5 font-medium text-white">{{ nextTraining.venue }}</dd>
