@@ -21,6 +21,14 @@ trait SeedsRandomly
 
         fake()->seed($seed);
 
+        // Seeding the generator rewinds the number stream but not Faker's
+        // uniqueness tracker, which is a separate set of already-issued values
+        // living on the shared generator. Any factory using unique() then draws
+        // again on a collision, so a replay that started with a warm tracker
+        // burns a different number of values and diverges from the run it was
+        // meant to reproduce. Reset it too, or SAMPLE_*_SEED only half works.
+        fake()->unique(true);
+
         return $seed;
     }
 
