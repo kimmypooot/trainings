@@ -35,7 +35,6 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PhysicalOrRequestController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProfilePhotoController;
-use App\Http\Controllers\ProgramController;
 use App\Http\Controllers\QrCodeController;
 use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\RegistrationOutputController;
@@ -52,12 +51,21 @@ use Inertia\Inertia;
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
 /*
- * The public training catalogue. Deliberately outside every auth group: the
- * Commission's programs are public information, and an agency deciding whom to
- * nominate should not have to create an account to read what is on offer.
- * /trainings is the signed-in equivalent and stays gated.
+ * The public training catalogue used to live here. It now *is* the landing
+ * page's calendar section — the two rendered identical cards from the same
+ * source and differed only in that one could be filtered, so the filters moved
+ * to / and this became a redirect rather than a second copy of the same grid.
+ *
+ * Permanent, and kept rather than deleted, because the URL was in the sitemap
+ * and is the one a crawler or an existing bookmark already knows. The name
+ * survives too, so route('programs') keeps resolving.
+ *
+ * The catalogue remains deliberately outside every auth group: the Commission's
+ * programs are public information, and an agency deciding whom to nominate
+ * should not have to create an account to read what is on offer. /trainings is
+ * the signed-in equivalent and stays gated.
  */
-Route::get('/programs', [ProgramController::class, 'index'])->name('programs');
+Route::permanentRedirect('/programs', '/#upcoming')->name('programs');
 
 /*
  * robots.txt and sitemap.xml come from routes rather than public/ so the
@@ -72,9 +80,10 @@ Route::get('/robots.txt', function () {
 })->name('robots');
 
 Route::get('/sitemap.xml', function () {
+    // No /programs: it is a permanent redirect to '/' now, and listing a URL
+    // that only 301s tells a crawler to fetch the same page twice.
     $urls = array_map(fn (string $path) => url($path), [
         '/',
-        '/programs',
         '/login',
         '/register',
         '/forgot-password',
@@ -322,6 +331,7 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 Route::get('/scanner/trainings/{training}/roster', [ScannerController::class, 'roster'])
                     ->name('scanner.roster');
                 Route::post('/scanner/sync', [ScannerController::class, 'sync'])->name('scanner.sync');
+
                 /*
                  * Admitting a walk-in. Sits with the scanner because that is
                  * where it happens — the operator has just scanned a valid
@@ -340,7 +350,6 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                  */
                 Route::post('/scanner/walk-in', [ScannerController::class, 'walkIn'])
                     ->name('scanner.walk-in');
-
 
                 /*
                  * Issuing a station to someone without an account. Kept with
@@ -416,7 +425,6 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
              */
             Route::post('/payments/bulk', [AdminPaymentController::class, 'bulk'])
                 ->name('payments.bulk');
-
             Route::post('/refunds/{refundRequest}/review', [AdminPaymentController::class, 'reviewRefund'])
                 ->name('refunds.review');
             // The bank account participants are told to deposit into. Held by

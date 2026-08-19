@@ -1,15 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppIcon from '@/Components/AppIcon.vue';
+import AppInput from '@/Components/AppInput.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 import ProgramCard from '@/Components/ProgramCard.vue';
 import ProgramDetailModal from '@/Components/ProgramDetailModal.vue';
 
 const props = defineProps({
     stats: { type: Array, default: () => [] },
-    upcomingTrainings: { type: Array, default: () => [] },
+    programs: { type: Array, default: () => [] },
+    filters: { type: Object, default: () => ({}) },
+    filterOptions: { type: Object, default: () => ({ modes: [], categories: [], statuses: [] }) },
+    meta: { type: Object, default: () => ({ current_page: 1, last_page: 1, total: 0, showing: 0 }) },
 });
 
 // Absolute URLs for og:* and canonical; only meaningful client-side, which is
@@ -70,6 +76,81 @@ const stats = computed(() => (props.stats.length ? props.stats : fallbackStats))
 // the modal instead of sending anonymous visitors straight to sign-in; the
 // sign-in call-to-action lives in the modal footer.
 const selected = ref(null);
+
+/*
+ * Catalogue filtering, which used to be a separate /programs page.
+ *
+ * It reloads '/' rather than a catalogue route, so `only` is doing real work
+ * here: without it every keystroke would also re-ship the stats block and the
+ * whole hero payload to repaint five cards.
+ */
+const search = ref(props.filters.search ?? '');
+const mode = ref(props.filters.mode ?? '');
+const category = ref(props.filters.category ?? '');
+const status = ref(props.filters.status ?? '');
+
+// A filter change always starts from the first page; staying on, say, page 3 of
+// a narrowed search reads as "nothing found". preserveState keeps the fields
+// from flashing while the new result set loads, and preserveScroll matters more
+// here than it did on /programs — the results sit a full hero below the top of
+// the page, so a scroll reset would throw the visitor back to the photo.
+const applyFilters = () => {
+    router.get(
+        '/',
+        {
+            search: search.value.trim() || undefined,
+            mode: mode.value || undefined,
+            category: category.value || undefined,
+            status: status.value || undefined,
+            page: 1,
+        },
+        {
+            preserveState: true,
+            replace: true,
+            preserveScroll: true,
+            only: ['programs', 'filters', 'meta'],
+        }
+    );
+};
+
+// Only the text box is debounced — a keystroke pauses while the dropdowns act
+// on click, where a 300ms lag reads as a missed tap.
+let searchDebounce;
+watch(search, () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyFilters, 300);
+});
+
+watch([mode, category, status], applyFilters);
+
+const hasActiveFilters = computed(
+    () => search.value.trim() !== '' || Boolean(mode.value || category.value || status.value)
+);
+
+const clearFilters = () => {
+    search.value = '';
+    mode.value = '';
+    category.value = '';
+    status.value = '';
+};
+
+/*
+ * Page links, built here rather than from a server-side paginator payload.
+ *
+ * The status filter is applied after pagination (it is derived, not a column —
+ * see HomeController), so the server's own "showing x of y" would count rows
+ * this page never rendered. Pages stay honest; the result line below reports
+ * what is actually on screen.
+ */
+const pageLink = (target) => ({
+    search: search.value.trim() || undefined,
+    mode: mode.value || undefined,
+    category: category.value || undefined,
+    status: status.value || undefined,
+    page: target,
+});
+
+const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i) => i + 1));
 </script>
 
 <template>
@@ -207,57 +288,178 @@ const selected = ref(null);
                         Programs we are offering
                     </h2>
                     <p class="mt-4 text-base leading-relaxed text-pretty text-csc-ink/70">
-                        Every program currently on the Regional Office calendar. Each card shows whether
-                        registration is open, opening on a set date, or already full.
+                        Every program currently on the Regional Office calendar — including those whose
+                        registration has not opened yet, and those already full. Each card shows where it
+                        stands.
                     </p>
                 </div>
 
+                <!-- Filters -->
+                <div class="mt-12 rounded-2xl border border-csc-line bg-csc-blue-tint p-5 sm:p-6">
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <AppInput
+                            v-model="search"
+                            label="Search"
+                            type="search"
+                            placeholder="Title, code, or venue"
+                        />
+                        <AppSelect
+                            v-model="status"
+                            label="Registration"
+                            :options="filterOptions.statuses"
+                            placeholder="Any status"
+                        />
+                        <AppSelect
+                            v-model="category"
+                            label="Curriculum"
+                            :options="filterOptions.categories"
+                            placeholder="Any curriculum"
+                        />
+                        <AppSelect
+                            v-model="mode"
+                            label="Mode"
+                            :options="filterOptions.modes"
+                            placeholder="Any mode"
+                        />
+                    </div>
+
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <!--
+                            Counts what is on screen, not what the query matched:
+                            the status filter runs after pagination, so the two
+                            can differ and only the former is checkable by eye.
+                        -->
+                        <p class="text-sm text-csc-ink/70" role="status" aria-live="polite">
+                            Showing <span class="font-semibold text-csc-ink">{{ meta.showing }}</span>
+                            {{ meta.showing === 1 ? 'program' : 'programs' }}
+                            <template v-if="meta.last_page > 1">
+                                · page {{ meta.current_page }} of {{ meta.last_page }}
+                            </template>
+                        </p>
+                        <button
+                            v-if="hasActiveFilters"
+                            type="button"
+                            class="text-sm font-semibold text-csc-blue underline underline-offset-4 hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            @click="clearFilters"
+                        >
+                            Clear filters
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div v-if="programs.length" class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    <ProgramCard
+                        v-for="program in programs"
+                        :key="program.id"
+                        :program="program"
+                        @open="selected = $event"
+                    />
+                </div>
+
                 <!--
-                    Nothing scheduled is a real, ordinary state for a regional
-                    training calendar (between quarters, after a batch closes),
-                    and saying so plainly is more use to a visitor than an
-                    absent section.
+                    Two different empty states, because they need two different
+                    answers: a filter that matched nothing wants the filters
+                    cleared, an empty calendar wants an account so we can write
+                    when the next batch opens. Nothing scheduled is a real,
+                    ordinary state for a regional training calendar (between
+                    quarters, after a batch closes), and saying so plainly is
+                    more use to a visitor than an absent section.
                 -->
                 <div
-                    v-if="!upcomingTrainings.length"
-                    class="mx-auto mt-14 max-w-xl rounded-2xl border border-csc-line bg-csc-blue-tint px-8 py-12 text-center"
+                    v-else
+                    class="mx-auto mt-10 max-w-xl rounded-2xl border border-csc-line bg-csc-blue-tint px-8 py-12 text-center"
                 >
                     <span class="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-white">
                         <svg class="size-6 text-csc-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" />
                         </svg>
                     </span>
-                    <h3 class="mt-5 text-lg font-semibold text-csc-blue">No programs scheduled right now</h3>
-                    <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-csc-ink/70">
-                        The next batch of training programs has not been published yet. Create an account now
-                        and we will email you as soon as registration opens.
-                    </p>
-                    <div class="mt-6">
-                        <AppButton href="/register">Create your account</AppButton>
-                    </div>
+
+                    <template v-if="hasActiveFilters">
+                        <h3 class="mt-5 text-lg font-semibold text-csc-blue">No programs match those filters</h3>
+                        <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-csc-ink/70">
+                            Try widening your search, or clear the filters to see the whole calendar.
+                        </p>
+                        <div class="mt-6">
+                            <AppButton @click="clearFilters">Clear filters</AppButton>
+                        </div>
+                    </template>
+                    <!--
+                        This used to promise "we will email you as soon as
+                        registration opens". Nothing in the system sends that
+                        mail, and nothing should: every notification we have is
+                        transactional — it answers something a participant
+                        already did. A catalogue announcement is the opposite,
+                        one message fanned out to the entire user table, and at
+                        a regional office's eventual roll size that is thousands
+                        of sends against a daily quota measured in far fewer.
+                        The first published program of the quarter would burn
+                        the allowance that the registration receipts, payment
+                        confirmations and certificate releases depend on.
+
+                        So the copy now offers only what an account actually
+                        does for someone standing in front of an empty
+                        calendar: a completed profile is a prerequisite for
+                        registering at all (EnsureProfileIsComplete gates the
+                        whole participant area), so getting it out of the way
+                        now is a real head start on a slot rather than a
+                        subscription we would have to honour.
+                    -->
+                    <template v-else>
+                        <h3 class="mt-5 text-lg font-semibold text-csc-blue">No programs scheduled right now</h3>
+                        <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-csc-ink/70">
+                            The next batch has not been published yet — new programs appear on this page as
+                            soon as the Regional Office schedules them. Creating an account now gets your
+                            profile ready, so you can reserve a slot the moment registration opens.
+                        </p>
+                        <div class="mt-6">
+                            <AppButton href="/register">Create your account</AppButton>
+                        </div>
+                    </template>
                 </div>
 
-                <div v-else class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    <ProgramCard
-                        v-for="training in upcomingTrainings"
-                        :key="training.id"
-                        :program="training"
-                        @open="selected = $event"
-                    />
-                </div>
-
-                <!--
-                    The landing page shows six; /programs holds the rest with
-                    search and facets. Rendered whenever there is anything at all
-                    to list, because six cards give a visitor no way to tell
-                    whether they are seeing the whole calendar or the first page
-                    of it.
-                -->
-                <div v-if="upcomingTrainings.length" class="mt-12 text-center">
-                    <AppButton href="/programs" variant="ghost" size="lg">
-                        View all programs
-                    </AppButton>
-                </div>
+                <!-- Pagination -->
+                <nav
+                    v-if="meta.last_page > 1"
+                    class="mt-12 flex flex-wrap items-center justify-center gap-2"
+                    aria-label="Pagination"
+                >
+                    <Link
+                        v-if="meta.current_page > 1"
+                        href="/"
+                        :data="pageLink(meta.current_page - 1)"
+                        preserve-scroll
+                        class="rounded-lg border border-csc-line px-4 py-2 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    >
+                        Previous
+                    </Link>
+                    <Link
+                        v-for="n in pages"
+                        :key="n"
+                        href="/"
+                        :data="pageLink(n)"
+                        preserve-scroll
+                        class="rounded-lg border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        :class="
+                            n === meta.current_page
+                                ? 'border-csc-blue bg-csc-blue text-white'
+                                : 'border-csc-line text-csc-blue hover:bg-csc-blue-tint'
+                        "
+                        :aria-current="n === meta.current_page ? 'page' : undefined"
+                    >
+                        {{ n }}
+                    </Link>
+                    <Link
+                        v-if="meta.current_page < meta.last_page"
+                        href="/"
+                        :data="pageLink(meta.current_page + 1)"
+                        preserve-scroll
+                        class="rounded-lg border border-csc-line px-4 py-2 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    >
+                        Next
+                    </Link>
+                </nav>
             </div>
         </section>
 
@@ -302,9 +504,7 @@ const selected = ref(null);
                             aria-hidden="true"
                         >
                             Learn more
-                            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M5 12h14M13 5l7 7-7 7" />
-                            </svg>
+                            <AppIcon name="arrow-forward" size="sm" />
                         </span>
                     </Link>
                 </div>

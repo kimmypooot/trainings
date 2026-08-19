@@ -109,7 +109,7 @@ class PublicPagesTest extends TestCase
 
         $response = $this->get('/')->assertOk();
 
-        $listed = collect($response->viewData('page')['props']['upcomingTrainings'])
+        $listed = collect($response->viewData('page')['props']['programs'])
             ->keyBy('title');
 
         $this->assertEqualsCanonicalizing([
@@ -145,15 +145,22 @@ class PublicPagesTest extends TestCase
         ]);
 
         $response = $this->get('/')->assertOk();
-        $listed = $response->viewData('page')['props']['upcomingTrainings'][0];
+        $listed = $response->viewData('page')['props']['programs'][0];
 
         $this->assertSame('closing-soon', $listed['status']);
         // Still joinable — "closing soon" is a hint, not a different permission.
         $this->assertTrue($listed['is_registrable']);
     }
 
-    /** The list is capped so the section stays two tidy rows of three. */
-    public function test_home_caps_the_program_list(): void
+    /**
+     * The section is the catalogue, not a teaser for one.
+     *
+     * It used to stop at six and link out to /programs for the rest. That page
+     * is gone, so a cap here would strand the remainder with nowhere to send a
+     * visitor — nine programs must all be on the first page, and only the
+     * paginator may hold anything back.
+     */
+    public function test_home_lists_the_whole_first_page_of_programs(): void
     {
         Training::factory()->count(9)->create(['starts_at' => now()->addDays(30)]);
 
@@ -161,7 +168,8 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Home')
-                ->has('upcomingTrainings', 6)
+                ->has('programs', 9)
+                ->where('meta.last_page', 1)
             );
     }
 

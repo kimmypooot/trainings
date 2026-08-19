@@ -9,7 +9,12 @@ use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
- * The public catalogue at /programs.
+ * The public catalogue, which lives on the landing page.
+ *
+ * It used to be a page of its own at /programs. That page and the landing
+ * page's calendar section rendered identical cards from the same source and
+ * differed only in that one could be filtered, so the filters moved to '/' and
+ * /programs became a permanent redirect.
  *
  * Its whole reason for existing is to be reachable without an account, so the
  * first thing asserted is that no middleware crept in front of it. The rest
@@ -25,13 +30,25 @@ class ProgramCatalogTest extends TestCase
     {
         Training::factory()->create(['title' => 'Open Program', 'starts_at' => now()->addDays(30)]);
 
-        $this->get('/programs')
+        $this->get('/')
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->component('Programs/Index')
+                ->component('Home')
                 ->has('programs', 1)
                 ->where('programs.0.title', 'Open Program')
             );
+    }
+
+    /**
+     * The old catalogue URL was in the sitemap and in real bookmarks, so it
+     * keeps working. Permanent, because the content genuinely moved and did not
+     * merely go missing.
+     */
+    public function test_the_old_catalogue_url_redirects_to_the_calendar(): void
+    {
+        $this->get('/programs')
+            ->assertStatus(301)
+            ->assertRedirect('/#upcoming');
     }
 
     /**
@@ -51,7 +68,7 @@ class ProgramCatalogTest extends TestCase
             'facilitator_contact' => '09171234567',
         ]);
 
-        $response = $this->get('/programs')->assertOk();
+        $response = $this->get('/')->assertOk();
 
         $response->assertDontSee('secret-room', false);
         $response->assertDontSee('09171234567', false);
@@ -73,7 +90,7 @@ class ProgramCatalogTest extends TestCase
             'ends_at' => now()->subDays(4),
         ]);
 
-        $titles = collect($this->get('/programs')->viewData('page')['props']['programs'])
+        $titles = collect($this->get('/')->viewData('page')['props']['programs'])
             ->pluck('title')
             ->all();
 
@@ -96,7 +113,7 @@ class ProgramCatalogTest extends TestCase
         ]);
 
         foreach (['Records', 'TRN-2026-0001', 'Palo'] as $term) {
-            $titles = collect($this->get('/programs?search='.urlencode($term))->viewData('page')['props']['programs'])
+            $titles = collect($this->get('/?search='.urlencode($term))->viewData('page')['props']['programs'])
                 ->pluck('title')
                 ->all();
 
@@ -122,7 +139,7 @@ class ProgramCatalogTest extends TestCase
         ]);
 
         $titlesFor = fn (string $status) => collect(
-            $this->get('/programs?status='.$status)->viewData('page')['props']['programs']
+            $this->get('/?status='.$status)->viewData('page')['props']['programs']
         )->pluck('title')->all();
 
         $this->assertSame(['Joinable'], $titlesFor('open'));
@@ -132,15 +149,21 @@ class ProgramCatalogTest extends TestCase
 
     /**
      * A public URL is guessable, hand-editable, and crawled. A nonsense filter
-     * must return an honest empty result, never a 422 or a 500.
+     * must return an honest empty result, never a 422 or a 500 — and on the
+     * landing page it must not take the rest of the page down with it.
      */
     public function test_unknown_filter_values_return_an_empty_result_not_an_error(): void
     {
         Training::factory()->create(['starts_at' => now()->addDays(30)]);
 
-        $this->get('/programs?mode=teleportation&category=wizardry&status=invented')
+        $this->get('/?mode=teleportation&category=wizardry&status=invented')
             ->assertOk()
-            ->assertInertia(fn (AssertableInertia $page) => $page->has('programs', 0));
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('programs', 0)
+                // The hero and the stats block are not part of the catalogue and
+                // must survive a filter that matches nothing.
+                ->has('stats', 4)
+            );
     }
 
     public function test_the_result_count_reports_what_the_page_shows(): void
@@ -154,7 +177,7 @@ class ProgramCatalogTest extends TestCase
 
         // The paginator matched two rows; the status filter leaves one on screen,
         // and the figure the page prints must be the latter.
-        $props = $this->get('/programs?status=open')->viewData('page')['props'];
+        $props = $this->get('/?status=open')->viewData('page')['props'];
 
         $this->assertCount(1, $props['programs']);
         $this->assertSame(1, $props['meta']['showing']);
@@ -164,7 +187,7 @@ class ProgramCatalogTest extends TestCase
     {
         Training::factory()->count(15)->create(['starts_at' => now()->addDays(30)]);
 
-        $this->get('/programs')
+        $this->get('/')
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->has('programs', 12)
@@ -172,34 +195,22 @@ class ProgramCatalogTest extends TestCase
                 ->where('meta.total', 15)
             );
 
-        $this->get('/programs?page=2')
+        $this->get('/?page=2')
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page->has('programs', 3));
     }
 
     /**
-     * The landing page and /programs read the same source, so a program must
-     * never be described one way on one and another way on the other.
+     * The catalogue is reachable at '/', so the sitemap must not also advertise
+     * the old URL — that would send a crawler to a 301 for a page it already
+     * has.
      */
-    public function test_the_landing_page_and_the_catalogue_agree(): void
-    {
-        Training::factory()->full()->create([
-            'title' => 'Booked Out',
-            'starts_at' => now()->addDays(40),
-        ]);
-
-        $onHome = collect($this->get('/')->viewData('page')['props']['upcomingTrainings'])->firstWhere('title', 'Booked Out');
-        $onCatalogue = collect($this->get('/programs')->viewData('page')['props']['programs'])->firstWhere('title', 'Booked Out');
-
-        $this->assertSame($onHome, $onCatalogue);
-    }
-
-    /** The catalogue is a public page and belongs in the sitemap. */
-    public function test_the_catalogue_is_listed_in_the_sitemap(): void
+    public function test_the_sitemap_lists_the_landing_page_and_not_the_old_url(): void
     {
         $this->get('/sitemap.xml')
             ->assertOk()
-            ->assertSee(url('/programs'), false);
+            ->assertSee(url('/').'<', false)
+            ->assertDontSee(url('/programs'), false);
     }
 
     /**
@@ -214,8 +225,11 @@ class ProgramCatalogTest extends TestCase
         $user = User::factory()->create(['profile_completed_at' => null]);
 
         $this->actingAs($user)
-            ->get('/programs')
+            ->get('/')
             ->assertOk()
-            ->assertInertia(fn (AssertableInertia $page) => $page->component('Programs/Index'));
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Home')
+                ->has('programs', 1)
+            );
     }
 }
