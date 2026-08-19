@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppBadge from '@/Components/AppBadge.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import ProgramStatusPill from '@/Components/ProgramStatusPill.vue';
 
 /**
@@ -158,9 +159,7 @@ const money = (value) =>
                 v-if="program.is_supervisory"
                 class="mt-6 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70"
             >
-                <svg class="mt-0.5 size-4 shrink-0 text-csc-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 16v-4M12 8h.01M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z" />
-                </svg>
+                <AppIcon name="info" size="sm" class="mt-0.5 shrink-0 text-csc-blue" />
                 This is a Supervisory Development Course. You will be asked to submit an output before
                 your completion is credited.
             </p>

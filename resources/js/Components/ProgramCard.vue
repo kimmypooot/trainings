@@ -1,5 +1,6 @@
 <script setup>
 import AppBadge from '@/Components/AppBadge.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import ProgramStatusPill from '@/Components/ProgramStatusPill.vue';
 
 /**
@@ -60,9 +61,7 @@ const money = (value) =>
 
         <div class="mt-5 space-y-2.5 text-sm text-csc-ink/70">
             <div class="flex items-center gap-2">
-                <svg class="size-4 shrink-0 text-csc-blue/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" />
-                </svg>
+                <AppIcon name="calendar" size="sm" class="shrink-0 text-csc-blue/60" />
                 <span>
                     <span class="font-semibold text-csc-ink">{{ program.starts_at }}</span>
                     <!-- A single-day run stores the same date twice; "Oct 4 – Oct 4" is noise. -->
@@ -72,9 +71,7 @@ const money = (value) =>
                 </span>
             </div>
             <div class="flex items-center gap-2">
-                <svg class="size-4 shrink-0 text-csc-blue/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 21s-7-5.5-7-11a7 7 0 1 1 14 0c0 5.5-7 11-7 11Z" />
-                </svg>
+                <AppIcon name="map-pin" size="sm" class="shrink-0 text-csc-blue/60" />
                 <span>{{ program.venue }}</span>
             </div>
             <!--
@@ -85,19 +82,26 @@ const money = (value) =>
                 belongs on the card rather than behind a click.
             -->
             <div class="flex items-center gap-2">
-                <svg class="size-4 shrink-0 text-csc-blue/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
+                <AppIcon name="users" size="sm" class="shrink-0 text-csc-blue/60" />
                 <span v-if="program.status === 'full'">No slots remaining</span>
                 <span v-else-if="program.status === 'ongoing'">Currently in session</span>
                 <span v-else>{{ slotsLabel(program.slots_remaining) }}</span>
             </div>
             <div class="flex items-center gap-2">
-                <svg class="size-4 shrink-0 text-csc-blue/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 3v18M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5 9.8 10.5 12 11s4 1.5 4 3-1.8 2.5-4 2.5-4-1-4-2.5" />
-                </svg>
+                <!--
+                    A price tag, not a currency sign.
+
+                    Each icon in this list names the *kind* of fact its row
+                    carries — calendar for the dates, pin for the venue, people
+                    for the seats. A currency glyph broke that pattern by
+                    restating the row's own content: it was a dollar sign for a
+                    long time, which at least disagreed with the ₱ loudly enough
+                    to be spotted, and correcting it to a peso only made the
+                    duplication tidy ("₱ Fee ₱2,500.00"). The amount already
+                    carries its currency, so the icon is free to do the job the
+                    other three do.
+                -->
+                <AppIcon name="tag" size="sm" class="shrink-0 text-csc-blue/60" />
                 <span v-if="program.payment_required">
                     Fee <span class="font-semibold text-csc-ink">₱{{ money(program.payment_amount) }}</span>
                 </span>
@@ -107,18 +111,11 @@ const money = (value) =>
 
         <span class="mt-auto inline-flex items-center gap-1.5 pt-6 text-sm font-semibold text-csc-blue">
             View details
-            <svg
-                class="size-4 transition-transform duration-200 group-hover:translate-x-1"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-            >
-                <path d="M5 12h14M13 5l7 7-7 7" />
-            </svg>
+            <AppIcon
+                name="arrow-forward"
+                size="sm"
+                class="transition-transform duration-200 group-hover:translate-x-1"
+            />
         </span>
     </button>
 </template>

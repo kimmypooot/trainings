@@ -22,6 +22,15 @@ export const icons = {
     'chevron-down': 'm6 9 6 6 6-6',
     'arrow-left': 'M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-3',
     'arrow-right': 'M15 10l4 4-4 4M19 14H10a5 5 0 0 0-5 5v1',
+    /*
+     * A straight arrow, distinct from the turning `arrow-right` above.
+     *
+     * The two are not interchangeable: `arrow-right` doubles back on itself and
+     * reads as "go to that", which is what a button leading somewhere else
+     * wants. This one reads as "continue", which is what an inline "View
+     * details" affordance at the foot of a card wants.
+     */
+    'arrow-forward': 'M5 12h14M13 5l7 7-7 7',
     'sign-out': 'M15 17l5-5-5-5M20 12H9M12 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6',
 
     // Objects in the domain
@@ -37,6 +46,10 @@ export const icons = {
     shield: 'M12 3l7 3v5c0 4.4-2.9 8.4-7 9.6C7.9 19.4 5 15.4 5 11V6l7-3Z',
     lock: 'M8 10V7a4 4 0 1 1 8 0v3M6 10h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z',
     'map-pin': 'M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z',
+    // A price tag rather than a currency glyph: it names the *kind* of fact its
+    // row carries, the way the calendar and pin do, instead of restating an
+    // amount that already carries its own ₱.
+    tag: 'M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8ZM7.5 7.5h.01',
     link: 'M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.2 1.2M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.2-1.2',
     phone: 'M4 5c0-.6.4-1 1-1h3l2 5-2.5 1.5a12 12 0 0 0 5 5L14 13l5 2v3c0 .6-.4 1-1 1h-1A15 15 0 0 1 4 6V5Z',
     settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 4v2m0 12v2m8-8h-2M6 12H4m13.7-5.7-1.4 1.4M7.7 16.3l-1.4 1.4m0-11.4 1.4 1.4m8.6 8.6 1.4 1.4',
@@ -51,6 +64,9 @@ export const icons = {
     check: 'M5 13l4 4L19 7',
     'check-circle': 'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18ZM8.5 12.5l2.5 2.5 4.5-5',
     warning: 'M12 7v6M12 16.5v.5',
+    // Carries its own circle, as `check-circle` does — this one is used inline
+    // beside prose, where there is no tinted container to supply the shape.
+    info: 'M12 16v-4M12 8h.01M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z',
     clock: 'M12 8v4l2.5 2.5M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z',
     eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z',
     'eye-off': 'M4 20 20 4',
