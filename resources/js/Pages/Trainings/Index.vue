@@ -11,6 +11,7 @@ import AppModal from '@/Components/AppModal.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppSkeleton from '@/Components/AppSkeleton.vue';
+import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
 import TrainingRegistrationForm from '@/Components/TrainingRegistrationForm.vue';
 
 const props = defineProps({
@@ -410,48 +411,11 @@ const slotsDetail = (training) =>
                     <!-- The long-form text rides in with the fetched detail;
                          until it lands, a compact skeleton holds the shape
                          below the grid that was already instant. -->
-                    <div v-if="detailLoaded" class="mt-6 space-y-6">
-                        <div v-if="modalTraining.venue_details">
-                            <div class="border-t border-csc-line pt-5">
-                                <h3 class="text-sm font-semibold text-csc-blue">Venue details</h3>
-                                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
-                                    {{ modalTraining.venue_details }}
-                                </p>
-                            </div>
-                        </div>
-                        <div v-if="modalTraining.description">
-                            <div class="border-t border-csc-line pt-5">
-                                <h3 class="text-sm font-semibold text-csc-blue">Description</h3>
-                                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
-                                    {{ modalTraining.description }}
-                                </p>
-                            </div>
-                        </div>
-                        <div v-if="modalTraining.target_participants">
-                            <div class="border-t border-csc-line pt-5">
-                                <h3 class="text-sm font-semibold text-csc-blue">Target participants</h3>
-                                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
-                                    {{ modalTraining.target_participants }}
-                                </p>
-                            </div>
-                        </div>
-                        <div v-if="modalTraining.prerequisites">
-                            <div class="border-t border-csc-line pt-5">
-                                <h3 class="text-sm font-semibold text-csc-blue">Prerequisites</h3>
-                                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
-                                    {{ modalTraining.prerequisites }}
-                                </p>
-                            </div>
-                        </div>
-                        <p
-                            v-if="modalTraining.is_supervisory"
-                            class="flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70"
-                        >
-                            <AppIcon name="info" size="sm" class="mt-0.5 shrink-0 text-csc-blue" />
-                            This is a Supervisory Development Course. You will be asked to submit an output
-                            before your completion is credited.
-                        </p>
-                    </div>
+                    <TrainingDetailSections
+                        v-if="detailLoaded"
+                        :training="modalTraining"
+                        class="mt-6"
+                    />
 
                     <div v-else class="mt-6 border-t border-csc-line pt-5">
                         <AppSkeleton variant="text" count="3" label="Loading training details" />

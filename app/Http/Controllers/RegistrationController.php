@@ -25,7 +25,10 @@ class RegistrationController extends Controller
      */
     public function index(Request $request): Response
     {
-        $registrations = Registration::with(['training', 'cancellationRequests', 'outputs'])
+        // payments rides along because hasSettledFee() reads it, and the join
+        // link below asks that of every row — without it this is one query per
+        // registration.
+        $registrations = Registration::with(['training', 'cancellationRequests', 'outputs', 'payments'])
             ->where('user_id', $request->user()->getKey())
             ->join('trainings', 'trainings.id', '=', 'registrations.training_id')
             ->orderByDesc('trainings.starts_at')
@@ -40,6 +43,9 @@ class RegistrationController extends Controller
                 'can_withdraw' => $registration->status->isCancellable()
                     && ! $registration->hasPendingCancellation(),
                 'withdrawal_pending' => $registration->hasPendingCancellation(),
+                // Lets the dialog name the one thing still standing between the
+                // participant and the join link, rather than a blanket "not yet".
+                'fee_settled' => $registration->hasSettledFee(),
                 // The document verification state, so a participant knows their
                 // proof is sitting in a review queue — and whether they have
                 // been asked to fix it.
@@ -102,6 +108,36 @@ class RegistrationController extends Controller
                         ? $registration->training->payment_amount
                         : null,
                     'description' => $registration->training->description,
+                    /*
+                     * The rest of the prose, so the list can open a training in
+                     * a dialog rather than sending the participant to the detail
+                     * page for it.
+                     *
+                     * Shipped outright rather than fetched on demand the way the
+                     * catalogue does it. The catalogue paginates and would carry
+                     * a dozen unopened descriptions per page; a participant's own
+                     * registrations are a handful, already loaded whole, and
+                     * already carry the description — so the lazy machinery would
+                     * buy a round trip and nothing else.
+                     */
+                    'training_code' => $registration->training->training_code,
+                    'target_participants' => $registration->training->target_participants,
+                    'prerequisites' => $registration->training->prerequisites,
+                    'is_supervisory' => $registration->training->is_supervisory,
+                    /*
+                     * The join link, on the same terms Trainings\Show grants it.
+                     *
+                     * Withheld on the server rather than sent and hidden in the
+                     * page: an Inertia payload is plain JSON in the response
+                     * body, so a link shipped here is readable whatever the
+                     * template does with it. Only the boolean crosses the wire
+                     * when the link itself does not, which is what lets the
+                     * dialog say a link exists without disclosing it.
+                     */
+                    'meeting_link' => $registration->mayViewMeetingLink()
+                        ? $registration->training->meeting_link
+                        : null,
+                    'has_meeting_link' => filled($registration->training->meeting_link),
                     'is_past' => $registration->training->starts_at->isPast(),
                     'url' => route('trainings.show', $registration->training->slug),
                 ],

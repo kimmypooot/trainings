@@ -317,4 +317,71 @@ class MeetingLinkTest extends TestCase
             fn (RegistrationReviewed $notification) => ! str_contains($notification->body($participant), self::LINK)
         );
     }
+
+    /*
+     * ── The registrations list ────────────────────────────────────────────
+     *
+     * My/Registrations opens a training in a dialog rather than sending the
+     * participant to the detail page, so the link has to reach that payload on
+     * exactly the same terms — and be withheld from it on the same terms. A
+     * second surface is a second chance to leak it.
+     */
+
+    /** @return array{0: string|null, 1: bool} the link as sent, and whether one exists */
+    private function linkInMyRegistrations(User $user): array
+    {
+        $seen = [null, false];
+
+        $this->actingAs($user)
+            ->get('/my/registrations')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) use (&$seen) {
+                $training = $page->toArray()['props']['registrations'][0]['training'];
+
+                $seen = [$training['meeting_link'], $training['has_meeting_link']];
+            });
+
+        return $seen;
+    }
+
+    public function test_the_registrations_list_withholds_an_unearned_link(): void
+    {
+        $participant = $this->participant();
+        $training = $this->training();
+
+        Registration::factory()->approved()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+        ]);
+
+        [$link, $exists] = $this->linkInMyRegistrations($participant);
+
+        // Approved but unpaid: told one exists, never what it is.
+        $this->assertNull($link);
+        $this->assertTrue($exists);
+    }
+
+    public function test_the_registrations_list_releases_an_earned_link(): void
+    {
+        $participant = $this->participant();
+        $training = $this->training();
+
+        $registration = Registration::factory()->approved()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+        ]);
+
+        Payment::factory()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::Online,
+            'status' => PaymentStatus::Verified,
+        ]);
+
+        [$link] = $this->linkInMyRegistrations($participant);
+
+        $this->assertSame(self::LINK, $link);
+    }
 }

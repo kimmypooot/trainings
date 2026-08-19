@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppBadge from '@/Components/AppBadge.vue';
@@ -12,10 +12,28 @@ import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
+import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
 
 const props = defineProps({
     registrations: { type: Array, required: true },
 });
+
+/*
+ * Reading a training without leaving the list.
+ *
+ * "View training details" used to be a link to the detail page — a whole
+ * navigation, and a page built around deciding whether to register, offered to
+ * somebody who already has. The dialog answers the question that was actually
+ * being asked ("what am I signed up for again?") and leaves the participant
+ * where they were.
+ *
+ * No fetch behind it, unlike the catalogue's version: everything the dialog
+ * shows is already in the props for this page. See RegistrationController.
+ *
+ * Holds the registration rather than its training, so the dialog can offer the
+ * one action that belongs to a training you are already on.
+ */
+const detailing = ref(null);
 
 const upcoming = computed(() => props.registrations.filter((r) => !r.training.is_past));
 const past = computed(() => props.registrations.filter((r) => r.training.is_past));
@@ -28,6 +46,30 @@ const money = (value) =>
 
 const schedule = (training) =>
     training.ends_at ? `${training.starts_at} – ${training.ends_at}` : training.starts_at;
+
+/*
+ * Why the join link is not in the dialog yet.
+ *
+ * The link never reaches the client until it is earned (see
+ * RegistrationController), so this only ever names the missing step — it never
+ * has a link to withhold. Mirrors Trainings/Show, which is where this used to
+ * be the only place a participant could find it.
+ */
+const joinLockedReason = (registration) => {
+    const training = registration.training;
+
+    if (!training.has_meeting_link || training.meeting_link) return null;
+
+    if (!registration.fee_settled) {
+        return 'The join link is released once your payment has been verified.';
+    }
+
+    if (registration.status === 'pending') {
+        return 'The join link is released once CSC approves your registration.';
+    }
+
+    return null;
+};
 
 /**
  * Withdrawing is a request, not an immediate cancellation — CSC caters and
@@ -139,9 +181,13 @@ const submitResubmit = () => {
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <h3 class="text-sm font-semibold text-csc-blue">
-                                        <Link :href="registration.training.url" class="hover:underline">
+                                        <button
+                                            type="button"
+                                            class="rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            @click="detailing = registration"
+                                        >
                                             {{ registration.training.title }}
-                                        </Link>
+                                        </button>
                                     </h3>
                                     <p class="mt-1 text-xs text-csc-ink/60">{{ schedule(registration.training) }}</p>
                                 </div>
@@ -217,13 +263,14 @@ const submitResubmit = () => {
                             </p>
 
                             <div class="mt-4 flex flex-wrap items-center gap-3">
-                                <Link
-                                    :href="registration.training.url"
+                                <button
+                                    type="button"
                                     class="inline-flex items-center gap-1.5 rounded text-sm font-medium text-csc-blue transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="detailing = registration"
                                 >
                                     View training details
                                     <AppIcon name="chevron-right" size="sm" />
-                                </Link>
+                                </button>
                                 <AppButton
                                     v-if="registration.can_withdraw"
                                     size="sm"
@@ -291,9 +338,13 @@ const submitResubmit = () => {
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <h3 class="text-sm font-semibold text-csc-ink">
-                                        <Link :href="registration.training.url" class="hover:underline">
+                                        <button
+                                            type="button"
+                                            class="rounded text-left hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            @click="detailing = registration"
+                                        >
                                             {{ registration.training.title }}
-                                        </Link>
+                                        </button>
                                     </h3>
                                     <p class="mt-1 text-xs text-csc-ink/60">{{ schedule(registration.training) }}</p>
                                     <p v-if="registration.training.venue" class="text-xs text-csc-ink/60">
@@ -367,13 +418,14 @@ const submitResubmit = () => {
                                 </AppButton>
                             </div>
 
-                            <Link
-                                :href="registration.training.url"
+                            <button
+                                type="button"
                                 class="mt-3 inline-flex items-center gap-1.5 rounded text-sm font-medium text-csc-blue transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                @click="detailing = registration"
                             >
                                 View training details
                                 <AppIcon name="chevron-right" size="sm" />
-                            </Link>
+                            </button>
                         </li>
                     </ul>
                 </section>
@@ -469,6 +521,102 @@ const submitResubmit = () => {
                     <AppButton type="submit" :loading="resubmitForm.processing">Re-upload</AppButton>
                 </div>
             </form>
+        </AppModal>
+
+        <!--
+            The training, read in place. No slots or registration window here,
+            unlike the catalogue's dialog: those answer "should I sign up",
+            which is already settled for everything on this page.
+        -->
+        <AppModal
+            :open="detailing !== null"
+            :title="detailing?.training.title"
+            :subtitle="detailing ? `${detailing.training.mode_label} · ${schedule(detailing.training)}` : null"
+            size="lg"
+            @close="detailing = null"
+        >
+            <template v-if="detailing">
+                <dl class="grid gap-x-6 gap-y-5 text-sm sm:grid-cols-2">
+                    <div>
+                        <dt class="text-csc-ink/60">Date</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">{{ schedule(detailing.training) }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-csc-ink/60">Venue</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.venue }}</dd>
+                    </div>
+                    <div v-if="detailing.training.mode_label">
+                        <dt class="text-csc-ink/60">Mode</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.mode_label }}</dd>
+                    </div>
+                    <div v-if="detailing.training.payment_required">
+                        <dt class="text-csc-ink/60">Fee</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">₱{{ money(detailing.training.payment_amount) }}</dd>
+                    </div>
+                    <div v-if="detailing.training.category">
+                        <dt class="text-csc-ink/60">Curriculum</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.category }}</dd>
+                    </div>
+                    <div v-if="detailing.training.duration_days">
+                        <dt class="text-csc-ink/60">Duration</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">
+                            {{ detailing.training.duration_days }} day{{ detailing.training.duration_days === 1 ? '' : 's' }}
+                        </dd>
+                    </div>
+                    <div v-if="detailing.training.level_label">
+                        <dt class="text-csc-ink/60">Level</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.level_label }}</dd>
+                    </div>
+                    <div v-if="detailing.training.training_code">
+                        <dt class="text-csc-ink/60">Training code</dt>
+                        <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.training_code }}</dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-csc-ink/60">Your registration</dt>
+                        <dd class="mt-1"><AppBadge :status="detailing.status" /></dd>
+                    </div>
+                </dl>
+
+                <!--
+                    The join link, once it has been earned. This is what the
+                    dialog was missing while "Open the full page" was the only
+                    way to it — and on the day of an online session it is the
+                    single thing a participant comes to this page for.
+                -->
+                <div v-if="detailing.training.meeting_link" class="mt-5 rounded-lg bg-info-soft p-4">
+                    <h3 class="flex items-center gap-2 text-sm font-semibold text-info">
+                        <AppIcon name="link" size="sm" />
+                        Join link
+                    </h3>
+                    <a
+                        :href="detailing.training.meeting_link"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="mt-1.5 block text-sm font-medium break-all text-csc-blue underline underline-offset-2 transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    >
+                        {{ detailing.training.meeting_link }}
+                    </a>
+                    <p class="mt-1.5 text-xs text-csc-ink/60">
+                        Please keep this link to yourself — it is issued to you alone.
+                    </p>
+                </div>
+
+                <p
+                    v-else-if="joinLockedReason(detailing)"
+                    class="mt-5 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70"
+                >
+                    <AppIcon name="lock" size="sm" class="mt-0.5 shrink-0" />
+                    {{ joinLockedReason(detailing) }}
+                </p>
+
+                <TrainingDetailSections :training="detailing.training" class="mt-6" />
+            </template>
+
+            <template v-if="detailing" #footer>
+                <div class="flex justify-end">
+                    <AppButton variant="ghost" @click="detailing = null">Close</AppButton>
+                </div>
+            </template>
         </AppModal>
     </AuthenticatedLayout>
 </template>
