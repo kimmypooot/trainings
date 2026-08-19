@@ -72,11 +72,18 @@ const submit = () => {
                 <!-- Google OAuth — full page load, not an Inertia visit -->
                 <a
                     href="/auth/google"
-                    class="mt-8 inline-flex w-full items-center justify-center gap-3 rounded-lg border border-csc-line bg-white px-5 py-3 text-sm font-semibold text-csc-ink transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    class="relative mt-8 inline-flex w-full items-center justify-center gap-3 rounded-lg border border-csc-line bg-white px-5 py-3 text-sm font-semibold text-csc-ink transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                     :class="googleEnabled ? '' : 'pointer-events-none opacity-50'"
                     :aria-disabled="googleEnabled ? undefined : 'true'"
                     :tabindex="googleEnabled ? undefined : -1"
                 >
+                    <!-- See Login.vue: same pill, same reasoning. -->
+                    <span
+                        class="absolute -top-2.5 right-4 rounded-full bg-csc-blue px-2 py-0.5 text-2xs font-semibold tracking-wide text-white uppercase shadow-sm"
+                    >
+                        Recommended
+                    </span>
+
                     <svg class="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                         <path
                             fill="#4285F4"
