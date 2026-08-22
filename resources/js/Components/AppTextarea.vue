@@ -70,7 +70,7 @@ const remaining = computed(() => {
             :required="required"
             :aria-invalid="error ? 'true' : undefined"
             :aria-describedby="describedBy"
-            class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink/40 focus:outline-2 focus:outline-offset-1"
+            class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1"
             :class="[
                 error
                     ? 'border-csc-red-ink focus:outline-csc-red-ink'
@@ -81,9 +81,9 @@ const remaining = computed(() => {
         />
 
         <div class="mt-1 flex items-start justify-between gap-3">
-            <p v-if="hint && !error" :id="hintId" class="text-xs text-csc-ink/60">{{ hint }}</p>
+            <p v-if="hint && !error" :id="hintId" class="text-xs text-csc-ink-subtle">{{ hint }}</p>
             <p v-if="error" :id="errorId" class="text-xs font-medium text-csc-red-ink">{{ error }}</p>
-            <p v-if="remaining !== null && !error" class="ml-auto shrink-0 text-xs text-csc-ink/50" aria-live="polite">
+            <p v-if="remaining !== null && !error" class="ml-auto shrink-0 text-xs text-csc-ink-subtle" aria-live="polite">
                 {{ remaining }} characters left
             </p>
         </div>

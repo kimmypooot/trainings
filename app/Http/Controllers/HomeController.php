@@ -6,6 +6,7 @@ use App\Enums\Curriculum;
 use App\Enums\RegistrationStatus;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
+use App\Models\FieldOffice;
 use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
@@ -119,38 +120,69 @@ class HomeController extends Controller
      * Landing-page headline figures.
      *
      * Real counts straight from the database, cached for an hour so a public
-     * page never runs four queries per hit. The regional-offices figure stays a
-     * constant on purpose: it describes the nationwide CSC organisation, which
-     * this database (a single regional deployment) cannot count.
+     * page never runs four queries per hit.
+     *
+     * Every figure has to earn its place, because this band is the one part of
+     * the landing page that makes a claim. Two rules follow from that:
+     *
+     * 1. A figure that would read as an indictment is withheld, not shown as a
+     *    zero. A fresh deployment has delivered nothing and completed nothing,
+     *    and "0% completion rate" on the front page of a training portal is a
+     *    statement about the office, not about the data being new. Completion
+     *    is reported only once there is a real denominator behind it.
+     * 2. Nothing is asserted that this database cannot count. The figure here
+     *    used to be a hard-coded "17 regional offices" describing the
+     *    nationwide CSC organisation — true of the Commission, but not a fact
+     *    this single-region deployment has any standing to publish. It is now
+     *    the number of field offices actually taking part, which is countable
+     *    and is the more useful number for a visitor anyway.
+     *
+     * An empty array is a valid answer and hides the whole band; see Home.vue.
      *
      * @return array<int, array{figure: string, label: string}>
      */
     private function stats(): array
     {
         return Cache::remember('home.stats', now()->addHour(), function () {
+            $stats = [];
+
             $enrolled = User::whereNotNull('profile_completed_at')->count();
+            if ($enrolled > 0) {
+                $stats[] = ['figure' => number_format($enrolled), 'label' => 'Personnel enrolled'];
+            }
 
             // "Delivered" = a training that has actually begun, any status that
             // is not still a draft or unceremoniously cancelled.
             $delivered = Training::whereNotIn('status', [TrainingStatus::Draft, TrainingStatus::Cancelled])
                 ->where('starts_at', '<=', now())
                 ->count();
+            if ($delivered > 0) {
+                $stats[] = ['figure' => number_format($delivered), 'label' => 'Programs delivered'];
+            }
 
             $approvedOrCompleted = Registration::whereIn('status', [
                 RegistrationStatus::Approved,
                 RegistrationStatus::Completed,
             ])->count();
-            $completed = Registration::where('status', RegistrationStatus::Completed)->count();
-            $completion = $approvedOrCompleted
-                ? (int) round($completed / $approvedOrCompleted * 100)
-                : 0;
 
-            return [
-                ['figure' => number_format($enrolled), 'label' => 'Personnel enrolled'],
-                ['figure' => number_format($delivered), 'label' => 'Programs delivered'],
-                ['figure' => $completion.'%', 'label' => 'Completion rate'],
-                ['figure' => '17', 'label' => 'Regional offices'],
-            ];
+            // Rule 1 above: no denominator, no percentage.
+            if ($approvedOrCompleted > 0) {
+                $completed = Registration::where('status', RegistrationStatus::Completed)->count();
+                $stats[] = [
+                    'figure' => round($completed / $approvedOrCompleted * 100).'%',
+                    'label' => 'Completion rate',
+                ];
+            }
+
+            $offices = FieldOffice::count();
+            if ($offices > 0) {
+                $stats[] = [
+                    'figure' => number_format($offices),
+                    'label' => $offices === 1 ? 'Participating office' : 'Participating offices',
+                ];
+            }
+
+            return $stats;
         });
     }
 }

@@ -4,6 +4,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import AppAvatar from '@/Components/AppAvatar.vue';
 import AppFooter from '@/Components/AppFooter.vue';
 import AppChangePasswordModal from '@/Components/AppChangePasswordModal.vue';
+import AppGlobalSearch from '@/Components/AppGlobalSearch.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppToast from '@/Components/AppToast.vue';
 import AppModal from '@/Components/AppModal.vue';
@@ -24,10 +25,16 @@ const pendingActions = computed(() => page.props.pendingActions ?? {});
 // on for days unnoticed — see HandleInertiaRequests' maintenanceMode prop.
 const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
 
-// Notifications count comes from its own shared prop; every other badge is a
-// pending action fed to the sidebar by key (see PendingActionCounter).
-const countFor = (item) =>
-    item.key === 'notifications' ? unread.value : (pendingActions.value[item.key] ?? 0);
+// Everyone who is not a participant. Deliberately broader than STAFF_ROLES
+// below: collecting officers and management are kept out of the *roster*, but
+// both read the participants directory and the trainings catalogue, which is
+// exactly what the header search reaches — see the admin group in web.php.
+const isStaff = computed(() => role.value !== 'participant');
+
+// Every sidebar badge is a pending action fed in by key (see
+// PendingActionCounter). The unread notification count is not one of them — it
+// belongs to the header bell, which is the only place that link now lives.
+const countFor = (item) => pendingActions.value[item.key] ?? 0;
 
 const ALL_ROLES = [
     'participant',
@@ -70,13 +77,10 @@ const navGroups = [
                 roles: [...STAFF_ROLES, 'collecting-officer'],
                 icon: 'home',
             },
-            {
-                key: 'notifications',
-                label: 'Notifications',
-                href: '/notifications',
-                roles: ALL_ROLES,
-                icon: 'bell',
-            },
+            // Notifications is deliberately absent here: the header bell is on
+            // every signed-in screen and carries the same count and the same
+            // link, so a nav row for it was one more thing to read on a list
+            // that already runs to twenty items for a superadmin.
         ],
     },
     {
@@ -127,6 +131,15 @@ const navGroups = [
                 primary: true,
                 roles: ['participant'],
                 icon: 'certificate',
+            },
+            {
+                // Badged with the number of training days still owed an
+                // evaluation — see PendingActionCounter.
+                key: 'evaluations',
+                label: 'Session Evaluations',
+                href: '/my/evaluations',
+                roles: ['participant'],
+                icon: 'clipboard',
             },
             {
                 key: 'admin-certificates',
@@ -223,6 +236,23 @@ const navGroups = [
                 href: '/admin/field-offices',
                 roles: ['admin', 'superadmin'],
                 icon: 'building',
+            },
+            {
+                key: 'admin-smes',
+                label: 'Subject Matter Experts',
+                href: '/admin/smes',
+                roles: ['admin', 'superadmin'],
+                icon: 'users',
+            },
+            {
+                // Management sees the results without the directory: reading
+                // how a programme was received is oversight, maintaining the
+                // roster of experts is HRD's job.
+                key: 'admin-evaluations',
+                label: 'Evaluations',
+                href: '/admin/evaluations',
+                roles: ['admin', 'superadmin', 'management'],
+                icon: 'clipboard',
             },
             {
                 key: 'admin-analytics',
@@ -428,7 +458,7 @@ const confirmSignOut = () => {
         -->
         <aside
             id="app-sidebar"
-            class="fixed inset-y-0 left-0 z-(--z-drawer) flex w-64 flex-col bg-csc-blue transition-[transform,width] duration-200 md:z-(--z-backdrop) md:translate-x-0"
+            class="fixed inset-y-0 left-0 z-(--z-drawer) flex w-64 flex-col border-r border-white/5 bg-csc-blue bg-gradient-to-b from-csc-blue to-csc-blue-deep transition-[transform,width] duration-200 md:z-(--z-backdrop) md:translate-x-0"
             :class="[
                 drawerOpen ? 'translate-x-0' : '-translate-x-full',
                 collapsed ? 'md:w-16' : 'md:w-64',
@@ -442,11 +472,20 @@ const confirmSignOut = () => {
                     href="/dashboard"
                     class="flex items-center gap-3 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
                 >
-                    <img
-                        src="/images/csc-logo.png"
-                        alt="CSC Logo"
-                        class="h-9 w-9 shrink-0 object-contain"
-                    />
+                    <!--
+                        The seal is a blue-and-red wordmark on transparency, so
+                        on --color-csc-blue the letterforms sit on their own
+                        colour and all but vanish. The white plate is what makes
+                        it legible; it is not decoration, and it is why this is
+                        the one white surface allowed inside the rail.
+                    -->
+                    <span class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white p-1.5 shadow-sm ring-1 ring-white/20">
+                        <img
+                            src="/images/csc-logo-256.png"
+                            alt="CSC Logo"
+                            class="h-full w-full object-contain"
+                        />
+                    </span>
                     <span v-if="!collapsed" class="leading-tight">
                         <span class="block text-sm font-bold text-white">CSC RO VIII</span>
                         <span class="mt-0.5 block text-xs font-medium tracking-wide text-white/60">
@@ -467,9 +506,18 @@ const confirmSignOut = () => {
             </div>
 
             <nav class="sidebar-nav min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Main">
-                <div v-for="group in visibleGroups" :key="group.key">
+                <!--
+                    Collapsed, the group labels go but their spacing stays, so
+                    the rail would read as icons separated by unexplained holes.
+                    A hairline turns the gap back into a stated boundary.
+                -->
+                <div
+                    v-for="group in visibleGroups"
+                    :key="group.key"
+                    :class="collapsed ? 'md:border-t md:border-white/10 md:pt-3 md:first:border-t-0 md:first:pt-0' : ''"
+                >
                     <p
-                        class="mb-1.5 px-3 text-[10px] font-bold tracking-widest text-white/40 uppercase"
+                        class="mb-1.5 px-3 text-[10px] font-semibold tracking-wider text-white/70 uppercase"
                         :class="collapsed ? 'md:hidden' : ''"
                     >
                         {{ group.label }}
@@ -480,29 +528,41 @@ const confirmSignOut = () => {
                             v-for="item in group.items"
                             :key="item.key"
                             :href="item.href"
-                            class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                            class="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                             :class="[
                                 props.current === item.key
-                                    ? 'bg-white/15 text-white'
-                                    : 'text-white/75 hover:bg-white/10 hover:text-white',
+                                    ? 'bg-white/15 font-semibold text-white'
+                                    : 'font-medium text-white/85 hover:bg-white/8 hover:text-white',
                                 collapsed ? 'md:justify-center md:px-0' : '',
                             ]"
                             :aria-current="props.current === item.key ? 'page' : undefined"
                             :title="collapsed ? item.label : undefined"
                         >
+                            <!--
+                                Active used to be bg-white/15 against a /10
+                                hover — five percent apart, which on a twenty
+                                item nav is not a difference you can see. The
+                                marker makes current-page differ in kind, so
+                                hover can stay a background and still lose.
+                            -->
+                            <span
+                                v-if="props.current === item.key"
+                                class="absolute inset-y-1.5 left-0 w-1 rounded-r-full bg-white"
+                                aria-hidden="true"
+                            />
                             <span class="relative shrink-0">
                                 <AppIcon :name="item.icon" />
                                 <!-- Rail has no room for the count, so it shows a dot -->
                                 <span
                                     v-if="countFor(item) && collapsed"
-                                    class="absolute -top-0.5 -right-0.5 hidden size-2 rounded-full bg-danger ring-2 ring-csc-blue md:block"
+                                    class="absolute -top-0.5 -right-0.5 hidden size-2 rounded-full bg-white ring-2 ring-csc-blue md:block"
                                     aria-hidden="true"
                                 />
                             </span>
                             <span :class="collapsed ? 'md:hidden' : ''">{{ item.label }}</span>
                             <span
                                 v-if="countFor(item)"
-                                class="ml-auto rounded-full bg-danger px-1.5 py-0.5 text-2xs font-semibold text-white"
+                                class="ml-auto rounded-full bg-white/20 px-1.5 py-0.5 text-2xs font-semibold text-white"
                                 :class="collapsed ? 'md:hidden' : ''"
                             >
                                 {{ countFor(item) > 99 ? '99+' : countFor(item) }}
@@ -515,7 +575,7 @@ const confirmSignOut = () => {
             <div class="border-t border-white/10 px-3 py-4">
                 <button
                     type="button"
-                    class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                     :class="collapsed ? 'md:justify-center md:px-0' : ''"
                     :title="collapsed ? 'Sign out' : undefined"
                     @click="signOut"
@@ -551,16 +611,45 @@ const confirmSignOut = () => {
                         <h1 class="truncate text-lg font-semibold tracking-tight text-csc-blue">{{ title }}</h1>
                     </div>
 
+                    <!--
+                        The header's dead centre, which was ~800px of nothing.
+                        Staff only: a participant has a handful of screens and
+                        nothing to search across, and the endpoint behind this
+                        reads the directory, which is staff work.
+                    -->
+                    <div v-if="isStaff" class="hidden flex-1 justify-center px-4 md:flex">
+                        <AppGlobalSearch />
+                    </div>
+
                     <div class="flex items-center gap-1 sm:gap-2">
+                        <!--
+                            The bell is now the only route to notifications, so
+                            it carries the current-page state the sidebar row
+                            used to hold.
+                        -->
                         <Link
                             href="/notifications"
-                            class="relative inline-flex size-11 items-center justify-center rounded-lg text-csc-ink transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            class="relative inline-flex size-11 items-center justify-center rounded-lg transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                props.current === 'notifications'
+                                    ? 'bg-csc-blue-tint text-csc-blue'
+                                    : 'text-csc-ink'
+                            "
+                            :aria-current="props.current === 'notifications' ? 'page' : undefined"
                         >
                             <AppIcon name="bell" />
                             <!-- Unread alert: a pulsing ring draws the eye, the count carries the detail -->
                             <template v-if="unread">
+                                <!--
+                                    Keyed on the count so the pulse replays
+                                    when the number actually changes. It used to
+                                    be animate-ping, which is infinite: a
+                                    permanent attention-grab for a figure that
+                                    was not moving. Three beats, then it rests.
+                                -->
                                 <span
-                                    class="absolute top-1 right-1 inline-flex size-4 animate-ping rounded-full bg-danger/50"
+                                    :key="unread"
+                                    class="bell-ping absolute top-1 right-1 inline-flex size-4 rounded-full bg-danger/50"
                                     aria-hidden="true"
                                 />
                                 <span
@@ -583,19 +672,20 @@ const confirmSignOut = () => {
                                 aria-controls="account-popover"
                                 @click="accountOpen = !accountOpen"
                             >
+                                <!--
+                                    Avatar and chevron only. This used to spell
+                                    out the name and the role beside them, which
+                                    said "who am I" three times over in ~280px —
+                                    and since `name` is upper-cased for most
+                                    accounts, it out-shouted the page title next
+                                    to it. Both facts moved into the popover,
+                                    where the email already lived.
+                                -->
                                 <AppAvatar :name="user.name" :src="user.avatar" size="sm" />
-                                <span class="hidden flex-col items-start sm:flex">
-                                    <span class="text-sm leading-tight font-medium whitespace-nowrap text-csc-ink">
-                                        {{ user.name ?? user.email }}
-                                    </span>
-                                    <span class="mt-0.5 rounded-full bg-csc-blue-tint px-2 py-0.5 text-2xs font-medium text-csc-blue">
-                                        {{ user.role_label }}
-                                    </span>
-                                </span>
                                 <AppIcon
                                     name="chevron-down"
                                     size="sm"
-                                    class="hidden text-csc-ink/50 transition-transform duration-150 sm:block"
+                                    class="text-csc-ink-subtle transition-transform duration-150"
                                     :class="accountOpen ? 'rotate-180' : ''"
                                 />
                                 <span class="sr-only">Account menu</span>
@@ -610,11 +700,19 @@ const confirmSignOut = () => {
                             <div
                                 v-if="accountOpen"
                                 id="account-popover"
-                                class="absolute right-0 z-(--z-popover) mt-2 w-56 overflow-hidden rounded-xl border border-csc-line bg-white shadow-lg"
+                                class="absolute right-0 z-(--z-popover) mt-2 w-64 overflow-hidden rounded-xl border border-csc-line bg-white shadow-lg"
                             >
                                 <div class="border-b border-csc-line px-4 py-3">
+                                    <p class="truncate text-sm font-semibold text-csc-ink">
+                                        {{ user.name ?? user.email }}
+                                    </p>
+                                    <p class="mt-1 mb-1.5">
+                                        <span class="rounded-full bg-csc-blue-tint px-2 py-0.5 text-2xs font-medium text-csc-blue">
+                                            {{ user.role_label }}
+                                        </span>
+                                    </p>
                                     <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                                        <p class="text-xs text-csc-ink/60">{{ user.email }}</p>
+                                        <p class="text-xs text-csc-ink-subtle">{{ user.email }}</p>
                                         <span
                                             v-if="user.email_verified"
                                             class="inline-flex items-center gap-1 text-2xs font-semibold text-csc-blue"
@@ -634,7 +732,7 @@ const confirmSignOut = () => {
                                             </span>
                                             Verified
                                         </span>
-                                        <span v-else class="text-2xs font-medium text-csc-ink/45">
+                                        <span v-else class="text-2xs font-medium text-csc-ink-subtle">
                                             Not Verified
                                         </span>
                                     </div>
@@ -643,7 +741,7 @@ const confirmSignOut = () => {
                                     href="/profile"
                                     class="flex items-center gap-2.5 px-4 py-2.5 text-sm text-csc-ink transition-colors hover:bg-csc-blue-tint"
                                 >
-                                    <AppIcon name="user" class="shrink-0 text-csc-ink/50" />
+                                    <AppIcon name="user" class="shrink-0 text-csc-ink-subtle" />
                                     My Profile
                                 </Link>
                                 <button
@@ -651,7 +749,7 @@ const confirmSignOut = () => {
                                     class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-csc-ink transition-colors hover:bg-csc-blue-tint"
                                     @click="openChangePassword"
                                 >
-                                    <AppIcon name="lock" class="shrink-0 text-csc-ink/50" />
+                                    <AppIcon name="lock" class="shrink-0 text-csc-ink-subtle" />
                                     <!--
                                         A Google-created account has no password
                                         to change yet — it has one to make. The
@@ -695,7 +793,9 @@ const confirmSignOut = () => {
                 </div>
             </div>
 
-            <main id="main" class="flex-1 px-4 py-6 pb-24 sm:px-6 md:pb-8 lg:px-8 lg:py-8">
+            <!-- Clearance for the mobile tab bar now sits on AppFooter, which
+                 is what actually ends the document. -->
+            <main id="main" class="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <!-- Keyed by the page component so each navigation plays the
                      fade-and-rise once; see .page-enter in app.css. -->
                 <Transition name="page" appear>
@@ -721,7 +821,7 @@ const confirmSignOut = () => {
                     :key="item.key"
                     :href="item.href"
                     class="flex min-h-14 flex-col items-center justify-center gap-1 px-1 py-2 text-2xs font-medium transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="props.current === item.key ? 'text-csc-blue' : 'text-csc-ink/60'"
+                    :class="props.current === item.key ? 'text-csc-blue' : 'text-csc-ink-subtle'"
                     :aria-current="props.current === item.key ? 'page' : undefined"
                 >
                     <span
@@ -737,7 +837,7 @@ const confirmSignOut = () => {
 
                 <button
                     type="button"
-                    class="flex min-h-14 flex-col items-center justify-center gap-1 px-1 py-2 text-2xs font-medium text-csc-ink/60 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-csc-blue"
+                    class="flex min-h-14 flex-col items-center justify-center gap-1 px-1 py-2 text-2xs font-medium text-csc-ink-subtle transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-csc-blue"
                     :aria-expanded="drawerOpen"
                     aria-controls="app-sidebar"
                     @click="drawerOpen = true"
@@ -760,7 +860,7 @@ const confirmSignOut = () => {
                     <AppIcon name="sign-out" size="lg" />
                 </span>
                 <h3 class="text-base font-semibold tracking-tight text-csc-blue">Sign out</h3>
-                <p class="mt-1 text-sm text-csc-ink/70">Are you sure you want to sign out of your account?</p>
+                <p class="mt-1 text-sm text-csc-ink-muted">Are you sure you want to sign out of your account?</p>
                 <div class="mt-6 flex gap-3">
                     <AppButton variant="ghost" block @click="confirmingSignOut = false">Cancel</AppButton>
                     <AppButton variant="accent" block @click="confirmSignOut">Sign out</AppButton>
@@ -799,5 +899,23 @@ const confirmSignOut = () => {
 
 .sidebar-nav::-webkit-scrollbar-thumb:hover {
     background: color-mix(in srgb, white 35%, transparent);
+}
+
+/*
+ * Tailwind's animate-ping is infinite. The unread badge only has news to break
+ * when the count changes, so this is the same motion bounded to three beats;
+ * the element is keyed on the count, which replays it on the next arrival.
+ * The global prefers-reduced-motion block in app.css already neutralises it.
+ */
+.bell-ping {
+    animation: bell-ping 1s cubic-bezier(0, 0, 0.2, 1) 3;
+}
+
+@keyframes bell-ping {
+    75%,
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
 }
 </style>

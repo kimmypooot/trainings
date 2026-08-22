@@ -37,7 +37,7 @@ const cuts = [
             </AppButton>
         </template>
 
-        <p class="text-sm text-csc-ink/70">
+        <p class="text-sm text-csc-ink-muted">
             <span class="font-semibold text-csc-blue">{{ breakdown.total }}</span> registration(s)
         </p>
 

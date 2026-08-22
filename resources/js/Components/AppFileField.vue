@@ -49,7 +49,7 @@ const onChange = (event) => emit('change', event.target.files[0] ?? null);
             @change="onChange"
         />
 
-        <p v-if="hint" :id="`${id}-hint`" class="mt-1.5 text-xs text-csc-ink/60">{{ hint }}</p>
+        <p v-if="hint" :id="`${id}-hint`" class="mt-1.5 text-xs text-csc-ink-subtle">{{ hint }}</p>
         <p v-if="error" class="mt-1.5 text-xs font-medium text-csc-red-ink">{{ error }}</p>
     </div>
 </template>

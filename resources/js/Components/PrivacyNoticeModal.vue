@@ -101,7 +101,7 @@ onBeforeUnmount(() => {
                         v-if="imageLoading && !imageError"
                         class="flex h-[60vh] w-full animate-pulse items-center justify-center rounded-xl border-2 border-csc-blue/20 bg-csc-blue-tint"
                     >
-                        <p class="text-xs text-csc-ink/50">Loading privacy notice…</p>
+                        <p class="text-xs text-csc-ink-subtle">Loading privacy notice…</p>
                     </div>
 
                     <img
@@ -121,8 +121,8 @@ onBeforeUnmount(() => {
                         v-if="imageError"
                         class="w-full rounded-xl border-2 border-dashed border-csc-line bg-csc-blue-tint px-6 py-14 text-center"
                     >
-                        <p class="text-sm font-semibold text-csc-ink/70">Notice image unavailable</p>
-                        <p class="mt-1 text-xs text-csc-ink/50">You can still read the full notice on the next step.</p>
+                        <p class="text-sm font-semibold text-csc-ink-muted">Notice image unavailable</p>
+                        <p class="mt-1 text-xs text-csc-ink-subtle">You can still read the full notice on the next step.</p>
                     </div>
                 </div>
 
@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
 
                     <section>
                         <h3 class="mb-1 font-semibold text-csc-blue">2. Personal Data We Collect</h3>
-                        <ul class="list-inside list-disc space-y-1 text-csc-ink/80">
+                        <ul class="list-inside list-disc space-y-1 text-csc-ink-muted">
                             <li><strong>Basic information:</strong> name, agency, position, and contact details.</li>
                             <li><strong>Training records:</strong> nominations, attendance, and completion data.</li>
                             <li><strong>Account information:</strong> email address and sign-in method.</li>
@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 
                     <section>
                         <h3 class="mb-1 font-semibold text-csc-blue">3. Purpose of Processing</h3>
-                        <ul class="list-inside list-disc space-y-1 text-csc-ink/80">
+                        <ul class="list-inside list-disc space-y-1 text-csc-ink-muted">
                             <li>Processing training nominations and enrolment.</li>
                             <li>Issuing certificates and maintaining training records.</li>
                             <li>Producing agency and Commission-level training reports.</li>
@@ -189,7 +189,7 @@ onBeforeUnmount(() => {
                             <p class="text-xs font-semibold tracking-wide text-csc-ink uppercase">
                                 Data Protection Officer
                             </p>
-                            <p class="mt-1 text-xs text-csc-ink/70">
+                            <p class="mt-1 text-xs text-csc-ink-muted">
                                 Email:
                                 <a href="mailto:dpo@csc.gov.ph" class="font-medium text-csc-blue hover:underline">
                                     dpo@csc.gov.ph
@@ -198,7 +198,7 @@ onBeforeUnmount(() => {
                         </div>
                     </section>
 
-                    <p class="text-xs text-csc-ink/60">
+                    <p class="text-xs text-csc-ink-subtle">
                         See also our
                         <Link href="/privacy-policy" class="font-medium text-csc-blue hover:underline">Privacy Policy</Link>
                         and
@@ -213,15 +213,15 @@ onBeforeUnmount(() => {
                     <button
                         v-if="step === 2"
                         type="button"
-                        class="rounded text-sm font-medium text-csc-ink/70 transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded text-sm font-medium text-csc-ink-muted transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         @click="step = 1"
                     >
                         Back
                     </button>
-                    <p v-else class="text-xs text-csc-ink/50">1 of 2 — Data Privacy Notice</p>
+                    <p v-else class="text-xs text-csc-ink-subtle">1 of 2 — Data Privacy Notice</p>
 
                     <div class="flex items-center gap-3">
-                        <p v-if="step === 2" class="text-xs text-csc-ink/50">2 of 2</p>
+                        <p v-if="step === 2" class="text-xs text-csc-ink-subtle">2 of 2</p>
 
                         <button
                             v-if="step === 1"

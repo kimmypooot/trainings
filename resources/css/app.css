@@ -27,6 +27,44 @@
     --color-csc-line: #e5e7eb;
 
     /*
+     * Secondary text, as named tokens rather than an opacity on --color-csc-ink.
+     *
+     * These used to be written text-csc-ink/70, /60, /55 and /50, which is how
+     * a palette stays compliant on paper while the rendered pixel is not: the
+     * token passes, the composite it flattens to does not. Measured against
+     * both surfaces they actually sit on — white content and the
+     * --color-csc-blue-tint panels — the old values came out at 4.33:1 (/70),
+     * 3.34:1 (/60) and 2.94:1 (/55), all under the 4.5:1 AA floor for
+     * body-size text. /70 was the default for every paragraph on the public
+     * site, and /55 was the unmet-requirement text on the register form, which
+     * is the copy a blocked user most needs to read.
+     *
+     * The replacements are fixed hexes so the ratio cannot drift with whatever
+     * surface ends up behind them. Both clear AA on white and on the tint:
+     *
+     *   --color-csc-ink-muted        5.71:1 on white, 5.02:1 on tint
+     *   --color-csc-ink-subtle       5.31:1 on white, 4.67:1 on tint
+     *   --color-csc-ink-placeholder  4.83:1 on white (inputs are always white)
+     *
+     * muted is body copy and secondary prose; subtle is hints, footnotes,
+     * metadata, inactive progress stages and unmet-requirement text. They are
+     * deliberately close together, and there is no third step below them: the
+     * 4.5:1 floor over --color-csc-blue-tint leaves no room for one. Anything
+     * fainter than subtle would pass on white and fail the moment it were used
+     * on a tinted panel, which is exactly the trap the old opacities fell into.
+     * The hierarchy between the two is carried by size and weight, not by
+     * pushing the grey down until it stops being readable.
+     *
+     * Use these, not an opacity on --color-csc-ink. The one place the codebase
+     * still writes text-csc-ink/40 is AppPagination's disabled arrows and its
+     * aria-hidden ellipsis, where WCAG exempts the control and the faintness is
+     * the affordance — see the comments there.
+     */
+    --color-csc-ink-muted: #5f6774;
+    --color-csc-ink-subtle: #646c78;
+    --color-csc-ink-placeholder: #6b7280;
+
+    /*
      * Semantic status colours, deliberately separate from the brand palette.
      *
      * Inside the signed-in app the brand red is retired, so a red "Cancelled"
@@ -110,9 +148,19 @@
         background: #fff !important;
     }
 
-    /* The application shell */
+    /*
+     * The application shell.
+     *
+     * footer joins this list for the certificate verification result, which is
+     * a page people print and file as evidence. On paper the GOVPH link
+     * columns, the seals and the visitor counter are a second sheet of chrome
+     * wrapped around four lines that matter. Nothing in either footer — the
+     * public one or AppFooter's copyright line — is content a printed record
+     * needs.
+     */
     aside,
     header,
+    footer,
     nav[aria-label='Primary'],
     .print\:hidden {
         display: none !important;

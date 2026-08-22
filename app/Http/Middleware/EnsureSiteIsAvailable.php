@@ -70,6 +70,18 @@ class EnsureSiteIsAvailable
         return Inertia::render('Maintenance', [
             'authenticated' => $request->user() !== null,
             'message' => SiteSetting::current()->maintenance_message,
+            // Passed for the same reason as `authenticated`, and it matters
+            // more here than anywhere: this is the page a participant reads
+            // when nothing else works, so the address on it is the one that
+            // gets written to. It was hard-coded, and hard-coded wrong — a
+            // generic mailbox and the Central Office trunkline in Quezon City,
+            // on the page whose entire job is telling someone in Eastern
+            // Visayas how to reach help.
+            'office' => [
+                'name' => config('office.name'),
+                'email' => config('office.email'),
+                'phone' => config('office.phone'),
+            ],
         ])
             ->toResponse($request)
             ->setStatusCode(Response::HTTP_SERVICE_UNAVAILABLE);

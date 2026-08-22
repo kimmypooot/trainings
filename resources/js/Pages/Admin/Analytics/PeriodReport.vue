@@ -118,7 +118,7 @@ const breakdownExportUrl = computed(
 
         <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-csc-line pt-4">
             <p class="text-sm font-semibold text-csc-blue">{{ periodReport.label }}</p>
-            <p class="text-xs text-csc-ink/60">
+            <p class="text-xs text-csc-ink-subtle">
                 {{ periodReport.conducted }} training(s) conducted, {{ periodReport.participants }} registration(s)
             </p>
         </div>
@@ -133,7 +133,7 @@ const breakdownExportUrl = computed(
                 :class="
                     subtype === 'revenue'
                         ? 'bg-csc-blue text-white'
-                        : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                        : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                 "
                 @click="subtype = 'revenue'"
             >
@@ -147,7 +147,7 @@ const breakdownExportUrl = computed(
                 :class="
                     subtype === 'breakdown'
                         ? 'bg-csc-blue text-white'
-                        : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                        : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                 "
                 @click="subtype = 'breakdown'"
             >

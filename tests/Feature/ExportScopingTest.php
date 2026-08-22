@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\Role;
 use App\Models\Attendance;
@@ -299,6 +300,44 @@ class ExportScopingTest extends TestCase
 
         $this->assertStringContainsString($mine->name, $csv);
         $this->assertStringNotContainsString($theirs->name, $csv);
+    }
+
+    /**
+     * The affected-participants export carries fee state, which makes a leak
+     * here worse than a roster leak: it would disclose another office's
+     * participants *and* what each of them has or has not paid.
+     */
+    public function test_affected_export_is_scoped_and_names_the_fee_state(): void
+    {
+        $training = Training::factory()->paid()->create();
+
+        $mine = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+        $theirs = $this->participantIn($this->officeB, 'BRAVO PARTICIPANT');
+
+        $registration = Registration::factory()->approved()->create([
+            'user_id' => $mine->getKey(), 'training_id' => $training->getKey(),
+        ]);
+        Registration::factory()->approved()->create([
+            'user_id' => $theirs->getKey(), 'training_id' => $training->getKey(),
+        ]);
+
+        Payment::factory()->verified()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $mine->getKey(),
+            'training_id' => $training->getKey(),
+            'payment_method' => PaymentMethod::Promissory,
+        ]);
+
+        $csv = $this->body(
+            $this->actingAs($this->staffFor($this->officeA))
+                ->get("/admin/exports/trainings/{$training->id}/affected")
+                ->assertOk()
+        );
+
+        $this->assertStringContainsString($mine->name, $csv);
+        $this->assertStringNotContainsString($theirs->name, $csv);
+        // Spelled out, because "promissory" alone has been read as money in.
+        $this->assertStringContainsString('Promissory note (unpaid)', $csv);
     }
 
     public function test_roster_export_is_scoped_and_carries_attendance(): void

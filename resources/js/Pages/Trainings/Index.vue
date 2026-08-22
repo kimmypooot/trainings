@@ -179,12 +179,12 @@ const slotsDetail = (training) =>
 
     <AuthenticatedLayout title="Trainings" current="trainings">
         <div class="mx-auto max-w-7xl space-y-5">
-            <p class="text-sm leading-relaxed text-csc-ink/70">
+            <p class="text-sm leading-relaxed text-csc-ink-muted">
                 Programs offered by the Civil Service Commission. Slots are taken on a first-come basis.
             </p>
 
             <!-- Your registrations, at a glance -->
-            <div v-if="registeredCount > 0" class="flex items-center gap-2 rounded-xl border border-csc-line bg-white px-4 py-3 text-sm text-csc-ink/75">
+            <div v-if="registeredCount > 0" class="flex items-center gap-2 rounded-xl border border-csc-line bg-white px-4 py-3 text-sm text-csc-ink-muted">
                 <span>
                     You are registered in
                     <Link
@@ -231,7 +231,7 @@ const slotsDetail = (training) =>
                     />
 
                     <label
-                        class="flex cursor-pointer items-center gap-2 rounded-lg border border-csc-line bg-white px-3 py-2.5 text-sm font-medium text-csc-ink/80 hover:border-csc-blue/40"
+                        class="flex cursor-pointer items-center gap-2 rounded-lg border border-csc-line bg-white px-3 py-2.5 text-sm font-medium text-csc-ink-muted hover:border-csc-blue/40"
                     >
                         <input
                             v-model="openOnly"
@@ -273,10 +273,10 @@ const slotsDetail = (training) =>
                             >
                                 {{ training.title }}
                             </button>
-                            <p class="mt-1 text-xs text-csc-ink/60">{{ training.venue }}</p>
+                            <p class="mt-1 text-xs text-csc-ink-subtle">{{ training.venue }}</p>
                             <!-- The run's range stays on a single row: a dash
                                  joins start and end when the run spans days. -->
-                            <p class="mt-0.5 text-xs text-csc-ink/60">
+                            <p class="mt-0.5 text-xs text-csc-ink-subtle">
                                 {{ training.starts_at }}<template v-if="training.ends_at && training.ends_at !== training.starts_at"> – {{ training.ends_at }}</template>
                             </p>
 
@@ -285,10 +285,10 @@ const slotsDetail = (training) =>
                                     {{ training.mode_label }}
                                 </span>
                                 <AppBadge v-if="training.is_supervisory" status="supervisory" />
-                                <span v-if="training.duration_days" class="text-csc-ink/60">
+                                <span v-if="training.duration_days" class="text-csc-ink-subtle">
                                     {{ training.duration_days }} {{ training.duration_days === 1 ? 'day' : 'days' }}
                                 </span>
-                                <span class="font-medium text-csc-ink/60">
+                                <span class="font-medium text-csc-ink-subtle">
                                     {{ training.payment_amount ? formatFee(training.payment_amount) : 'Free' }}
                                 </span>
                             </div>
@@ -298,16 +298,16 @@ const slotsDetail = (training) =>
                     <div class="mt-auto flex items-center justify-between gap-2 border-t border-csc-line px-5 py-3">
                         <AppBadge v-if="training.is_registered" :status="training.registration_status" />
                         <span v-else-if="training.is_full" class="text-xs font-semibold text-danger">Full</span>
-                        <span v-else-if="training.registration_closed" class="text-xs font-semibold text-csc-ink/50">
+                        <span v-else-if="training.registration_closed" class="text-xs font-semibold text-csc-ink-subtle">
                             Registration closed
                         </span>
-                        <span v-else-if="training.registration_not_yet_open" class="text-xs font-semibold text-csc-ink/60">
+                        <span v-else-if="training.registration_not_yet_open" class="text-xs font-semibold text-csc-ink-subtle">
                             Opens {{ training.registration_opens_at }}
                         </span>
-                        <span v-else-if="training.slots_remaining !== null" class="text-xs font-medium text-csc-ink/60">
+                        <span v-else-if="training.slots_remaining !== null" class="text-xs font-medium text-csc-ink-subtle">
                             {{ training.slots_remaining }} slot{{ training.slots_remaining === 1 ? '' : 's' }} left
                         </span>
-                        <span v-else class="text-xs font-medium text-csc-ink/60">Open</span>
+                        <span v-else class="text-xs font-medium text-csc-ink-subtle">Open</span>
 
                         <button
                             type="button"
@@ -354,54 +354,54 @@ const slotsDetail = (training) =>
                 <template v-if="modalTraining">
                     <dl class="grid gap-x-6 gap-y-5 text-sm sm:grid-cols-2">
                         <div>
-                            <dt class="text-csc-ink/60">Date</dt>
+                            <dt class="text-csc-ink-subtle">Date</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">
                                 {{ modalTraining.starts_at }}
                                 <template v-if="modalTraining.ends_at && modalTraining.ends_at !== modalTraining.starts_at">
-                                    <span class="text-csc-ink/55">– {{ modalTraining.ends_at }}</span>
+                                    <span class="text-csc-ink-subtle">– {{ modalTraining.ends_at }}</span>
                                 </template>
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-csc-ink/60">Venue</dt>
+                            <dt class="text-csc-ink-subtle">Venue</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.venue }}</dd>
                         </div>
                         <div>
-                            <dt class="text-csc-ink/60">Mode</dt>
+                            <dt class="text-csc-ink-subtle">Mode</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.mode_label }}</dd>
                         </div>
                         <div v-if="modalTraining.payment_required">
-                            <dt class="text-csc-ink/60">Fee</dt>
+                            <dt class="text-csc-ink-subtle">Fee</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ formatFee(modalTraining.payment_amount) }}</dd>
                         </div>
                         <div v-if="modalTraining.category">
-                            <dt class="text-csc-ink/60">Curriculum</dt>
+                            <dt class="text-csc-ink-subtle">Curriculum</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.category }}</dd>
                         </div>
                         <div>
-                            <dt class="text-csc-ink/60">Available slots</dt>
+                            <dt class="text-csc-ink-subtle">Available slots</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ slotsDetail(modalTraining) }}</dd>
                         </div>
                         <div v-if="modalTraining.duration_days">
-                            <dt class="text-csc-ink/60">Duration</dt>
+                            <dt class="text-csc-ink-subtle">Duration</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">
                                 {{ modalTraining.duration_days }} day{{ modalTraining.duration_days === 1 ? '' : 's' }}
                             </dd>
                         </div>
                         <div v-if="modalTraining.level_label">
-                            <dt class="text-csc-ink/60">Level</dt>
+                            <dt class="text-csc-ink-subtle">Level</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.level_label }}</dd>
                         </div>
                         <div v-if="modalTraining.registration_not_yet_open && modalTraining.registration_opens_at">
-                            <dt class="text-csc-ink/60">Registration opens</dt>
+                            <dt class="text-csc-ink-subtle">Registration opens</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.registration_opens_at }}</dd>
                         </div>
                         <div v-if="modalTraining.registration_closes_at">
-                            <dt class="text-csc-ink/60">Registration closes</dt>
+                            <dt class="text-csc-ink-subtle">Registration closes</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.registration_closes_at }}</dd>
                         </div>
                         <div v-if="modalTraining.is_registered" class="sm:col-span-2">
-                            <dt class="text-csc-ink/60">Your registration</dt>
+                            <dt class="text-csc-ink-subtle">Your registration</dt>
                             <dd class="mt-1">
                                 <AppBadge :status="modalTraining.registration_status" />
                             </dd>
@@ -426,7 +426,7 @@ const slotsDetail = (training) =>
                     <AppButton v-if="modalTraining.is_registered" :href="modalTraining.url" size="lg" block>
                         View your registration
                     </AppButton>
-                    <p v-else-if="modalTraining.registration_closed" class="text-sm font-medium text-csc-ink/60">
+                    <p v-else-if="modalTraining.registration_closed" class="text-sm font-medium text-csc-ink-subtle">
                         Registration for this training has closed.
                     </p>
                     <p v-else-if="modalTraining.is_full" class="text-sm font-medium text-danger">

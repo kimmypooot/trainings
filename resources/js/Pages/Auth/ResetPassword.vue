@@ -24,6 +24,14 @@ const passwordChecks = computed(() => [
     { label: 'Contains a number', passed: /\d/.test(form.password) },
 ]);
 
+// Spoken in place of the list on every change to it. Phrased as progress
+// rather than as failure, because it fires while someone is still typing.
+const passwordCheckSummary = computed(() => {
+    const met = passwordChecks.value.filter((check) => check.passed).length;
+
+    return `${met} of ${passwordChecks.value.length} password requirements met`;
+});
+
 // Stays silent until both fields hold something, so the field reads calm at rest.
 const confirmationMatches = computed(
     () => form.password_confirmation.length > 0 && form.password === form.password_confirmation
@@ -45,7 +53,7 @@ const submit = () => {
         <h2 class="text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
             Choose a new password
         </h2>
-        <p class="mt-2 text-sm text-csc-ink/70">
+        <p class="mt-2 text-sm text-csc-ink-muted">
             The reset link works once, so pick something you'll remember and confirm it below.
         </p>
 
@@ -87,13 +95,23 @@ const submit = () => {
                     required
                 />
 
-                <!-- Live requirement checks; hidden until the field has a first character -->
-                <ul v-if="form.password.length > 0" class="mt-2 space-y-1.5" aria-live="polite">
+                <!--
+                    Live requirement checks; hidden until the field has a first
+                    character.
+                
+                    The list itself is no longer the live region. It used to be,
+                    which meant every keystroke re-announced all three rules in
+                    full — someone typing an eight-character password with a
+                    screen reader heard twenty-four announcements to learn three
+                    facts. The summary line below is the live region instead, so
+                    what gets spoken is the thing that actually changed.
+                -->
+                <ul v-if="form.password.length > 0" class="mt-2 space-y-1.5" aria-hidden="true">
                     <li
                         v-for="check in passwordChecks"
                         :key="check.label"
                         class="flex items-center gap-2 text-xs"
-                        :class="check.passed ? 'font-medium text-success' : 'text-csc-ink/55'"
+                        :class="check.passed ? 'font-medium text-success' : 'text-csc-ink-subtle'"
                     >
                         <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path v-if="check.passed" d="M5 12.5l4.5 4.5L19 7.5" />
@@ -102,6 +120,8 @@ const submit = () => {
                         {{ check.label }}
                     </li>
                 </ul>
+
+                <p v-if="form.password.length > 0" class="sr-only" role="status">{{ passwordCheckSummary }}</p>
             </div>
 
             <div>
@@ -135,7 +155,7 @@ const submit = () => {
             </AppButton>
         </form>
 
-        <p class="mt-8 text-center text-sm text-csc-ink/70">
+        <p class="mt-8 text-center text-sm text-csc-ink-muted">
             Remembered it?
             <Link href="/login" class="font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink">
                 Back to sign in

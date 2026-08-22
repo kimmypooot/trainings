@@ -202,7 +202,7 @@ async function confirmRelease() {
             </p>
 
             <section v-if="storedRosters.length" class="mt-6">
-                <h2 class="text-2xs font-semibold tracking-wide text-white/50 uppercase">On this device</h2>
+                <h2 class="text-2xs font-semibold tracking-wide text-white/70 uppercase">On this device</h2>
                 <ul class="mt-2 space-y-2">
                     <li
                         v-for="stored in storedRosters"
@@ -228,7 +228,7 @@ async function confirmRelease() {
             </section>
 
             <section class="mt-6">
-                <h2 class="text-2xs font-semibold tracking-wide text-white/50 uppercase">Available trainings</h2>
+                <h2 class="text-2xs font-semibold tracking-wide text-white/70 uppercase">Available trainings</h2>
 
                 <p v-if="!trainings.length" class="mt-2 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
                     No training is scheduled in the current window.
@@ -283,7 +283,7 @@ async function confirmRelease() {
                 <span class="size-2 shrink-0 rounded-full" :class="toneDots[syncTone]" />
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-medium">{{ syncLabel }}</p>
-                    <p v-if="lastSyncedAt" class="truncate text-2xs text-white/50">
+                    <p v-if="lastSyncedAt" class="truncate text-2xs text-white/70">
                         Last sync {{ lastSyncedAt.toLocaleTimeString() }} · {{ syncedCount }} sent in total
                     </p>
                 </div>
@@ -482,7 +482,7 @@ async function confirmRelease() {
                         v-model="search"
                         type="search"
                         placeholder="Search by name or organisation"
-                        class="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2.5 text-sm placeholder:text-white/40 focus:border-white focus:outline-none"
+                        class="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2.5 text-sm placeholder:text-white/70 focus:border-white focus:outline-none"
                     />
                 </label>
 
@@ -498,7 +498,7 @@ async function confirmRelease() {
                     >
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-sm font-medium">{{ row.name }}</p>
-                            <p v-if="row.organization" class="truncate text-2xs text-white/50">{{ row.organization }}</p>
+                            <p v-if="row.organization" class="truncate text-2xs text-white/70">{{ row.organization }}</p>
                         </div>
 
                         <span
@@ -532,7 +532,7 @@ async function confirmRelease() {
                     >
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-sm font-medium">{{ scan.name }}</p>
-                            <p class="truncate text-2xs text-white/50">
+                            <p class="truncate text-2xs text-white/70">
                                 Day {{ scan.training_day }} · {{ scan.time_in }}
                                 <span v-if="scan.by_hand"> · marked by hand</span>
                                 <span v-if="scan.message"> · {{ scan.message }}</span>

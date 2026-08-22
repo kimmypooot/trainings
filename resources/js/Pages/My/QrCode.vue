@@ -36,7 +36,7 @@ const regenerate = () => {
         <div class="mx-auto max-w-lg space-y-5">
             <AppCard>
                 <div class="text-center">
-                    <p class="text-sm text-csc-ink/70">Show this code at the registration desk.</p>
+                    <p class="text-sm text-csc-ink-muted">Show this code at the registration desk.</p>
 
                     <!--
                         The plate is pinned to light: `color-scheme` and
@@ -59,10 +59,10 @@ const regenerate = () => {
                     </div>
 
                     <p class="mt-5 text-lg font-semibold text-csc-blue">{{ participant.name }}</p>
-                    <p v-if="participant.position" class="mt-0.5 text-sm text-csc-ink/70">
+                    <p v-if="participant.position" class="mt-0.5 text-sm text-csc-ink-muted">
                         {{ participant.position }}
                     </p>
-                    <p v-if="participant.organization" class="text-sm text-csc-ink/60">
+                    <p v-if="participant.organization" class="text-sm text-csc-ink-subtle">
                         {{ participant.organization }}
                     </p>
                 </div>
@@ -80,7 +80,7 @@ const regenerate = () => {
                             Save or Print My Code
                         </a>
 
-                        <p class="text-xs leading-relaxed text-csc-ink/60">
+                        <p class="text-xs leading-relaxed text-csc-ink-subtle">
                             This code is unique to you and stays the same across every CSC event. It works without
                             an internet connection once this page has loaded. Do not share screenshots of it.
                         </p>
@@ -89,7 +89,7 @@ const regenerate = () => {
             </AppCard>
 
             <AppCard title="Trouble with your code?">
-                <p class="text-sm leading-relaxed text-csc-ink/70">
+                <p class="text-sm leading-relaxed text-csc-ink-muted">
                     If someone else has a photo of your code, issue a new one. Your old code stops working
                     immediately.
                 </p>

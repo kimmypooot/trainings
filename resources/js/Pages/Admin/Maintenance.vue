@@ -82,7 +82,7 @@ const confirmEnable = () => {
                             <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
                             {{ enabled ? 'Under maintenance' : 'Live' }}
                         </span>
-                        <p v-if="maintenance.updated_by" class="mt-2 text-xs text-csc-ink/60">
+                        <p v-if="maintenance.updated_by" class="mt-2 text-xs text-csc-ink-subtle">
                             Last changed by {{ maintenance.updated_by }}{{ maintenance.updated_at ? ` on ${maintenance.updated_at}` : '' }}
                         </p>
                     </div>

@@ -184,7 +184,7 @@ const convert = (id) => {
                     :class="
                         active === tab.key
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="active = tab.key"
                 >
@@ -217,13 +217,13 @@ const convert = (id) => {
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">{{ item.participant }}</p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">{{ item.training }}</p>
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ item.training }}</p>
                             </div>
                             <AppBadge :status="item.status" />
                         </div>
 
-                        <p class="mt-3 text-sm text-csc-ink/80">{{ item.reason }}</p>
-                        <p v-if="item.review_remarks" class="mt-1.5 text-xs text-csc-ink/55">
+                        <p class="mt-3 text-sm text-csc-ink-muted">{{ item.reason }}</p>
+                        <p v-if="item.review_remarks" class="mt-1.5 text-xs text-csc-ink-subtle">
                             Remarks: {{ item.review_remarks }}
                         </p>
 
@@ -257,15 +257,15 @@ const convert = (id) => {
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">{{ item.title }}</p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
                                     Requested by {{ item.requester ?? '—' }} · {{ item.submitted_at }}
                                 </p>
                             </div>
                             <AppBadge :status="item.status" />
                         </div>
 
-                        <p class="mt-3 text-sm text-csc-ink/80">{{ item.justification }}</p>
-                        <p class="mt-1.5 text-xs text-csc-ink/55">
+                        <p class="mt-3 text-sm text-csc-ink-muted">{{ item.justification }}</p>
+                        <p class="mt-1.5 text-xs text-csc-ink-subtle">
                             <template v-if="item.category">{{ item.category }} · </template>
                             <template v-if="item.expected_participants">
                                 ~{{ item.expected_participants }} participants ·
@@ -292,7 +292,7 @@ const convert = (id) => {
                                 Create Draft Training
                             </AppButton>
 
-                            <p v-else-if="item.converted" class="text-xs text-csc-ink/55">
+                            <p v-else-if="item.converted" class="text-xs text-csc-ink-subtle">
                                 A draft training has been created from this request.
                             </p>
                         </div>
@@ -314,14 +314,14 @@ const convert = (id) => {
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">{{ item.title }}</p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
                                     {{ item.participant }} · {{ item.training }}
                                 </p>
                             </div>
                             <AppBadge :status="item.status" />
                         </div>
 
-                        <p v-if="item.description" class="mt-3 text-sm text-csc-ink/80">
+                        <p v-if="item.description" class="mt-3 text-sm text-csc-ink-muted">
                             {{ item.description }}
                         </p>
 
@@ -332,7 +332,7 @@ const convert = (id) => {
                             >
                                 {{ item.filename }}
                             </a>
-                            <span class="text-xs text-csc-ink/55">{{ item.size }}</span>
+                            <span class="text-xs text-csc-ink-subtle">{{ item.size }}</span>
                         </div>
 
                         <div v-if="item.status === 'pending'" class="mt-4 flex flex-wrap gap-2">

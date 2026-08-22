@@ -26,6 +26,7 @@ const props = defineProps({
     officeBreakdown: { type: Array, default: () => [] },
     revenue: { type: Object, default: () => ({}) },
     can: { type: Object, default: () => ({}) },
+    rescheduledTo: { type: Object, default: null },
     paymentMethods: { type: Array, default: () => [] },
     collectingOfficers: { type: Array, default: () => [] },
 });
@@ -210,7 +211,7 @@ const attendanceChoices = computed(() =>
             late: 'text-warning hover:bg-warning-soft',
             absent: 'text-danger hover:bg-danger-soft',
             excused: 'text-info hover:bg-info-soft',
-        }[option.value] ?? 'text-csc-ink/60 hover:bg-csc-blue-tint',
+        }[option.value] ?? 'text-csc-ink-subtle hover:bg-csc-blue-tint',
     }))
 );
 
@@ -711,6 +712,31 @@ const printedAt = new Date().toLocaleString();
                 <AppButton variant="ghost" size="sm" icon="print" @click="printAttendanceSheet">
                     Print Attendance Sheet
                 </AppButton>
+                <!--
+                    Two doors to the same workflow, and which one is offered
+                    depends on whether the replacement run exists yet. Once it
+                    does, the useful screen is the list of people stranded by
+                    it — offering "Reschedule" again would invite a second
+                    replacement nobody meant to create.
+                -->
+                <AppButton
+                    v-if="can.reschedule && rescheduledTo"
+                    variant="ghost"
+                    size="sm"
+                    icon="users"
+                    :href="`/admin/trainings/${training.id}/affected`"
+                >
+                    Affected Participants
+                </AppButton>
+                <AppButton
+                    v-else-if="can.reschedule"
+                    variant="ghost"
+                    size="sm"
+                    icon="calendar"
+                    :href="`/admin/trainings/${training.id}/reschedule`"
+                >
+                    Reschedule This Run
+                </AppButton>
             </div>
 
             <AppAlert v-for="message in errors" :key="message" tone="danger">{{ message }}</AppAlert>
@@ -720,35 +746,49 @@ const printedAt = new Date().toLocaleString();
             </AppAlert>
 
             <AppCard :title="training.title" :subtitle="`${training.starts_at} · ${training.venue}`" class="print:hidden">
-                <div class="grid grid-cols-2 gap-4 sm:grid-cols-7">
+                <!--
+                    Six tiles always, plus one each for a supervisory course and
+                    a run that collects evaluations — so the track has to hold
+                    eight without the last one wrapping alone onto its own row.
+                -->
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
                     <div>
                         <p class="text-2xl font-bold text-warning">{{ pendingCount }}</p>
-                        <p class="text-xs text-csc-ink/60">Pending</p>
+                        <p class="text-xs text-csc-ink-subtle">Pending</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-csc-blue">{{ summary.checked_in_today }}</p>
-                        <p class="text-xs text-csc-ink/60">Checked in today</p>
+                        <p class="text-xs text-csc-ink-subtle">Checked in today</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-csc-blue">{{ summary.active }}</p>
-                        <p class="text-xs text-csc-ink/60">Holding a slot</p>
+                        <p class="text-xs text-csc-ink-subtle">Holding a slot</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-success">{{ summary.completed }}</p>
-                        <p class="text-xs text-csc-ink/60">Completed</p>
+                        <p class="text-xs text-csc-ink-subtle">Completed</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-danger">{{ summary.cancelled }}</p>
-                        <p class="text-xs text-csc-ink/60">Cancelled</p>
+                        <p class="text-xs text-csc-ink-subtle">Cancelled</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-warning">{{ summary.with_food_restrictions }}</p>
-                        <p class="text-xs text-csc-ink/60">Food restrictions</p>
+                        <p class="text-xs text-csc-ink-subtle">Food restrictions</p>
                     </div>
                     <!-- Only meaningful on a supervisory course. -->
                     <div v-if="training.is_supervisory">
                         <p class="text-2xl font-bold text-warning">{{ summary.documents_to_review }}</p>
-                        <p class="text-xs text-csc-ink/60">Docs to verify</p>
+                        <p class="text-xs text-csc-ink-subtle">Docs to verify</p>
+                    </div>
+                    <!--
+                        Participants still owing an evaluation. Scoped to this
+                        office's own people, like every other figure here — it is
+                        a chase list, not a measure of the training.
+                    -->
+                    <div v-if="training.collects_evaluations">
+                        <p class="text-2xl font-bold text-warning">{{ summary.evaluations_outstanding }}</p>
+                        <p class="text-xs text-csc-ink-subtle">Evaluations owed</p>
                     </div>
                 </div>
             </AppCard>
@@ -772,7 +812,7 @@ const printedAt = new Date().toLocaleString();
                         This station records nothing. Scans are answered as they would be live, but no
                         attendance is saved.
                     </p>
-                    <p class="mt-1 text-xs leading-relaxed text-csc-ink/70">
+                    <p class="mt-1 text-xs leading-relaxed text-csc-ink-muted">
                         Copy each to whoever is working the door. Sending the code by a different
                         route than the link is safer, since either one alone is useless. The code
                         is shown once and cannot be recovered — if it is lost, issue a new station.
@@ -790,7 +830,7 @@ const printedAt = new Date().toLocaleString();
                             </p>
                             <button
                                 type="button"
-                                class="shrink-0 rounded-md p-1.5 text-csc-ink/50 transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
+                                class="shrink-0 rounded-md p-1.5 text-csc-ink-subtle transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
                                 :title="copiedField === 'url' ? 'Link copied' : 'Copy link'"
                                 @click="copyField('url', newStation.url)"
                             >
@@ -807,7 +847,7 @@ const printedAt = new Date().toLocaleString();
                             </p>
                             <button
                                 type="button"
-                                class="shrink-0 rounded-md p-1.5 text-csc-ink/50 transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
+                                class="shrink-0 rounded-md p-1.5 text-csc-ink-subtle transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
                                 :title="copiedField === 'code' ? 'Code copied' : 'Copy code'"
                                 @click="copyField('code', newStation.code)"
                             >
@@ -819,13 +859,13 @@ const printedAt = new Date().toLocaleString();
                         </div>
                     </div>
 
-                    <p class="mt-3 text-xs text-csc-ink/60">Expires {{ newStation.expires_at }}</p>
+                    <p class="mt-3 text-xs text-csc-ink-subtle">Expires {{ newStation.expires_at }}</p>
                 </div>
 
                 <!-- Issue -->
                 <div class="mt-4 flex flex-wrap items-end gap-3">
                     <label class="min-w-48 flex-1">
-                        <span class="text-xs font-medium text-csc-ink/70">Label (optional)</span>
+                        <span class="text-xs font-medium text-csc-ink-muted">Label (optional)</span>
                         <input
                             v-model="stationLabel"
                             type="text"
@@ -847,7 +887,7 @@ const printedAt = new Date().toLocaleString();
                         type="checkbox"
                         class="mt-0.5 size-4 rounded border-csc-ink/30 text-csc-blue focus:ring-csc-blue"
                     />
-                    <span class="text-xs leading-relaxed text-csc-ink/70">
+                    <span class="text-xs leading-relaxed text-csc-ink-muted">
                         <strong class="font-semibold text-csc-ink">Practice station</strong> — scans are
                         checked against the real roster and answered exactly as they would be, but no
                         attendance is ever recorded. Use this to prove phones, cameras and signal at the
@@ -867,7 +907,7 @@ const printedAt = new Date().toLocaleString();
                                 {{ link.label ?? 'Unlabelled station' }}
                                 <AppBadge v-if="link.is_test" tone="warning" class="ml-1">Practice</AppBadge>
                             </p>
-                            <p class="truncate text-xs text-csc-ink/60">
+                            <p class="truncate text-xs text-csc-ink-subtle">
                                 Expires {{ link.expires_at }} ·
                                 <template v-if="link.last_used_at">last used {{ link.last_used_at }}</template>
                                 <template v-else>never used</template>
@@ -878,7 +918,7 @@ const printedAt = new Date().toLocaleString();
                     </li>
                 </ul>
 
-                <p v-else class="mt-4 border-t border-csc-ink/10 pt-4 text-xs text-csc-ink/60">
+                <p v-else class="mt-4 border-t border-csc-ink/10 pt-4 text-xs text-csc-ink-subtle">
                     No station is currently active for this training.
                 </p>
             </AppCard>
@@ -916,27 +956,27 @@ const printedAt = new Date().toLocaleString();
 
                 <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
                     <div>
-                        <p class="text-xs text-csc-ink/60">Assessed</p>
+                        <p class="text-xs text-csc-ink-subtle">Assessed</p>
                         <p class="mt-0.5 text-lg font-semibold text-csc-ink">₱{{ money(revenue.gross ?? 0) }}</p>
                     </div>
                     <div>
-                        <p class="text-xs text-csc-ink/60">PRIME-HRM Discount</p>
+                        <p class="text-xs text-csc-ink-subtle">PRIME-HRM Discount</p>
                         <p class="mt-0.5 text-lg font-semibold text-warning">
                             − ₱{{ money(revenue.discount ?? 0) }}
                         </p>
                     </div>
                     <div>
-                        <p class="text-xs text-csc-ink/60">Collected</p>
+                        <p class="text-xs text-csc-ink-subtle">Collected</p>
                         <p class="mt-0.5 text-lg font-semibold text-csc-blue">
                             ₱{{ money(revenue.collected ?? 0) }}
                         </p>
                     </div>
                     <div>
-                        <p class="text-xs text-csc-ink/60">On Promissory Note</p>
-                        <p class="mt-0.5 text-lg font-semibold text-csc-ink/70">
+                        <p class="text-xs text-csc-ink-subtle">On Promissory Note</p>
+                        <p class="mt-0.5 text-lg font-semibold text-csc-ink-muted">
                             ₱{{ money(revenue.promissory ?? 0) }}
                         </p>
-                        <p v-if="revenue.promissory_count" class="text-2xs text-csc-ink/55">
+                        <p v-if="revenue.promissory_count" class="text-2xs text-csc-ink-subtle">
                             {{ revenue.promissory_count }} outstanding
                         </p>
                     </div>
@@ -951,24 +991,24 @@ const printedAt = new Date().toLocaleString();
                         <table class="w-full text-left text-sm">
                             <thead class="border-b border-csc-line text-xs uppercase">
                                 <tr>
-                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">Participant</th>
-                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">OR No.</th>
-                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">Participant</th>
+                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">OR No.</th>
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
                                         Full Fee
                                     </th>
-                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
                                         Discount
                                     </th>
-                                    <th scope="col" class="py-2 text-right font-semibold text-csc-ink/70">Paid</th>
+                                    <th scope="col" class="py-2 text-right font-semibold text-csc-ink-muted">Paid</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-csc-line">
                                 <tr v-for="row in revenue.discounted" :key="row.id">
-                                    <td class="py-2.5 pr-4 text-csc-ink/80">{{ row.participant }}</td>
-                                    <td class="py-2.5 pr-4 font-mono text-xs text-csc-ink/60">
+                                    <td class="py-2.5 pr-4 text-csc-ink-muted">{{ row.participant }}</td>
+                                    <td class="py-2.5 pr-4 font-mono text-xs text-csc-ink-subtle">
                                         {{ row.or_number ?? '—' }}
                                     </td>
-                                    <td class="py-2.5 pr-4 text-right text-csc-ink/70">₱{{ money(row.gross) }}</td>
+                                    <td class="py-2.5 pr-4 text-right text-csc-ink-muted">₱{{ money(row.gross) }}</td>
                                     <td class="py-2.5 pr-4 text-right font-medium text-warning">
                                         − ₱{{ money(row.discount) }}
                                     </td>
@@ -995,34 +1035,34 @@ const printedAt = new Date().toLocaleString();
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-csc-line text-xs uppercase">
                             <tr>
-                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">Field Office</th>
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">Field Office</th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
                                     Participants
                                 </th>
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">Paid</th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">Paid</th>
                                 <!-- Money promised but not received. Kept as its
                                      own column, as v1 had it: folded into Paid it
                                      reads as an office that owes nothing. -->
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
                                     On Note
                                 </th>
-                                <th scope="col" class="py-2 text-right font-semibold text-csc-ink/70">Outstanding</th>
+                                <th scope="col" class="py-2 text-right font-semibold text-csc-ink-muted">Outstanding</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
                             <tr v-for="office in officeBreakdown" :key="office.label">
-                                <td class="py-2.5 pr-4 text-csc-ink/80">{{ office.label }}</td>
+                                <td class="py-2.5 pr-4 text-csc-ink-muted">{{ office.label }}</td>
                                 <td class="py-2.5 pr-4 text-right font-medium text-csc-ink">{{ office.count }}</td>
-                                <td class="py-2.5 pr-4 text-right text-csc-ink/70">{{ office.settled }}</td>
+                                <td class="py-2.5 pr-4 text-right text-csc-ink-muted">{{ office.settled }}</td>
                                 <td
                                     class="py-2.5 pr-4 text-right font-medium"
-                                    :class="office.promissory ? 'text-info' : 'text-csc-ink/50'"
+                                    :class="office.promissory ? 'text-info' : 'text-csc-ink-subtle'"
                                 >
                                     {{ office.promissory }}
                                 </td>
                                 <td
                                     class="py-2.5 text-right font-medium"
-                                    :class="office.outstanding ? 'text-warning' : 'text-csc-ink/50'"
+                                    :class="office.outstanding ? 'text-warning' : 'text-csc-ink-subtle'"
                                 >
                                     {{ office.outstanding }}
                                 </td>
@@ -1075,14 +1115,14 @@ const printedAt = new Date().toLocaleString();
                             :class="
                                 statusFilter === chip
                                     ? 'bg-csc-blue text-white shadow-sm'
-                                    : 'bg-csc-blue-tint/60 text-csc-ink/70 hover:text-csc-ink'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink-muted hover:text-csc-ink'
                             "
                             @click="statusFilter = chip"
                         >
                             {{ chip === 'all' ? 'All' : chip }}
                             <span
                                 class="ml-1 text-xs"
-                                :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                                :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
                             >
                                 {{ statusCounts[chip] ?? 0 }}
                             </span>
@@ -1118,7 +1158,7 @@ const printedAt = new Date().toLocaleString();
                         v-if="training.days.length > 1"
                         class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3 print:hidden"
                     >
-                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink/60 uppercase">
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                             Marking
                         </span>
                         <button
@@ -1154,7 +1194,7 @@ const printedAt = new Date().toLocaleString();
                         v-if="training.is_supervisory"
                         class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3"
                     >
-                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink/50 uppercase">
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                             Document
                         </span>
                         <button
@@ -1165,14 +1205,14 @@ const printedAt = new Date().toLocaleString();
                             :class="
                                 docFilter === chip
                                     ? 'bg-csc-blue text-white shadow-sm'
-                                    : 'bg-csc-blue-tint/60 text-csc-ink/70 hover:text-csc-ink'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink-muted hover:text-csc-ink'
                             "
                             @click="docFilter = chip"
                         >
                             {{ chip === 'all' ? 'All' : chip }}
                             <span
                                 class="ml-1 text-xs"
-                                :class="docFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                                :class="docFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
                             >
                                 {{ docStatusCounts[chip] ?? 0 }}
                             </span>
@@ -1216,7 +1256,7 @@ const printedAt = new Date().toLocaleString();
 
                     <button
                         type="button"
-                        class="rounded text-xs font-medium text-csc-ink/60 underline hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded text-xs font-medium text-csc-ink-subtle underline hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         @click="selected = new Set()"
                     >
                         Clear
@@ -1285,7 +1325,7 @@ const printedAt = new Date().toLocaleString();
                                         @change="toggleAll"
                                     />
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1294,7 +1334,7 @@ const printedAt = new Date().toLocaleString();
                                         Participant{{ sortIndicator('name') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1303,7 +1343,7 @@ const printedAt = new Date().toLocaleString();
                                         Agency{{ sortIndicator('organization') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1312,7 +1352,7 @@ const printedAt = new Date().toLocaleString();
                                         Field Office{{ sortIndicator('field_office') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1321,7 +1361,7 @@ const printedAt = new Date().toLocaleString();
                                         Status{{ sortIndicator('status') }}
                                     </button>
                                 </th>
-                                <th v-if="training.is_supervisory" scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th v-if="training.is_supervisory" scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1330,16 +1370,35 @@ const printedAt = new Date().toLocaleString();
                                         Document{{ sortIndicator('supervisory_document.status_label') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     Attendance
                                     <span
                                         v-if="training.days.length > 1"
-                                        class="ml-1 font-normal text-csc-ink/50 normal-case"
+                                        class="ml-1 font-normal text-csc-ink-subtle normal-case"
                                     >
                                         · {{ activeDayLabel }}
                                     </span>
                                 </th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Action</th>
+                                <!--
+                                    Only where there is a panel to evaluate. A
+                                    run with no experts assigned has nothing to
+                                    chase, and a column of dashes reads as a
+                                    fault rather than as "not applicable".
+                                -->
+                                <th
+                                    v-if="training.collects_evaluations"
+                                    scope="col"
+                                    class="px-5 py-3 font-semibold text-csc-ink-muted"
+                                >
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('evaluation.submitted')"
+                                    >
+                                        Evaluation{{ sortIndicator('evaluation.submitted') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
@@ -1360,22 +1419,22 @@ const printedAt = new Date().toLocaleString();
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">{{ registration.name }}</p>
-                                    <p class="mt-0.5 text-xs text-csc-ink/60">{{ registration.email }}</p>
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ registration.email }}</p>
                                 </td>
-                                <td class="px-5 py-3.5 text-csc-ink/75">
+                                <td class="px-5 py-3.5 text-csc-ink-muted">
                                     {{ registration.organization ?? '—' }}
-                                    <p v-if="registration.position" class="mt-0.5 text-xs text-csc-ink/55">
+                                    <p v-if="registration.position" class="mt-0.5 text-xs text-csc-ink-subtle">
                                         {{ registration.position }}
                                     </p>
                                 </td>
-                                <td class="px-5 py-3.5 text-xs text-csc-ink/70">
+                                <td class="px-5 py-3.5 text-xs text-csc-ink-muted">
                                     {{ registration.field_office ?? '—' }}
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <AppBadge :status="registration.status" />
                                     <p
                                         v-if="registration.review_remarks"
-                                        class="mt-1 max-w-48 text-xs text-csc-ink/55"
+                                        class="mt-1 max-w-48 text-xs text-csc-ink-subtle"
                                     >
                                         {{ registration.review_remarks }}
                                     </p>
@@ -1414,13 +1473,13 @@ const printedAt = new Date().toLocaleString();
                                         </div>
                                         <p
                                             v-if="registration.supervisory_document.remarks"
-                                            class="mt-1 max-w-48 text-xs text-csc-ink/55"
+                                            class="mt-1 max-w-48 text-xs text-csc-ink-subtle"
                                         >
                                             {{ registration.supervisory_document.remarks }}
                                         </p>
                                         <p
                                             v-else-if="registration.supervisory_document.reviewed_by"
-                                            class="mt-1 text-2xs text-csc-ink/45"
+                                            class="mt-1 text-2xs text-csc-ink-subtle"
                                         >
                                             {{ registration.supervisory_document.reviewed_by }}
                                             <template v-if="registration.supervisory_document.reviewed_at">
@@ -1428,7 +1487,7 @@ const printedAt = new Date().toLocaleString();
                                             </template>
                                         </p>
                                     </template>
-                                    <span v-else class="text-xs text-csc-ink/50">—</span>
+                                    <span v-else class="text-xs text-csc-ink-subtle">—</span>
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <template v-if="isMarkable(registration)">
@@ -1465,7 +1524,7 @@ const printedAt = new Date().toLocaleString();
                                         <button
                                             v-if="training.duration_days > 1"
                                             type="button"
-                                            class="mt-1 block rounded text-2xs text-csc-ink/55 hover:text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            class="mt-1 block rounded text-2xs text-csc-ink-subtle hover:text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                             @click="correcting = registration.id"
                                         >
                                             {{ registration.credited_days }} of {{ training.duration_days }} days ·
@@ -1473,7 +1532,36 @@ const printedAt = new Date().toLocaleString();
                                         </button>
                                     </template>
 
-                                    <span v-else class="text-xs text-csc-ink/50">—</span>
+                                    <span v-else class="text-xs text-csc-ink-subtle">—</span>
+                                </td>
+                                <td v-if="training.collects_evaluations" class="px-5 py-3.5">
+                                    <template v-if="registration.evaluation.expected">
+                                        <p
+                                            class="text-xs font-semibold"
+                                            :class="
+                                                registration.evaluation.outstanding.length
+                                                    ? 'text-warning'
+                                                    : 'text-success'
+                                            "
+                                        >
+                                            {{ registration.evaluation.submitted }} of
+                                            {{ registration.evaluation.expected }}
+                                        </p>
+                                        <!--
+                                            Naming the days is the point of the
+                                            column: "day 2 outstanding" is what
+                                            an office can act on, where a bare
+                                            1/3 only says something is missing.
+                                        -->
+                                        <p
+                                            v-if="registration.evaluation.outstanding.length"
+                                            class="mt-0.5 text-2xs text-csc-ink-subtle"
+                                        >
+                                            Day{{ registration.evaluation.outstanding.length === 1 ? '' : 's' }}
+                                            {{ registration.evaluation.outstanding.join(', ') }} outstanding
+                                        </p>
+                                    </template>
+                                    <span v-else class="text-xs text-csc-ink-subtle">—</span>
                                 </td>
                                 <td class="px-5 py-3.5 text-right whitespace-nowrap">
                                     <template v-if="registration.status === 'pending'">
@@ -1514,7 +1602,7 @@ const printedAt = new Date().toLocaleString();
                                     <template v-else-if="registration.status === 'completed'">
                                         <span
                                             v-if="registration.certificate_number"
-                                            class="font-mono text-2xs text-csc-ink/60"
+                                            class="font-mono text-2xs text-csc-ink-subtle"
                                         >
                                             {{ registration.certificate_number }}
                                         </span>
@@ -1540,7 +1628,7 @@ const printedAt = new Date().toLocaleString();
                                         </AppButton>
                                     </template>
 
-                                    <span v-else class="text-xs text-csc-ink/50">—</span>
+                                    <span v-else class="text-xs text-csc-ink-subtle">—</span>
 
                                     <template v-if="canRecordPayment(registration)">
                                         <span class="px-2 text-csc-line">|</span>
@@ -1554,7 +1642,7 @@ const printedAt = new Date().toLocaleString();
                                     </template>
                                     <span
                                         v-else-if="registration.payment.or_number"
-                                        class="ml-2 font-mono text-2xs text-csc-ink/60"
+                                        class="ml-2 font-mono text-2xs text-csc-ink-subtle"
                                         :title="`Paid by ${registration.payment.method}`"
                                     >
                                         {{ registration.payment.or_number }}
@@ -1604,12 +1692,12 @@ const printedAt = new Date().toLocaleString();
                                     <p class="text-sm font-semibold text-csc-ink">{{ registration.name }}</p>
                                     <AppBadge :status="registration.status" />
                                 </div>
-                                <p class="mt-0.5 text-xs text-csc-ink/60">{{ registration.email }}</p>
-                                <p class="mt-1 text-xs text-csc-ink/70">
+                                <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ registration.email }}</p>
+                                <p class="mt-1 text-xs text-csc-ink-muted">
                                     {{ registration.organization ?? '—' }}
                                     <template v-if="registration.position"> · {{ registration.position }}</template>
                                 </p>
-                                <p v-if="registration.field_office" class="text-xs text-csc-ink/55">
+                                <p v-if="registration.field_office" class="text-xs text-csc-ink-subtle">
                                     {{ registration.field_office }}
                                 </p>
                                 <div
@@ -1643,18 +1731,18 @@ const printedAt = new Date().toLocaleString();
                                 </div>
                                 <p
                                     v-if="training.is_supervisory && registration.supervisory_document?.remarks"
-                                    class="mt-1 text-xs text-csc-ink/55"
+                                    class="mt-1 text-xs text-csc-ink-subtle"
                                 >
                                     {{ registration.supervisory_document.remarks }}
                                 </p>
-                                <p v-if="registration.review_remarks" class="mt-1 text-xs text-csc-ink/55">
+                                <p v-if="registration.review_remarks" class="mt-1 text-xs text-csc-ink-subtle">
                                     {{ registration.review_remarks }}
                                 </p>
                             </div>
                         </div>
 
                         <div v-if="isMarkable(registration)" class="mt-3 border-t border-csc-line pt-3">
-                            <p class="mb-1.5 text-2xs font-semibold tracking-wide text-csc-ink/50 uppercase">
+                            <p class="mb-1.5 text-2xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                                 Attendance · {{ activeDayLabel }}
                             </p>
                             <div
@@ -1683,7 +1771,7 @@ const printedAt = new Date().toLocaleString();
                             <button
                                 v-if="training.duration_days > 1"
                                 type="button"
-                                class="mt-2 block rounded text-2xs text-csc-ink/55 hover:text-csc-blue hover:underline"
+                                class="mt-2 block rounded text-2xs text-csc-ink-subtle hover:text-csc-blue hover:underline"
                                 @click="correcting = registration.id"
                             >
                                 {{ registration.credited_days }} of {{ training.duration_days }} days · all days
@@ -1729,7 +1817,7 @@ const printedAt = new Date().toLocaleString();
                             <template v-else-if="registration.status === 'completed'">
                                 <span
                                     v-if="registration.certificate_number"
-                                    class="font-mono text-2xs text-csc-ink/60"
+                                    class="font-mono text-2xs text-csc-ink-subtle"
                                 >
                                     {{ registration.certificate_number }}
                                 </span>
@@ -1746,7 +1834,7 @@ const printedAt = new Date().toLocaleString();
                                 </AppButton>
                             </template>
 
-                            <span v-else class="text-xs text-csc-ink/50">—</span>
+                            <span v-else class="text-xs text-csc-ink-subtle">—</span>
                         </div>
                     </li>
                 </ul>
@@ -1887,7 +1975,7 @@ const printedAt = new Date().toLocaleString();
                     <div>
                         <p class="text-sm font-medium text-csc-ink">
                             Day {{ day.day }}
-                            <span class="ml-1 text-xs font-normal text-csc-ink/60">{{ day.label }}</span>
+                            <span class="ml-1 text-xs font-normal text-csc-ink-subtle">{{ day.label }}</span>
                         </p>
                         <p v-if="day.is_today" class="text-2xs font-semibold text-csc-blue uppercase">Today</p>
                     </div>
@@ -1953,11 +2041,11 @@ const printedAt = new Date().toLocaleString();
                         class="mt-3 space-y-1 border-t border-csc-line pt-3 text-xs"
                     >
                         <div class="flex justify-between">
-                            <dt class="text-csc-ink/60">Full fee</dt>
+                            <dt class="text-csc-ink-subtle">Full fee</dt>
                             <dd class="font-medium text-csc-ink">₱{{ money(primeHrm.gross) }}</dd>
                         </div>
                         <div class="flex justify-between">
-                            <dt class="text-csc-ink/60">Discount (20%)</dt>
+                            <dt class="text-csc-ink-subtle">Discount (20%)</dt>
                             <dd class="font-medium text-warning">− ₱{{ money(primeHrm.discount) }}</dd>
                         </div>
                         <div class="flex justify-between border-t border-csc-line pt-1">

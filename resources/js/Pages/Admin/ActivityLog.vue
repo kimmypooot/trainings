@@ -92,10 +92,10 @@ const toggle = (id) => {
                             <p class="min-w-0 text-sm text-csc-ink">
                                 {{ log.description || log.action }}
                             </p>
-                            <p class="shrink-0 text-xs text-csc-ink/55">{{ log.at }}</p>
+                            <p class="shrink-0 text-xs text-csc-ink-subtle">{{ log.at }}</p>
                         </div>
 
-                        <p class="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-csc-ink/55">
+                        <p class="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-csc-ink-subtle">
                             <span class="font-mono">{{ log.action }}</span>
                             <span>·</span>
                             <span>{{ log.actor }}</span>

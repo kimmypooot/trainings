@@ -154,12 +154,12 @@ const copyVerifyUrl = async (certificate) => {
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Certificate</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Participant</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Training</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Delivery</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Activity</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Actions</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Certificate</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Participant</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Training</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Delivery</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Activity</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
@@ -171,25 +171,25 @@ const copyVerifyUrl = async (certificate) => {
                                     >
                                         {{ certificate.number }}
                                     </Link>
-                                    <p class="mt-0.5 text-xs text-csc-ink/60">Issued {{ certificate.issued_at }}</p>
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">Issued {{ certificate.issued_at }}</p>
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">{{ certificate.participant }}</p>
-                                    <p class="mt-0.5 text-xs text-csc-ink/60">{{ certificate.email }}</p>
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ certificate.email }}</p>
                                 </td>
-                                <td class="px-5 py-3.5 text-csc-ink/75">{{ certificate.training }}</td>
+                                <td class="px-5 py-3.5 text-csc-ink-muted">{{ certificate.training }}</td>
                                 <td class="px-5 py-3.5 text-xs">
-                                    <span v-if="certificate.email_sent_at" class="text-csc-ink/70">
+                                    <span v-if="certificate.email_sent_at" class="text-csc-ink-muted">
                                         Emailed {{ certificate.email_sent_at }}
                                     </span>
                                     <span v-else class="font-medium text-warning">Not yet emailed</span>
                                 </td>
-                                <td class="px-5 py-3.5 text-xs text-csc-ink/70">
+                                <td class="px-5 py-3.5 text-xs text-csc-ink-muted">
                                     {{ certificate.verifications }} verification{{
                                         certificate.verifications === 1 ? '' : 's'
                                     }}
-                                    <p class="mt-0.5 text-csc-ink/55">{{ certificate.downloads }} download(s)</p>
-                                    <p v-if="certificate.last_verified_at" class="mt-0.5 text-csc-ink/55">
+                                    <p class="mt-0.5 text-csc-ink-subtle">{{ certificate.downloads }} download(s)</p>
+                                    <p v-if="certificate.last_verified_at" class="mt-0.5 text-csc-ink-subtle">
                                         Last {{ certificate.last_verified_at }}
                                     </p>
                                 </td>
@@ -237,8 +237,8 @@ const copyVerifyUrl = async (certificate) => {
                             {{ certificate.number }}
                         </Link>
                         <p class="mt-1 text-sm font-medium text-csc-ink">{{ certificate.participant }}</p>
-                        <p class="mt-0.5 text-xs text-csc-ink/60">{{ certificate.training }}</p>
-                        <p class="mt-2 text-xs text-csc-ink/60">
+                        <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ certificate.training }}</p>
+                        <p class="mt-2 text-xs text-csc-ink-subtle">
                             Issued {{ certificate.issued_at }} ·
                             {{ certificate.verifications }} verification(s)
                         </p>

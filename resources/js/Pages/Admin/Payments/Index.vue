@@ -337,7 +337,7 @@ const rejectRefund = (refund) => {
                     :class="
                         active === 'payments'
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="active = 'payments'"
                 >
@@ -351,7 +351,7 @@ const rejectRefund = (refund) => {
                     :class="
                         active === 'refunds'
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="active = 'refunds'"
                 >
@@ -436,14 +436,14 @@ const rejectRefund = (refund) => {
                         :aria-selected="statusFilter === chip"
                         class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         :class="
-                            statusFilter === chip ? 'bg-csc-blue text-white shadow-sm' : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            statusFilter === chip ? 'bg-csc-blue text-white shadow-sm' : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                         "
                         @click="filterBy(chip)"
                     >
                         {{ statuses.find((s) => s.value === chip)?.label ?? chip }}
                         <span
                             class="ml-1 text-xs"
-                            :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                            :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
                         >
                             {{ paymentCounts[chip] ?? 0 }}
                         </span>
@@ -493,7 +493,7 @@ const rejectRefund = (refund) => {
                                 participant, and unlike the roster's bulk
                                 actions there is no undo window behind it.
                             -->
-                            <p class="w-full text-xs text-csc-ink/60">
+                            <p class="w-full text-xs text-csc-ink-subtle">
                                 Each note is verified and its registration confirmed. The fee stays
                                 outstanding until the money is collected, and this cannot be undone.
                             </p>
@@ -514,7 +514,7 @@ const rejectRefund = (refund) => {
                                                 @change="toggleAllClearable"
                                             />
                                         </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                             <button
                                                 type="button"
                                                 class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -523,8 +523,8 @@ const rejectRefund = (refund) => {
                                                 Participant{{ sortIndicator('participant') }}
                                             </button>
                                         </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Training</th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Training</th>
+                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                             <button
                                                 type="button"
                                                 class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -533,7 +533,7 @@ const rejectRefund = (refund) => {
                                                 Amount{{ sortIndicator('amount') }}
                                             </button>
                                         </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                             <button
                                                 type="button"
                                                 class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -542,8 +542,8 @@ const rejectRefund = (refund) => {
                                                 Paid on{{ sortIndicator('payment_date_ts') }}
                                             </button>
                                         </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">OR number</th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">OR number</th>
+                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                             <button
                                                 type="button"
                                                 class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -552,7 +552,7 @@ const rejectRefund = (refund) => {
                                                 Status{{ sortIndicator('status') }}
                                             </button>
                                         </th>
-                                        <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Actions</th>
+                                        <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-csc-line">
@@ -569,19 +569,19 @@ const rejectRefund = (refund) => {
                                         </td>
                                         <td class="px-5 py-3.5">
                                             <p class="font-medium text-csc-ink">{{ payment.participant }}</p>
-                                            <p v-if="payment.reference_number" class="mt-0.5 text-xs text-csc-ink/55">
+                                            <p v-if="payment.reference_number" class="mt-0.5 text-xs text-csc-ink-subtle">
                                                 Ref {{ payment.reference_number }}
                                             </p>
                                         </td>
-                                        <td class="px-5 py-3.5 text-csc-ink/75">
+                                        <td class="px-5 py-3.5 text-csc-ink-muted">
                                             {{ payment.training }}
-                                            <p v-if="payment.charge_to" class="mt-0.5 text-xs text-csc-ink/55">
+                                            <p v-if="payment.charge_to" class="mt-0.5 text-xs text-csc-ink-subtle">
                                                 {{ payment.charge_to }}
                                             </p>
                                         </td>
                                         <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink">
                                             ₱{{ money(payment.amount) }}
-                                            <p class="text-xs text-csc-ink/55">{{ payment.method }}</p>
+                                            <p class="text-xs text-csc-ink-subtle">{{ payment.method }}</p>
                                             <!--
                                                 Both figures, because the gross
                                                 is what the report reconciles on
@@ -595,25 +595,25 @@ const rejectRefund = (refund) => {
                                                 PRIME-HRM −₱{{ money(payment.discount_amount) }}
                                             </p>
                                         </td>
-                                        <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink/75">{{ payment.payment_date }}</td>
+                                        <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink-muted">{{ payment.payment_date }}</td>
                                         <td class="px-5 py-3.5">
                                             <template v-if="payment.or_number">
                                                 <p class="font-mono text-xs text-csc-ink">{{ payment.or_number }}</p>
-                                                <p class="mt-0.5 text-xs text-csc-ink/55">
+                                                <p class="mt-0.5 text-xs text-csc-ink-subtle">
                                                     {{ payment.or_date }}
                                                     <template v-if="payment.collecting_officer">
                                                         · {{ payment.collecting_officer }}
                                                     </template>
                                                 </p>
                                             </template>
-                                            <span v-else class="text-xs text-csc-ink/45">—</span>
+                                            <span v-else class="text-xs text-csc-ink-subtle">—</span>
                                         </td>
                                         <td class="px-5 py-3.5">
                                             <AppBadge :status="payment.status" />
                                             <p v-if="payment.rejection_reason" class="mt-1 max-w-48 text-xs text-csc-red-ink">
                                                 {{ payment.rejection_reason }}
                                             </p>
-                                            <p v-if="payment.remarks" class="mt-1 max-w-48 text-xs text-csc-ink/55">
+                                            <p v-if="payment.remarks" class="mt-1 max-w-48 text-xs text-csc-ink-subtle">
                                                 {{ payment.remarks }}
                                             </p>
                                         </td>
@@ -669,7 +669,7 @@ const rejectRefund = (refund) => {
                                 <div class="flex flex-wrap items-start justify-between gap-3">
                                     <div class="min-w-0">
                                         <p class="font-semibold text-csc-ink">{{ payment.participant }}</p>
-                                        <p class="mt-0.5 text-sm text-csc-ink/60">{{ payment.training }}</p>
+                                        <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ payment.training }}</p>
                                         <p class="mt-1 text-sm text-csc-ink">
                                             ₱{{ money(payment.amount) }} · {{ payment.method }} ·
                                             {{ payment.payment_date }}
@@ -681,10 +681,10 @@ const rejectRefund = (refund) => {
                                             PRIME-HRM 20% — ₱{{ money(payment.gross_amount) }} less
                                             ₱{{ money(payment.discount_amount) }}
                                         </p>
-                                        <p v-if="payment.reference_number" class="text-xs text-csc-ink/55">
+                                        <p v-if="payment.reference_number" class="text-xs text-csc-ink-subtle">
                                             Ref {{ payment.reference_number }}
                                         </p>
-                                        <p v-if="payment.charge_to" class="text-xs text-csc-ink/55">
+                                        <p v-if="payment.charge_to" class="text-xs text-csc-ink-subtle">
                                             Charged to: {{ payment.charge_to }}
                                         </p>
                                     </div>
@@ -695,20 +695,20 @@ const rejectRefund = (refund) => {
                                     {{ payment.rejection_reason }}
                                 </p>
 
-                                <p v-if="payment.remarks" class="mt-1.5 text-xs text-csc-ink/55">
+                                <p v-if="payment.remarks" class="mt-1.5 text-xs text-csc-ink-subtle">
                                     {{ payment.remarks }}
                                 </p>
 
                                 <p v-if="payment.or_number" class="mt-2 text-sm text-csc-ink">
-                                    <span class="text-csc-ink/55">OR</span>
+                                    <span class="text-csc-ink-subtle">OR</span>
                                     <span class="font-mono">{{ payment.or_number }}</span>
-                                    <span v-if="payment.or_date" class="text-csc-ink/55"> · {{ payment.or_date }}</span>
-                                    <span v-if="payment.collecting_officer" class="text-csc-ink/55">
+                                    <span v-if="payment.or_date" class="text-csc-ink-subtle"> · {{ payment.or_date }}</span>
+                                    <span v-if="payment.collecting_officer" class="text-csc-ink-subtle">
                                         · issued by {{ payment.collecting_officer }}
                                     </span>
                                 </p>
 
-                                <p v-if="payment.verified_by" class="mt-1.5 text-xs text-csc-ink/55">
+                                <p v-if="payment.verified_by" class="mt-1.5 text-xs text-csc-ink-subtle">
                                     Reviewed by {{ payment.verified_by }}
                                 </p>
 
@@ -760,12 +760,12 @@ const rejectRefund = (refund) => {
                         :class="
                             refundStatusFilter === ''
                                 ? 'bg-csc-blue text-white shadow-sm'
-                                : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                                : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                         "
                         @click="refundStatusFilter = ''"
                     >
                         All
-                        <span class="ml-1 text-xs" :class="refundStatusFilter === '' ? 'text-white/80' : 'text-csc-ink/45'">
+                        <span class="ml-1 text-xs" :class="refundStatusFilter === '' ? 'text-white/80' : 'text-csc-ink-subtle'">
                             {{ Object.values(refundCounts).reduce((sum, n) => sum + n, 0) }}
                         </span>
                     </button>
@@ -779,14 +779,14 @@ const rejectRefund = (refund) => {
                         :class="
                             refundStatusFilter === status.value
                                 ? 'bg-csc-blue text-white shadow-sm'
-                                : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                                : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                         "
                         @click="refundStatusFilter = status.value"
                     >
                         {{ status.label }}
                         <span
                             class="ml-1 text-xs"
-                            :class="refundStatusFilter === status.value ? 'text-white/80' : 'text-csc-ink/45'"
+                            :class="refundStatusFilter === status.value ? 'text-white/80' : 'text-csc-ink-subtle'"
                         >
                             {{ refundCounts[status.value] ?? 0 }}
                         </span>
@@ -807,17 +807,17 @@ const rejectRefund = (refund) => {
                                 <div class="min-w-0">
                                     <p class="font-semibold text-csc-ink">
                                         {{ refund.participant }}
-                                        <span class="ml-1 font-mono text-xs font-normal text-csc-ink/50">
+                                        <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
                                             {{ refund.request_code }}
                                         </span>
                                     </p>
-                                    <p class="mt-0.5 text-sm text-csc-ink/60">{{ refund.training }}</p>
+                                    <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ refund.training }}</p>
                                     <p class="mt-1 text-sm text-csc-ink">₱{{ money(refund.amount) }}</p>
                                 </div>
                                 <AppBadge :status="refund.status" />
                             </div>
 
-                            <p class="mt-3 text-sm text-csc-ink/80">{{ refund.reason }}</p>
+                            <p class="mt-3 text-sm text-csc-ink-muted">{{ refund.reason }}</p>
 
                             <!-- Where it is along the pipeline, drawn from the
                                  same ordered stages the server uses. -->
@@ -837,7 +837,7 @@ const rejectRefund = (refund) => {
                                     ></span>
                                     <span
                                         class="text-xs"
-                                        :class="stageState(refund, index) === 'upcoming' ? 'text-csc-ink/45' : 'font-medium text-csc-ink'"
+                                        :class="stageState(refund, index) === 'upcoming' ? 'text-csc-ink-subtle' : 'font-medium text-csc-ink'"
                                     >
                                         {{ stage.label }}
                                     </span>
@@ -851,19 +851,19 @@ const rejectRefund = (refund) => {
                             <!-- What MSD needs to actually release the money. -->
                             <dl class="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                                 <div class="flex gap-2">
-                                    <dt class="text-csc-ink/55">Account name</dt>
+                                    <dt class="text-csc-ink-subtle">Account name</dt>
                                     <dd class="text-csc-ink">{{ refund.account_name || '—' }}</dd>
                                 </div>
                                 <div class="flex gap-2">
-                                    <dt class="text-csc-ink/55">Bank</dt>
+                                    <dt class="text-csc-ink-subtle">Bank</dt>
                                     <dd class="text-csc-ink">{{ refund.bank_name || '—' }}</dd>
                                 </div>
                                 <div class="flex gap-2">
-                                    <dt class="text-csc-ink/55">Account no.</dt>
+                                    <dt class="text-csc-ink-subtle">Account no.</dt>
                                     <dd class="font-mono text-csc-ink">{{ refund.account_number || '—' }}</dd>
                                 </div>
                                 <div v-if="refund.proof_url" class="flex gap-2">
-                                    <dt class="text-csc-ink/55">Proof</dt>
+                                    <dt class="text-csc-ink-subtle">Proof</dt>
                                     <dd>
                                         <a
                                             :href="refund.proof_url"
@@ -896,8 +896,8 @@ const rejectRefund = (refund) => {
                                 <ol class="mt-2 space-y-1.5 border-l-2 border-csc-line pl-3">
                                     <li v-for="(entry, index) in refund.trail" :key="index" class="text-xs">
                                         <span class="font-medium text-csc-ink">{{ entry.to }}</span>
-                                        <span class="text-csc-ink/55"> · {{ entry.actor }} · {{ entry.at }}</span>
-                                        <p v-if="entry.notes" class="text-csc-ink/70">{{ entry.notes }}</p>
+                                        <span class="text-csc-ink-subtle"> · {{ entry.actor }} · {{ entry.at }}</span>
+                                        <p v-if="entry.notes" class="text-csc-ink-muted">{{ entry.notes }}</p>
                                     </li>
                                 </ol>
                             </details>

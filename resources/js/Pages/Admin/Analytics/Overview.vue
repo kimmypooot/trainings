@@ -36,7 +36,7 @@ const tiles = computed(() => [
                 class="rounded-xl border border-csc-line bg-white p-4"
             >
                 <p class="text-2xl font-bold text-csc-blue">{{ tile.value }}</p>
-                <p class="mt-0.5 text-xs text-csc-ink/60">{{ tile.label }}</p>
+                <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ tile.label }}</p>
             </div>
         </div>
 
@@ -47,7 +47,7 @@ const tiles = computed(() => [
                     :key="row.month"
                     class="grid grid-cols-[6rem_1fr_2.5rem] items-center gap-3"
                 >
-                    <span class="text-xs text-csc-ink/60">{{ row.month }}</span>
+                    <span class="text-xs text-csc-ink-subtle">{{ row.month }}</span>
                     <span class="h-2.5 rounded-full bg-csc-blue-tint">
                         <span
                             class="block h-full rounded-full bg-csc-blue transition-all duration-150"
@@ -61,13 +61,13 @@ const tiles = computed(() => [
 
         <div class="grid gap-5 lg:grid-cols-2">
             <AppCard title="Attendance">
-                <p v-if="overview.attendance.rate === null" class="text-sm text-csc-ink/60">
+                <p v-if="overview.attendance.rate === null" class="text-sm text-csc-ink-subtle">
                     No attendance has been recorded yet.
                 </p>
 
                 <template v-else>
                     <p class="text-3xl font-bold text-csc-blue">{{ overview.attendance.rate }}%</p>
-                    <p class="mt-0.5 text-xs text-csc-ink/60">
+                    <p class="mt-0.5 text-xs text-csc-ink-subtle">
                         of {{ overview.attendance.total }} recorded days counted toward completion
                     </p>
 
@@ -77,7 +77,7 @@ const tiles = computed(() => [
                             :key="row.label"
                             class="flex items-center justify-between text-sm"
                         >
-                            <span class="text-csc-ink/70">{{ row.label }}</span>
+                            <span class="text-csc-ink-muted">{{ row.label }}</span>
                             <span class="font-medium text-csc-ink">{{ row.count }}</span>
                         </li>
                     </ul>
@@ -160,15 +160,15 @@ const tiles = computed(() => [
                     <p class="text-2xl font-bold text-csc-blue">
                         {{ Number(overview.payments.verified_total).toLocaleString() }}
                     </p>
-                    <p class="text-xs text-csc-ink/60">PHP verified</p>
+                    <p class="text-xs text-csc-ink-subtle">PHP verified</p>
                 </div>
                 <div>
                     <p class="text-2xl font-bold text-warning">{{ overview.payments.pending_count }}</p>
-                    <p class="text-xs text-csc-ink/60">Awaiting verification</p>
+                    <p class="text-xs text-csc-ink-subtle">Awaiting verification</p>
                 </div>
                 <div>
                     <p class="text-2xl font-bold text-danger">{{ overview.payments.rejected_count }}</p>
-                    <p class="text-xs text-csc-ink/60">Rejected</p>
+                    <p class="text-xs text-csc-ink-subtle">Rejected</p>
                 </div>
             </div>
         </AppCard>

@@ -88,7 +88,7 @@ const totals = computed(() => {
                     :class="
                         status === tab.value
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="status = tab.value"
                 >
@@ -121,34 +121,34 @@ const totals = computed(() => {
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
-                                <th scope="col" rowspan="2" class="px-5 py-3 font-semibold text-csc-ink/70">Training</th>
-                                <th scope="col" rowspan="2" class="px-5 py-3 font-semibold text-csc-ink/70">Schedule</th>
-                                <th scope="colgroup" colspan="6" class="border-b border-csc-line px-5 py-3 text-center font-semibold text-csc-ink/70">
+                                <th scope="col" rowspan="2" class="px-5 py-3 font-semibold text-csc-ink-muted">Training</th>
+                                <th scope="col" rowspan="2" class="px-5 py-3 font-semibold text-csc-ink-muted">Schedule</th>
+                                <th scope="colgroup" colspan="6" class="border-b border-csc-line px-5 py-3 text-center font-semibold text-csc-ink-muted">
                                     Breakdown of Participants
                                 </th>
-                                <th scope="col" rowspan="2" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Actions</th>
+                                <th scope="col" rowspan="2" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Actions</th>
                             </tr>
                             <tr>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Total</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Paid</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Pending</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Promissory</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Free</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Cancelled</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Total</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Paid</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Pending</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Promissory</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Free</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Cancelled</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
                             <tr v-for="training in trainings.data" :key="training.id">
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">{{ training.title }}</p>
-                                    <p class="mt-0.5 text-xs text-csc-ink/60">{{ training.venue }}</p>
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ training.venue }}</p>
                                     <AppBadge v-if="training.is_supervisory" status="supervisory" class="mt-1.5" />
                                 </td>
                                 <td class="px-5 py-3.5">
-                                    <p class="text-[11px] leading-snug text-csc-ink/75">
+                                    <p class="text-[11px] leading-snug text-csc-ink-muted">
                                         {{ training.starts_at }}<template v-if="training.ends_at && training.ends_at !== training.starts_at"> –</template>
                                     </p>
-                                    <p v-if="training.ends_at && training.ends_at !== training.starts_at" class="text-[11px] leading-snug text-csc-ink/75">
+                                    <p v-if="training.ends_at && training.ends_at !== training.starts_at" class="text-[11px] leading-snug text-csc-ink-muted">
                                         {{ training.ends_at }}
                                     </p>
                                 </td>
@@ -156,11 +156,11 @@ const totals = computed(() => {
                                     {{ training.registered
                                     }}<template v-if="training.capacity"> / {{ training.capacity }}</template>
                                 </td>
-                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink/75">{{ training.paid }}</td>
-                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink/75">{{ training.pending }}</td>
-                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink/75">{{ training.promissory }}</td>
-                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink/75">{{ training.free }}</td>
-                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink/75">{{ training.cancelled }}</td>
+                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink-muted">{{ training.paid }}</td>
+                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink-muted">{{ training.pending }}</td>
+                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink-muted">{{ training.promissory }}</td>
+                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink-muted">{{ training.free }}</td>
+                                <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink-muted">{{ training.cancelled }}</td>
                                 <td class="px-5 py-3.5 text-right whitespace-nowrap">
                                     <Link :href="training.roster_url" class="text-xs font-semibold text-csc-blue hover:underline">
                                         Roster
@@ -177,7 +177,7 @@ const totals = computed(() => {
                              regional totals without opening any roster. -->
                         <tfoot class="border-t border-csc-line bg-csc-blue-tint/60">
                             <tr>
-                                <td colspan="2" class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-csc-ink/70">
+                                <td colspan="2" class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-csc-ink-muted">
                                     Totals
                                 </td>
                                 <td class="px-5 py-3 text-right font-semibold text-csc-ink">{{ totals.registered }}</td>
@@ -201,13 +201,13 @@ const totals = computed(() => {
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="text-sm font-semibold text-csc-ink">{{ training.title }}</p>
-                                <p class="mt-0.5 text-[11px] leading-snug text-csc-ink/60">
+                                <p class="mt-0.5 text-[11px] leading-snug text-csc-ink-subtle">
                                     {{ training.starts_at }}<template v-if="training.ends_at && training.ends_at !== training.starts_at"> –</template>
                                 </p>
-                                <p v-if="training.ends_at && training.ends_at !== training.starts_at" class="text-[11px] leading-snug text-csc-ink/60">
+                                <p v-if="training.ends_at && training.ends_at !== training.starts_at" class="text-[11px] leading-snug text-csc-ink-subtle">
                                     {{ training.ends_at }}
                                 </p>
-                                <p class="text-xs text-csc-ink/60">{{ training.venue }}</p>
+                                <p class="text-xs text-csc-ink-subtle">{{ training.venue }}</p>
                                 <AppBadge v-if="training.is_supervisory" status="supervisory" class="mt-1.5" />
                             </div>
                             <span
@@ -219,28 +219,28 @@ const totals = computed(() => {
                         </div>
                         <dl class="mt-3 grid grid-cols-3 gap-x-3 gap-y-1.5 border-t border-csc-line pt-3 text-xs">
                             <div class="flex items-center justify-between gap-2">
-                                <dt class="text-csc-ink/55">Registered</dt>
+                                <dt class="text-csc-ink-subtle">Registered</dt>
                                 <dd class="font-semibold text-csc-ink">{{ training.registered }}</dd>
                             </div>
                             <div class="flex items-center justify-between gap-2">
-                                <dt class="text-csc-ink/55">Paid</dt>
-                                <dd class="tabular-nums text-csc-ink/75">{{ training.paid }}</dd>
+                                <dt class="text-csc-ink-subtle">Paid</dt>
+                                <dd class="tabular-nums text-csc-ink-muted">{{ training.paid }}</dd>
                             </div>
                             <div class="flex items-center justify-between gap-2">
-                                <dt class="text-csc-ink/55">Pending</dt>
-                                <dd class="tabular-nums text-csc-ink/75">{{ training.pending }}</dd>
+                                <dt class="text-csc-ink-subtle">Pending</dt>
+                                <dd class="tabular-nums text-csc-ink-muted">{{ training.pending }}</dd>
                             </div>
                             <div class="flex items-center justify-between gap-2">
-                                <dt class="text-csc-ink/55">Promissory</dt>
-                                <dd class="tabular-nums text-csc-ink/75">{{ training.promissory }}</dd>
+                                <dt class="text-csc-ink-subtle">Promissory</dt>
+                                <dd class="tabular-nums text-csc-ink-muted">{{ training.promissory }}</dd>
                             </div>
                             <div class="flex items-center justify-between gap-2">
-                                <dt class="text-csc-ink/55">Free</dt>
-                                <dd class="tabular-nums text-csc-ink/75">{{ training.free }}</dd>
+                                <dt class="text-csc-ink-subtle">Free</dt>
+                                <dd class="tabular-nums text-csc-ink-muted">{{ training.free }}</dd>
                             </div>
                             <div class="flex items-center justify-between gap-2">
-                                <dt class="text-csc-ink/55">Cancelled</dt>
-                                <dd class="tabular-nums text-csc-ink/75">{{ training.cancelled }}</dd>
+                                <dt class="text-csc-ink-subtle">Cancelled</dt>
+                                <dd class="tabular-nums text-csc-ink-muted">{{ training.cancelled }}</dd>
                             </div>
                         </dl>
                         <div class="mt-3 flex items-center justify-between border-t border-csc-line pt-3">

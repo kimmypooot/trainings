@@ -64,7 +64,7 @@ const describedBy = computed(() => {
                 :required="required"
                 :aria-invalid="error ? 'true' : undefined"
                 :aria-describedby="describedBy"
-                class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink/40 focus:outline-2 focus:outline-offset-1"
+                class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1"
                 :class="[
                     error
                         ? 'border-csc-red-ink focus:outline-csc-red-ink'
@@ -80,7 +80,7 @@ const describedBy = computed(() => {
             </div>
         </div>
 
-        <p v-if="hint && !error" :id="hintId" class="mt-1.5 text-xs text-csc-ink/60">
+        <p v-if="hint && !error" :id="hintId" class="mt-1.5 text-xs text-csc-ink-subtle">
             {{ hint }}
         </p>
         <p v-if="error" :id="errorId" class="mt-1.5 text-xs font-medium text-csc-red-ink">

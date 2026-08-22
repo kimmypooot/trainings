@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Version
+    |--------------------------------------------------------------------------
+    |
+    | Shown in the signed-in footer. It lived there as a literal in the Vue
+    | component — the same staleness trap the office name was pulled out of,
+    | one release nobody remembers to edit and the number is quietly wrong.
+    | Stated once, here, and shared to the front end like every other fact.
+    |
+    */
+
+    'version' => env('APP_VERSION', '2.5.0'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

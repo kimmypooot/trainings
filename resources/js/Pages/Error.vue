@@ -66,7 +66,7 @@ const reload = () => window.location.reload();
             </span>
 
             <h1 class="mt-4 text-xl font-semibold tracking-tight text-csc-ink">{{ detail.title }}</h1>
-            <p class="mt-2 text-sm leading-relaxed text-csc-ink/70">{{ detail.message }}</p>
+            <p class="mt-2 text-sm leading-relaxed text-csc-ink-muted">{{ detail.message }}</p>
 
             <div v-if="status === 419" class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
                 <button

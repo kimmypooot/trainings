@@ -93,14 +93,14 @@ const submit = () => {
                         />
                     </div>
 
-                    <p v-if="!needsOffice" class="mt-4 text-xs leading-relaxed text-csc-ink/60">
+                    <p v-if="!needsOffice" class="mt-4 text-xs leading-relaxed text-csc-ink-subtle">
                         This role sees participants across the whole region. Only a Field Office account is
                         limited to one office.
                     </p>
                 </AppCard>
 
                 <AppCard :title="isEdit ? 'Reset Password' : 'Password'">
-                    <p v-if="isEdit" class="mb-4 text-xs leading-relaxed text-csc-ink/60">
+                    <p v-if="isEdit" class="mb-4 text-xs leading-relaxed text-csc-ink-subtle">
                         Leave blank to keep the current password.
                     </p>
 

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
@@ -101,20 +101,46 @@ const applyTemplate = (template) => {
     form.message = template.body;
 };
 
-const sendTest = () => {
-    router.post(
-        '/admin/emails/test',
-        {
-            training_id: form.training_id,
-            statuses: form.statuses,
-            sectors: form.sectors,
-            regions: form.regions,
-            subject: form.subject,
-            message: form.message,
-        },
-        { preserveScroll: true }
-    );
+/*
+ * Send a test.
+ *
+ * The address is asked for rather than assumed. Signed-in staff are not always
+ * the person who has to sign the copy off, and the rendering worth checking is
+ * usually the one in the mail client the participants read on. The sender's own
+ * address is only the default, so the common case is still two clicks.
+ */
+const testing = ref(false);
+
+const testForm = useForm({
+    training_id: '',
+    statuses: [],
+    sectors: [],
+    regions: [],
+    subject: '',
+    message: '',
+    email: '',
+});
+
+const openSendTest = () => {
+    // Snapshotted on open so the message that goes out is the one the sender
+    // was looking at when they asked, not whatever the form holds by the time
+    // they finish typing an address.
+    testForm.training_id = form.training_id;
+    testForm.statuses = [...form.statuses];
+    testForm.sectors = [...form.sectors];
+    testForm.regions = [...form.regions];
+    testForm.subject = form.subject;
+    testForm.message = form.message;
+    testForm.email = usePage().props.auth?.user?.email ?? '';
+    testForm.clearErrors();
+    testing.value = true;
 };
+
+const sendTest = () =>
+    testForm.post('/admin/emails/test', {
+        preserveScroll: true,
+        onSuccess: () => (testing.value = false),
+    });
 
 const savingTemplate = ref(false);
 
@@ -205,7 +231,7 @@ const deleteTemplate = (template) =>
                     <div v-if="audienceFilters.sectors.length || audienceFilters.regions.length" class="grid gap-5 sm:grid-cols-2">
                         <fieldset v-if="audienceFilters.sectors.length">
                             <legend class="mb-1.5 text-sm font-medium text-csc-ink">
-                                Sector <span class="font-normal text-csc-ink/55">(all, if none picked)</span>
+                                Sector <span class="font-normal text-csc-ink-subtle">(all, if none picked)</span>
                             </legend>
                             <div class="max-h-32 space-y-1.5 overflow-y-auto rounded-lg border border-csc-line p-3">
                                 <label
@@ -226,7 +252,7 @@ const deleteTemplate = (template) =>
 
                         <fieldset v-if="audienceFilters.regions.length">
                             <legend class="mb-1.5 text-sm font-medium text-csc-ink">
-                                Region <span class="font-normal text-csc-ink/55">(all, if none picked)</span>
+                                Region <span class="font-normal text-csc-ink-subtle">(all, if none picked)</span>
                             </legend>
                             <div class="max-h-32 space-y-1.5 overflow-y-auto rounded-lg border border-csc-line p-3">
                                 <label
@@ -285,7 +311,7 @@ const deleteTemplate = (template) =>
                             unreplaced tokens went out to participants.
                         -->
                         <div class="mt-2">
-                            <p class="mb-1.5 text-xs font-medium text-csc-ink/70">
+                            <p class="mb-1.5 text-xs font-medium text-csc-ink-muted">
                                 Insert a placeholder — each is filled in per recipient:
                             </p>
                             <div class="flex flex-wrap gap-1.5">
@@ -308,11 +334,11 @@ const deleteTemplate = (template) =>
                         <h3 class="mb-2 text-sm font-medium text-csc-ink">Preview</h3>
                         <ul class="space-y-3">
                             <li v-for="sample in samples" :key="sample.email" class="text-sm">
-                                <p class="text-xs text-csc-ink/55">
+                                <p class="text-xs text-csc-ink-subtle">
                                     To {{ sample.name }} &lt;{{ sample.email }}&gt;
                                 </p>
                                 <p class="font-medium text-csc-ink">{{ sample.subject }}</p>
-                                <p class="whitespace-pre-line text-csc-ink/75">{{ sample.body }}</p>
+                                <p class="whitespace-pre-line text-csc-ink-muted">{{ sample.body }}</p>
                             </li>
                         </ul>
                     </div>
@@ -321,8 +347,8 @@ const deleteTemplate = (template) =>
                         <AppButton type="button" variant="ghost" @click="openSaveTemplate">
                             Save as Template
                         </AppButton>
-                        <AppButton type="button" variant="ghost" icon="envelope" @click="sendTest">
-                            Send Test to Myself
+                        <AppButton type="button" variant="ghost" icon="envelope" @click="openSendTest">
+                            Send Test
                         </AppButton>
                         <AppButton
                             type="submit"
@@ -350,11 +376,11 @@ const deleteTemplate = (template) =>
                         <div class="min-w-0">
                             <p class="text-sm font-medium text-csc-ink">
                                 {{ template.name }}
-                                <span class="ml-1 text-xs font-normal text-csc-ink/55">
+                                <span class="ml-1 text-xs font-normal text-csc-ink-subtle">
                                     {{ template.category }}
                                 </span>
                             </p>
-                            <p class="truncate text-xs text-csc-ink/60">{{ template.subject }}</p>
+                            <p class="truncate text-xs text-csc-ink-subtle">{{ template.subject }}</p>
                         </div>
                         <div class="flex shrink-0 gap-2">
                             <AppButton size="sm" variant="ghost" @click="applyTemplate(template)">
@@ -386,23 +412,23 @@ const deleteTemplate = (template) =>
                     <table class="w-full min-w-160 text-left text-sm">
                         <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Recipient</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Subject</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Status</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Sent</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Recipient</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Subject</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Status</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Sent</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
                             <tr v-for="log in logs.data" :key="log.id">
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">{{ log.recipient_name ?? '—' }}</p>
-                                    <p class="mt-0.5 text-xs break-words text-csc-ink/60">
+                                    <p class="mt-0.5 text-xs break-words text-csc-ink-subtle">
                                         {{ log.recipient_email }}
                                     </p>
                                 </td>
-                                <td class="px-5 py-3.5 text-csc-ink/75">{{ log.subject }}</td>
-                                <td class="px-5 py-3.5 text-xs text-csc-ink/70">{{ log.status }}</td>
-                                <td class="px-5 py-3.5 text-xs whitespace-nowrap text-csc-ink/70">
+                                <td class="px-5 py-3.5 text-csc-ink-muted">{{ log.subject }}</td>
+                                <td class="px-5 py-3.5 text-xs text-csc-ink-muted">{{ log.status }}</td>
+                                <td class="px-5 py-3.5 text-xs whitespace-nowrap text-csc-ink-muted">
                                     {{ log.sent_at ?? '—' }}
                                 </td>
                             </tr>
@@ -413,6 +439,36 @@ const deleteTemplate = (template) =>
                 <AppPagination :pagination="logs" label="emails" class="pt-3" />
             </AppCard>
         </div>
+
+        <AppModal
+            :open="testing"
+            title="Send a test"
+            subtitle="One copy of the message as drafted, to any address you name."
+            @close="testing = false"
+        >
+            <form class="space-y-4" @submit.prevent="sendTest">
+                <AppInput
+                    v-model="testForm.email"
+                    type="email"
+                    label="Send to"
+                    hint="The subject arrives prefixed with [TEST]. Nobody else is emailed."
+                    :error="testForm.errors.email"
+                    autocomplete="email"
+                    required
+                />
+
+                <p v-if="testForm.errors.subject || testForm.errors.message" class="text-xs font-medium text-csc-red-ink">
+                    {{ testForm.errors.subject || testForm.errors.message }}
+                </p>
+
+                <div class="flex justify-end gap-2">
+                    <AppButton type="button" variant="ghost" @click="testing = false">Cancel</AppButton>
+                    <AppButton type="submit" icon="envelope" :loading="testForm.processing">
+                        Send test
+                    </AppButton>
+                </div>
+            </form>
+        </AppModal>
 
         <AppModal
             :open="savingTemplate"

@@ -135,11 +135,11 @@ const confirm = () => {
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Name</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Role</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Field Office</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Status</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Actions</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Name</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Role</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Field Office</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Status</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
@@ -147,11 +147,11 @@ const confirm = () => {
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">
                                         {{ user.name ?? '—' }}
-                                        <span v-if="user.is_self" class="ml-1 text-xs font-normal text-csc-ink/50">
+                                        <span v-if="user.is_self" class="ml-1 text-xs font-normal text-csc-ink-subtle">
                                             (you)
                                         </span>
                                     </p>
-                                    <p class="mt-0.5 text-xs text-csc-ink/60">{{ user.email }}</p>
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ user.email }}</p>
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <span class="rounded-full bg-csc-blue-tint px-2.5 py-1 text-xs font-semibold text-csc-blue">
@@ -159,7 +159,7 @@ const confirm = () => {
                                     </span>
                                     <p
                                         v-if="user.is_collecting_officer"
-                                        class="mt-1 text-2xs font-medium text-csc-ink/60"
+                                        class="mt-1 text-2xs font-medium text-csc-ink-subtle"
                                     >
                                         Collecting officer
                                     </p>
@@ -173,7 +173,7 @@ const confirm = () => {
                                         Needs reassignment
                                     </p>
                                 </td>
-                                <td class="px-5 py-3.5 text-xs text-csc-ink/70">{{ user.field_office ?? '—' }}</td>
+                                <td class="px-5 py-3.5 text-xs text-csc-ink-muted">{{ user.field_office ?? '—' }}</td>
                                 <td class="px-5 py-3.5">
                                     <span
                                         class="rounded-full px-2.5 py-1 text-xs font-semibold"
@@ -181,12 +181,12 @@ const confirm = () => {
                                     >
                                         {{ user.is_active ? 'Active' : 'Deactivated' }}
                                     </span>
-                                    <p v-if="user.last_login_at" class="mt-1.5 text-2xs text-csc-ink/55">
+                                    <p v-if="user.last_login_at" class="mt-1.5 text-2xs text-csc-ink-subtle">
                                         Last sign-in {{ user.last_login_at }}
                                     </p>
                                 </td>
                                 <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                    <span v-if="!canManage" class="text-xs text-csc-ink/45">—</span>
+                                    <span v-if="!canManage" class="text-xs text-csc-ink-subtle">—</span>
                                     <Link
                                         v-if="canManage"
                                         :href="user.edit_url"
@@ -221,8 +221,8 @@ const confirm = () => {
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="text-sm font-semibold text-csc-ink">{{ user.name ?? '—' }}</p>
-                                <p class="mt-0.5 text-xs text-csc-ink/60">{{ user.email }}</p>
-                                <p class="mt-1 text-xs text-csc-ink/70">{{ user.role_label }}</p>
+                                <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ user.email }}</p>
+                                <p class="mt-1 text-xs text-csc-ink-muted">{{ user.role_label }}</p>
                             </div>
                             <span
                                 class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold"
@@ -231,11 +231,11 @@ const confirm = () => {
                                 {{ user.is_active ? 'Active' : 'Off' }}
                             </span>
                         </div>
-                        <p v-if="user.last_login_at" class="mt-2 text-xs text-csc-ink/55">
+                        <p v-if="user.last_login_at" class="mt-2 text-xs text-csc-ink-subtle">
                             Last sign-in {{ user.last_login_at }}
                         </p>
                         <div class="mt-3 flex items-center justify-between border-t border-csc-line pt-3">
-                            <span class="text-xs text-csc-ink/60">{{ user.field_office ?? '—' }}</span>
+                            <span class="text-xs text-csc-ink-subtle">{{ user.field_office ?? '—' }}</span>
                             <span v-if="canManage" class="flex gap-3">
                                 <Link :href="user.edit_url" class="text-xs font-semibold text-csc-blue">Edit</Link>
                                 <button

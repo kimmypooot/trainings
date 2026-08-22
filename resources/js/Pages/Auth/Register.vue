@@ -27,6 +27,14 @@ const passwordChecks = computed(() => [
     { label: 'Contains a number', passed: /\d/.test(form.password) },
 ]);
 
+// Spoken in place of the list on every change to it. Phrased as progress
+// rather than as failure, because it fires while someone is still typing.
+const passwordCheckSummary = computed(() => {
+    const met = passwordChecks.value.filter((check) => check.passed).length;
+
+    return `${met} of ${passwordChecks.value.length} password requirements met`;
+});
+
 // Stays silent until both fields hold something, so the field reads calm at rest.
 const confirmationMatches = computed(
     () => form.password_confirmation.length > 0 && form.password === form.password_confirmation
@@ -52,7 +60,7 @@ const submit = () => {
         </p>
 
                 <h2 class="mt-4 text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">Create your account</h2>
-                <p class="mt-2 text-sm text-csc-ink/70">
+                <p class="mt-2 text-sm text-csc-ink-muted">
                     Register to sign up for trainings offered by the Civil Service Commission. We will ask for your
                     details on the next step.
                 </p>
@@ -105,13 +113,13 @@ const submit = () => {
                     Sign up with Google
                 </a>
 
-                <p v-if="!googleEnabled" class="mt-2 text-center text-xs text-csc-ink/50">
+                <p v-if="!googleEnabled" class="mt-2 text-center text-xs text-csc-ink-subtle">
                     Google sign-up is not configured on this server yet.
                 </p>
 
                 <div class="my-6 flex items-center gap-4" aria-hidden="true">
                     <span class="h-px flex-1 bg-csc-line" />
-                    <span class="text-xs font-medium tracking-wide text-csc-ink/50 uppercase">or</span>
+                    <span class="text-xs font-medium tracking-wide text-csc-ink-subtle uppercase">or</span>
                     <span class="h-px flex-1 bg-csc-line" />
                 </div>
 
@@ -141,7 +149,7 @@ const submit = () => {
                             <template #affix>
                                 <button
                                     type="button"
-                                    class="rounded-md p-1.5 text-csc-ink/60 transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
+                                    class="rounded-md p-1.5 text-csc-ink-subtle transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
                                     :aria-pressed="showPassword"
                                     @click="showPassword = !showPassword"
                                 >
@@ -155,13 +163,23 @@ const submit = () => {
                             </template>
                         </AppInput>
 
-                        <!-- Live requirement checks; hidden until the field has a first character -->
-                        <ul v-if="form.password.length > 0" class="mt-2 space-y-1.5" aria-live="polite">
+                        <!--
+                            Live requirement checks; hidden until the field has a first
+                            character.
+                        
+                            The list itself is no longer the live region. It used to be,
+                            which meant every keystroke re-announced all three rules in
+                            full — someone typing an eight-character password with a
+                            screen reader heard twenty-four announcements to learn three
+                            facts. The summary line below is the live region instead, so
+                            what gets spoken is the thing that actually changed.
+                        -->
+                        <ul v-if="form.password.length > 0" class="mt-2 space-y-1.5" aria-hidden="true">
                             <li
                                 v-for="check in passwordChecks"
                                 :key="check.label"
                                 class="flex items-center gap-2 text-xs"
-                                :class="check.passed ? 'font-medium text-success' : 'text-csc-ink/55'"
+                                :class="check.passed ? 'font-medium text-success' : 'text-csc-ink-subtle'"
                             >
                                 <svg class="size-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <path v-if="check.passed" d="M5 12.5l4.5 4.5L19 7.5" />
@@ -170,6 +188,8 @@ const submit = () => {
                                 {{ check.label }}
                             </li>
                         </ul>
+
+                        <p v-if="form.password.length > 0" class="sr-only" role="status">{{ passwordCheckSummary }}</p>
                     </div>
 
                     <div>
@@ -185,7 +205,7 @@ const submit = () => {
                             <template #affix>
                                 <button
                                     type="button"
-                                    class="rounded-md p-1.5 text-csc-ink/60 transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
+                                    class="rounded-md p-1.5 text-csc-ink-subtle transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
                                     :aria-pressed="showConfirmation"
                                     @click="showConfirmation = !showConfirmation"
                                 >
@@ -223,7 +243,7 @@ const submit = () => {
                                 type="checkbox"
                                 class="mt-0.5 size-4 shrink-0 rounded border-csc-line accent-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                 :aria-invalid="form.errors.consent ? 'true' : undefined"
-                                aria-describedby="consent-error"
+                                :aria-describedby="form.errors.consent ? 'consent-error' : undefined"
                             />
                             <span class="leading-relaxed">
                                 I have read and accept the
@@ -246,7 +266,7 @@ const submit = () => {
                     </AppButton>
                 </form>
 
-                <p class="mt-8 text-center text-sm text-csc-ink/70">
+                <p class="mt-8 text-center text-sm text-csc-ink-muted">
                     Already have an account?
                     <Link href="/login" class="font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink">
                         Sign in

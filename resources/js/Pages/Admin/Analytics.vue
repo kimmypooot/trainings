@@ -53,7 +53,7 @@ function switchTab(key) {
                     :class="
                         view === tab.key
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="switchTab(tab.key)"
                 >

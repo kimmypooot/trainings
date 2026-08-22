@@ -43,7 +43,7 @@ const subSize = computed(() => ({ sm: 'text-[10px]', md: 'text-2xs', lg: 'text-x
                 CSC <span class="font-normal">TIMS</span>
             </span>
             <span
-                :class="[subSize, light ? 'text-white/70' : 'text-csc-ink/60']"
+                :class="[subSize, light ? 'text-white/70' : 'text-csc-ink-subtle']"
                 class="mt-1 font-medium tracking-wide uppercase"
             >
                 Civil Service Commission

@@ -221,22 +221,22 @@ const submitCancel = () =>
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">
                                     {{ request.training_title }}
-                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink/50">
+                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
                                         {{ request.request_code }}
                                     </span>
                                 </p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">{{ request.agency_name }}</p>
-                                <p class="mt-1 text-sm text-csc-ink/75">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ request.agency_name }}</p>
+                                <p class="mt-1 text-sm text-csc-ink-muted">
                                     {{ request.confirmed_start ?? request.proposed_start }} –
                                     {{ request.confirmed_end ?? request.proposed_end }}
                                     · {{ request.confirmed_venue ?? request.proposed_venue }}
-                                    <span v-if="request.confirmed_start" class="text-csc-ink/55">(confirmed)</span>
+                                    <span v-if="request.confirmed_start" class="text-csc-ink-subtle">(confirmed)</span>
                                 </p>
                             </div>
                             <AppBadge :status="request.status" :label="request.status_label" />
                         </div>
 
-                        <p class="mt-3 text-sm text-csc-ink/75">{{ request.message }}</p>
+                        <p class="mt-3 text-sm text-csc-ink-muted">{{ request.message }}</p>
 
                         <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
                             {{ request.rejection_reason }}
@@ -247,10 +247,10 @@ const submitCancel = () =>
                             v-if="request.requirements_text"
                             class="mt-3 rounded-lg border border-csc-line bg-csc-mist/40 p-3"
                         >
-                            <h3 class="mb-1 text-xs font-semibold tracking-wide text-csc-ink/70 uppercase">
+                            <h3 class="mb-1 text-xs font-semibold tracking-wide text-csc-ink-muted uppercase">
                                 Requirements from HRD
                             </h3>
-                            <p class="text-sm whitespace-pre-line text-csc-ink/80">
+                            <p class="text-sm whitespace-pre-line text-csc-ink-muted">
                                 {{ request.requirements_text }}
                             </p>
                         </div>
@@ -261,7 +261,7 @@ const submitCancel = () =>
                                 v-for="stage in request.stages"
                                 :key="stage.label"
                                 class="flex items-center gap-1.5 text-xs"
-                                :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink/40'"
+                                :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink-subtle'"
                             >
                                 <AppIcon
                                     :name="stage.reached ? 'check' : 'clock'"
@@ -283,7 +283,7 @@ const submitCancel = () =>
                                 <li
                                     v-for="document in request.documents"
                                     :key="document.id"
-                                    class="text-xs text-csc-ink/70"
+                                    class="text-xs text-csc-ink-muted"
                                 >
                                     <a
                                         :href="document.url"

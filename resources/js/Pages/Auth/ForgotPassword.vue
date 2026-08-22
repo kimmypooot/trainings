@@ -28,7 +28,7 @@ const submit = () => {
         <h2 class="text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
             Forgot your password?
         </h2>
-        <p class="mt-2 text-sm text-csc-ink/70">
+        <p class="mt-2 text-sm text-csc-ink-muted">
             No problem. Tell us the address you registered with and we'll email you a reset link.
         </p>
 
@@ -71,7 +71,7 @@ const submit = () => {
             </AppButton>
         </form>
 
-        <p class="mt-8 text-center text-sm text-csc-ink/70">
+        <p class="mt-8 text-center text-sm text-csc-ink-muted">
             Remembered it?
             <Link href="/login" class="font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink">
                 Back to sign in

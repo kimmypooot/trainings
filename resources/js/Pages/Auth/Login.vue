@@ -120,7 +120,7 @@ const submit = () => {
         <h2 class="text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
             Sign in to your account
         </h2>
-        <p class="mt-2 text-sm text-csc-ink/70">
+        <p class="mt-2 text-sm text-csc-ink-muted">
             Sign in to register for trainings and manage your records.
         </p>
 
@@ -143,7 +143,7 @@ const submit = () => {
                         </span>
                         <div class="min-w-0">
                             <p class="text-sm font-semibold text-warning">Email Not Verified</p>
-                            <p class="mt-1 text-sm leading-relaxed text-csc-ink/70">
+                            <p class="mt-1 text-sm leading-relaxed text-csc-ink-muted">
                                 Your email address has not yet been verified. Please check your email and click the
                                 verification link to activate your account.
                             </p>
@@ -229,13 +229,13 @@ const submit = () => {
                     Continue with Google
                 </a>
 
-                <p v-if="!googleEnabled" class="mt-2 text-center text-xs text-csc-ink/50">
+                <p v-if="!googleEnabled" class="mt-2 text-center text-xs text-csc-ink-subtle">
                     Google sign-in is not configured on this server yet.
                 </p>
 
                 <div class="my-6 flex items-center gap-4" aria-hidden="true">
                     <span class="h-px flex-1 bg-csc-line" />
-                    <span class="text-xs font-medium tracking-wide text-csc-ink/50 uppercase">or</span>
+                    <span class="text-xs font-medium tracking-wide text-csc-ink-subtle uppercase">or</span>
                     <span class="h-px flex-1 bg-csc-line" />
                 </div>
 
@@ -263,7 +263,7 @@ const submit = () => {
                         <template #affix>
                             <button
                                 type="button"
-                                class="rounded-md p-1.5 text-csc-ink/60 transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
+                                class="rounded-md p-1.5 text-csc-ink-subtle transition-colors duration-150 hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-csc-blue"
                                 :aria-pressed="showPassword"
                                 @click="showPassword = !showPassword"
                             >
@@ -287,12 +287,19 @@ const submit = () => {
                             Remember Me
                         </label>
 
-                        <a
+                        <!--
+                            An Inertia <Link>, not a plain <a>. As a document
+                            navigation this was the one slow hop on the sign-in
+                            screen, and it threw away the email already typed —
+                            precisely the address the visitor is about to have
+                            to type again on the next page.
+                        -->
+                        <Link
                             href="/forgot-password"
                             class="rounded text-sm font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         >
                             Forgot password?
-                        </a>
+                        </Link>
                     </div>
 
                     <AppButton type="submit" size="lg" block :loading="form.processing" icon="arrow-right">
@@ -300,14 +307,14 @@ const submit = () => {
                     </AppButton>
                 </form>
 
-                <p class="mt-8 text-center text-sm text-csc-ink/70">
+                <p class="mt-8 text-center text-sm text-csc-ink-muted">
                     No account yet?
                     <Link href="/register" class="font-medium text-csc-blue transition-colors duration-150 hover:text-csc-red-ink">
                         Create one
                     </Link>
                 </p>
 
-                <p class="mt-6 border-t border-csc-line pt-6 text-center text-xs leading-relaxed text-csc-ink/60">
+                <p class="mt-6 border-t border-csc-line pt-6 text-center text-xs leading-relaxed text-csc-ink-subtle">
                     By signing in you agree to the
                     <Link href="/terms-of-service" class="font-medium text-csc-blue transition-colors hover:text-csc-red-ink">
                         Terms of Service

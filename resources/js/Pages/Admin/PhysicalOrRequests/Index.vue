@@ -237,12 +237,12 @@ const submitSettings = () =>
                     :class="
                         statusFilter === status.value
                             ? 'bg-csc-blue text-white shadow-sm'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="filterBy(status.value)"
                 >
                     {{ status.label }}
-                    <span class="ml-1 text-xs" :class="statusFilter === status.value ? 'text-white/80' : 'text-csc-ink/45'">
+                    <span class="ml-1 text-xs" :class="statusFilter === status.value ? 'text-white/80' : 'text-csc-ink-subtle'">
                         {{ counts[status.value] ?? 0 }}
                     </span>
                 </button>
@@ -262,11 +262,11 @@ const submitSettings = () =>
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">
                                     {{ request.participant }}
-                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink/50">
+                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
                                         {{ request.request_code }}
                                     </span>
                                 </p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">{{ request.training }}</p>
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ request.training }}</p>
                                 <p class="mt-1 text-sm text-csc-ink">
                                     OR <span class="font-mono">{{ request.or_number }}</span> ·
                                     Courier fee ₱{{ money(request.courier_fee) }}
@@ -275,7 +275,7 @@ const submitSettings = () =>
                             <AppBadge :status="request.status" />
                         </div>
 
-                        <p v-if="request.notes" class="mt-2 text-sm text-csc-ink/70">{{ request.notes }}</p>
+                        <p v-if="request.notes" class="mt-2 text-sm text-csc-ink-muted">{{ request.notes }}</p>
                         <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
                             Declined: {{ request.rejection_reason }}
                         </p>
@@ -292,7 +292,7 @@ const submitSettings = () =>
                                 ></span>
                                 <span
                                     class="text-xs"
-                                    :class="stageState(request, index) === 'upcoming' ? 'text-csc-ink/45' : 'font-medium text-csc-ink'"
+                                    :class="stageState(request, index) === 'upcoming' ? 'text-csc-ink-subtle' : 'font-medium text-csc-ink'"
                                 >
                                     {{ stage.label }}
                                 </span>
@@ -303,15 +303,15 @@ const submitSettings = () =>
 
                         <div v-if="request.courier_name" class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
                             <p class="flex gap-2">
-                                <span class="text-csc-ink/55">Courier</span>
+                                <span class="text-csc-ink-subtle">Courier</span>
                                 <span class="text-csc-ink">{{ request.courier_name }}</span>
                             </p>
                             <p class="flex gap-2">
-                                <span class="text-csc-ink/55">Tracking</span>
+                                <span class="text-csc-ink-subtle">Tracking</span>
                                 <span class="font-mono text-csc-ink">{{ request.tracking_number || '—' }}</span>
                             </p>
                             <p v-if="request.verified_by" class="flex gap-2">
-                                <span class="text-csc-ink/55">Fee verified by</span>
+                                <span class="text-csc-ink-subtle">Fee verified by</span>
                                 <span class="text-csc-ink">{{ request.verified_by }}</span>
                             </p>
                         </div>
@@ -325,8 +325,8 @@ const submitSettings = () =>
                             <ol class="mt-2 space-y-1.5 border-l-2 border-csc-line pl-3">
                                 <li v-for="(entry, index) in request.trail" :key="index" class="text-xs">
                                     <span class="font-medium text-csc-ink">{{ entry.to }}</span>
-                                    <span class="text-csc-ink/55"> · {{ entry.actor }} · {{ entry.at }}</span>
-                                    <p v-if="entry.notes" class="text-csc-ink/70">{{ entry.notes }}</p>
+                                    <span class="text-csc-ink-subtle"> · {{ entry.actor }} · {{ entry.at }}</span>
+                                    <p v-if="entry.notes" class="text-csc-ink-muted">{{ entry.notes }}</p>
                                 </li>
                             </ol>
                         </details>

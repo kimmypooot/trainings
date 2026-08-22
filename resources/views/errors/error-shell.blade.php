@@ -4,10 +4,28 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $heading ?? 'Error' }} - CSC TIMS</title>
+
+    {{--
+        Error pages are plain Blade, not the Inertia shell, so they do not get
+        app.blade.php's @fonts tags for free — without these a 404 renders in a
+        system font while every other page is Poppins. The try/catch is
+        deliberate: fonts() throws when the Vite build manifest is missing or
+        stale, and an error page is exactly where that is most likely to be
+        true. A broken build must not turn a tidy 500 into a blank one.
+    --}}
+    @php
+        try {
+            $fontTags = app(Illuminate\Foundation\Vite::class)->fonts();
+        } catch (\Throwable) {
+            $fontTags = '';
+        }
+    @endphp
+    {!! $fontTags !!}
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+            font-family: 'Poppins', 'Segoe UI', system-ui, Arial, sans-serif;
             background: #eef0f9;
             display: grid;
             place-items: center;
@@ -38,6 +56,8 @@
             border-radius: 10px;
             border: 0;
             cursor: pointer;
+            /* A <button> does not inherit the body font on its own. */
+            font-family: inherit;
         }
         .primary { background: #2a338f; color: #fff; }
         .primary:hover { background: #c4111f; }

@@ -38,10 +38,10 @@ const checkIn = (session) => {
                     <AppAvatar :name="participant.name" :src="participant.avatar" size="lg" />
                     <div class="min-w-0">
                         <p class="truncate text-lg font-semibold text-csc-blue">{{ participant.name }}</p>
-                        <p v-if="participant.position" class="truncate text-sm text-csc-ink/70">
+                        <p v-if="participant.position" class="truncate text-sm text-csc-ink-muted">
                             {{ participant.position }}
                         </p>
-                        <p v-if="participant.organization" class="truncate text-sm text-csc-ink/60">
+                        <p v-if="participant.organization" class="truncate text-sm text-csc-ink-subtle">
                             {{ participant.organization }}
                         </p>
                     </div>
@@ -49,11 +49,11 @@ const checkIn = (session) => {
 
                 <dl class="mt-6 grid gap-4 border-t border-csc-line pt-5 text-sm sm:grid-cols-2">
                     <div>
-                        <dt class="text-csc-ink/60">Email</dt>
+                        <dt class="text-csc-ink-subtle">Email</dt>
                         <dd class="mt-0.5 font-medium break-words text-csc-ink">{{ participant.email }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">CSC Field Office</dt>
+                        <dt class="text-csc-ink-subtle">CSC Field Office</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ participant.field_office ?? '—' }}</dd>
                     </div>
                 </dl>
@@ -76,7 +76,7 @@ const checkIn = (session) => {
                         class="rounded-lg border border-csc-line p-4"
                     >
                         <p class="font-semibold text-csc-ink">{{ session.training }}</p>
-                        <p class="mt-0.5 text-sm text-csc-ink/60">
+                        <p class="mt-0.5 text-sm text-csc-ink-subtle">
                             {{ session.venue }} · Day {{ session.day }} of {{ session.of_days }}
                         </p>
 

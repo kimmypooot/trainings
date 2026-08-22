@@ -197,12 +197,12 @@ const confirm = () => {
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Participant</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Agency</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Sector &amp; Region</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Status</th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">Trainings</th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Actions</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Participant</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Agency</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Sector &amp; Region</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Status</th>
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Trainings</th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
@@ -224,27 +224,27 @@ const confirm = () => {
                                             title="Email verified"
                                         />
                                     </div>
-                                    <p class="mt-0.5 text-xs text-csc-ink/60">{{ participant.email }}</p>
-                                    <p v-if="participant.mobile" class="mt-0.5 text-xs text-csc-ink/60">
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ participant.email }}</p>
+                                    <p v-if="participant.mobile" class="mt-0.5 text-xs text-csc-ink-subtle">
                                         {{ participant.mobile }}
                                     </p>
                                     <p v-if="!participant.profile_complete" class="mt-1 text-xs font-medium text-warning">
                                         Profile incomplete
                                     </p>
                                 </td>
-                                <td class="px-5 py-3.5 text-csc-ink/75">
+                                <td class="px-5 py-3.5 text-csc-ink-muted">
                                     {{ participant.organization ?? '—' }}
-                                    <p v-if="participant.position" class="mt-0.5 text-xs text-csc-ink/55">
+                                    <p v-if="participant.position" class="mt-0.5 text-xs text-csc-ink-subtle">
                                         {{ participant.position }}
                                         <span v-if="participant.salary_grade">· {{ participant.salary_grade }}</span>
                                     </p>
-                                    <p v-if="participant.field_office" class="mt-0.5 text-xs text-csc-ink/55">
+                                    <p v-if="participant.field_office" class="mt-0.5 text-xs text-csc-ink-subtle">
                                         {{ participant.field_office }}
                                     </p>
                                 </td>
-                                <td class="px-5 py-3.5 text-xs text-csc-ink/70">
+                                <td class="px-5 py-3.5 text-xs text-csc-ink-muted">
                                     {{ participant.sector ?? '—' }}
-                                    <p class="mt-0.5 text-csc-ink/55">{{ participant.region ?? '—' }}</p>
+                                    <p class="mt-0.5 text-csc-ink-subtle">{{ participant.region ?? '—' }}</p>
                                 </td>
                                 <td class="px-5 py-3.5 space-y-1">
                                     <AppBadge
@@ -253,9 +253,9 @@ const confirm = () => {
                                     />
                                     <AppBadge v-if="!participant.email_verified" status="pending" label="Email unverified" />
                                 </td>
-                                <td class="px-5 py-3.5 text-csc-ink/75">
+                                <td class="px-5 py-3.5 text-csc-ink-muted">
                                     {{ participant.registrations }}
-                                    <p class="mt-0.5 text-xs text-csc-ink/55">
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">
                                         {{ participant.settled_registrations }} settled
                                     </p>
                                 </td>
@@ -310,8 +310,8 @@ const confirm = () => {
                                 <Link :href="participant.url" class="text-sm font-semibold text-csc-blue">
                                     {{ participant.name ?? participant.email }}
                                 </Link>
-                                <p class="mt-0.5 text-xs text-csc-ink/60">{{ participant.email }}</p>
-                                <p v-if="participant.mobile" class="text-xs text-csc-ink/60">
+                                <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ participant.email }}</p>
+                                <p v-if="participant.mobile" class="text-xs text-csc-ink-subtle">
                                     {{ participant.mobile }}
                                 </p>
                             </div>
@@ -322,11 +322,11 @@ const confirm = () => {
                             />
                         </div>
 
-                        <p class="mt-2 text-xs text-csc-ink/70">{{ participant.organization ?? '—' }}</p>
-                        <p v-if="participant.sector" class="mt-0.5 text-xs text-csc-ink/55">
+                        <p class="mt-2 text-xs text-csc-ink-muted">{{ participant.organization ?? '—' }}</p>
+                        <p v-if="participant.sector" class="mt-0.5 text-xs text-csc-ink-subtle">
                             {{ participant.sector }}
                         </p>
-                        <p class="mt-2 text-xs text-csc-ink/60">
+                        <p class="mt-2 text-xs text-csc-ink-subtle">
                             {{ participant.registrations }} training{{ participant.registrations === 1 ? '' : 's' }} ·
                             {{ participant.settled_registrations }} settled
                         </p>

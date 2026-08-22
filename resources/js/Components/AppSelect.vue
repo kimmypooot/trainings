@@ -54,7 +54,7 @@ const describedBy = computed(() => {
                 :disabled="disabled"
                 :aria-invalid="error ? 'true' : undefined"
                 :aria-describedby="describedBy"
-                class="w-full appearance-none rounded-lg border bg-white py-2.5 pr-10 pl-4 text-sm text-csc-ink transition-colors duration-150 focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink/60"
+                class="w-full appearance-none rounded-lg border bg-white py-2.5 pr-10 pl-4 text-sm text-csc-ink transition-colors duration-150 focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink-subtle"
                 :class="
                     error
                         ? 'border-csc-red-ink focus:outline-csc-red-ink'
@@ -76,11 +76,11 @@ const describedBy = computed(() => {
             <AppIcon
                 name="chevron-down"
                 size="sm"
-                class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-csc-ink/50"
+                class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-csc-ink-subtle"
             />
         </div>
 
-        <p v-if="hint && !error" :id="hintId" class="mt-1.5 text-xs text-csc-ink/60">{{ hint }}</p>
+        <p v-if="hint && !error" :id="hintId" class="mt-1.5 text-xs text-csc-ink-subtle">{{ hint }}</p>
         <p v-if="error" :id="errorId" class="mt-1.5 text-xs font-medium text-csc-red-ink">{{ error }}</p>
     </div>
 </template>

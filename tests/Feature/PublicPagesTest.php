@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Enums\RegistrationStatus;
+use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
 use App\Notifications\ResetPassword;
@@ -22,10 +24,79 @@ class PublicPagesTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Home')
-                ->has('stats.0.figure')
-                ->has('stats.0.label')
-                ->where('stats.3.label', 'Regional offices')
+                ->has('stats')
             );
+    }
+
+    /**
+     * The headline figures band only publishes what the deployment can stand
+     * behind.
+     *
+     * A fresh regional deployment has delivered nothing and completed nothing.
+     * The band used to render that as "0 · 0 · 0% · 17" — three zeroes and a
+     * hard-coded count of the *national* CSC organisation, which this database
+     * has no standing to assert. "0% completion rate" on the front page of a
+     * training portal is read as a statement about the office, not about the
+     * data being new, so a figure with no denominator behind it is withheld
+     * rather than shown as a zero.
+     */
+    public function test_home_withholds_headline_figures_it_cannot_stand_behind(): void
+    {
+        $labels = $this->headlineFigureLabels();
+
+        // Nothing has been enrolled, delivered or completed yet, so none of
+        // those three appear at all rather than appearing as a zero.
+        $this->assertNotContains('Personnel enrolled', $labels);
+        $this->assertNotContains('Programs delivered', $labels);
+        $this->assertNotContains('Completion rate', $labels);
+
+        // The nationwide count is gone for good: it was hard-coded, and this
+        // database has no way to verify it. The field offices actually on the
+        // system are countable, so that figure may legitimately stand.
+        $this->assertNotContains('Regional offices', $labels);
+    }
+
+    /** @return array<int, string> */
+    private function headlineFigureLabels(): array
+    {
+        $labels = [];
+
+        $this->get('/')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) use (&$labels) {
+                $labels = array_column($page->toArray()['props']['stats'], 'label');
+            });
+
+        return $labels;
+    }
+
+    public function test_home_publishes_a_completion_rate_once_there_is_a_denominator(): void
+    {
+        $training = Training::factory()->create(['starts_at' => now()->subDays(10)]);
+        $user = User::factory()->create(['profile_completed_at' => now()]);
+
+        Registration::factory()->for($training)->for($user)->create([
+            'status' => RegistrationStatus::Completed,
+        ]);
+
+        $labels = $this->headlineFigureLabels();
+
+        $this->assertContains('Completion rate', $labels);
+
+        // Never the nationwide figure this database cannot count.
+        $this->assertNotContains('Regional offices', $labels);
+    }
+
+    /**
+     * The accessibility statement is a page, not a promise inside a policy.
+     * A visitor using assistive technology needs somewhere to read what the
+     * site claims to conform to and where to report a barrier.
+     */
+    public function test_accessibility_statement_is_public(): void
+    {
+        $this->get('/accessibility')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->component('Legal/Accessibility'));
     }
 
     public function test_robots_served_by_route_and_points_at_sitemap(): void
@@ -44,7 +115,21 @@ class PublicPagesTest extends TestCase
             ->assertHeader('Content-Type', 'application/xml')
             ->assertSee('<?xml version="1.0" encoding="UTF-8"?>', false);
 
-        foreach (['/', '/login', '/register', '/forgot-password', '/privacy-policy', '/terms-of-service'] as $path) {
+        $paths = [
+            '/',
+            '/login',
+            '/register',
+            '/forgot-password',
+            '/privacy-policy',
+            '/terms-of-service',
+            '/accessibility',
+            // A public entry point in its own right: an employer searching for
+            // how to check a CSC certificate should be able to land on it
+            // without holding a code first.
+            '/verify',
+        ];
+
+        foreach ($paths as $path) {
             $this->get('/sitemap.xml')
                 ->assertSee(url($path), false);
         }

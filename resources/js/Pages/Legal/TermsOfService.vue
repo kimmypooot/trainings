@@ -26,7 +26,7 @@ import LegalLayout from '@/Layouts/LegalLayout.vue';
 
         <section>
             <h2 class="mb-2 text-lg font-semibold text-csc-blue">3. Acceptable Use</h2>
-            <ul class="list-inside list-disc space-y-1 text-csc-ink/80">
+            <ul class="list-inside list-disc space-y-1 text-csc-ink-muted">
                 <li>Submit accurate and complete information in all nominations and records.</li>
                 <li>Do not share credentials or allow another person to use your account.</li>
                 <li>
@@ -77,7 +77,7 @@ import LegalLayout from '@/Layouts/LegalLayout.vue';
             </p>
         </section>
 
-        <p class="border-t border-csc-line pt-6 text-xs text-csc-ink/60">
+        <p class="border-t border-csc-line pt-6 text-xs text-csc-ink-subtle">
             See also our
             <Link href="/privacy-policy" class="font-medium text-csc-blue hover:underline">Privacy Policy</Link>.
         </p>

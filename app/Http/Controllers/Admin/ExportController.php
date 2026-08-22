@@ -13,7 +13,9 @@ use App\Models\User;
 use App\Support\Exports\SpreadsheetExport;
 use App\Support\ParticipantFilter;
 use App\Support\ReportScope;
+use App\Support\RescheduleService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -142,6 +144,72 @@ class ExportController extends Controller
             }),
             $request->string('format')->toString()
         );
+    }
+
+    /**
+     * Who a rescheduled run stranded, and what the office holds for them.
+     *
+     * The paper counterpart of the affected-participants screen. It exists
+     * because the decision it supports is rarely made at a desk: the list gets
+     * printed or mailed to a collecting officer, who reconciles the promissory
+     * notes against it before anyone is moved.
+     *
+     * Built through RescheduleService rather than from its own query, so the
+     * spreadsheet and the screen cannot disagree about who is affected or
+     * whether a given person can be moved.
+     */
+    public function affected(Request $request, Training $training): StreamedResponse
+    {
+        $target = $request->integer('target') > 0
+            ? Training::whereKey($request->integer('target'))->whereKeyNot($training->getKey())->first()
+            : $training->reschedules()->latest('id')->first();
+
+        $rows = RescheduleService::affected(
+            $training,
+            $target,
+            $request->user()->scopedFieldOfficeId(),
+        );
+
+        return SpreadsheetExport::download(
+            "affected-{$training->slug}",
+            [
+                'Name', 'Email', 'Field Office', 'Registration Status', 'Registered On',
+                'Fee State', 'Payment Method', 'Amount', 'OR No.',
+                'Can Be Moved', 'Reason',
+            ],
+            fn () => $this->affectedRows($rows),
+            $request->string('format')->toString()
+        );
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $rows
+     */
+    private function affectedRows(Collection $rows): \Generator
+    {
+        foreach ($rows as $row) {
+            yield [
+                $row['name'],
+                $row['email'],
+                $row['office'],
+                $row['status_label'],
+                $row['registered_at'],
+                // Spelled out rather than shipped as the internal key: this
+                // sheet is read by people reconciling receipts, and
+                // "promissory" on its own has been mistaken for money in.
+                match ($row['fee_state']) {
+                    'paid' => 'Paid',
+                    'promissory' => 'Promissory note (unpaid)',
+                    'free' => 'No fee',
+                    default => 'Unpaid',
+                },
+                $row['payment_method'],
+                $row['amount'],
+                $row['or_number'],
+                $row['movable'],
+                $row['blocker'],
+            ];
+        }
     }
 
     /**

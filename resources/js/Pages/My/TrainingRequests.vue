@@ -29,7 +29,7 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
 
     <AuthenticatedLayout title="Request a Training" current="training-requests">
         <div class="mx-auto max-w-4xl space-y-5">
-            <p class="text-sm leading-relaxed text-csc-ink/70">
+            <p class="text-sm leading-relaxed text-csc-ink-muted">
                 If your agency needs a training that is not in the catalogue, ask CSC to run one. HRD reviews
                 every request and will schedule it if there is enough demand.
             </p>
@@ -98,12 +98,12 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">{{ item.title }}</p>
-                                <p class="mt-0.5 text-xs text-csc-ink/60">Submitted {{ item.submitted_at }}</p>
+                                <p class="mt-0.5 text-xs text-csc-ink-subtle">Submitted {{ item.submitted_at }}</p>
                             </div>
                             <AppBadge :status="item.status" />
                         </div>
 
-                        <p v-if="item.review_remarks" class="mt-3 text-sm text-csc-ink/70">
+                        <p v-if="item.review_remarks" class="mt-3 text-sm text-csc-ink-muted">
                             CSC remarks: {{ item.review_remarks }}
                         </p>
 

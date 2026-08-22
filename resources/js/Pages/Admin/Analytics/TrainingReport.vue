@@ -63,8 +63,8 @@ function pickTraining(id) {
         <template v-else>
             <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-csc-line pt-4">
                 <p class="text-sm font-semibold text-csc-ink">{{ trainingReport.training.title }}</p>
-                <p class="text-xs text-csc-ink/60">{{ trainingReport.training.starts_at }}</p>
-                <p v-if="trainingReport.training.payment_amount" class="text-xs text-csc-ink/60">
+                <p class="text-xs text-csc-ink-subtle">{{ trainingReport.training.starts_at }}</p>
+                <p v-if="trainingReport.training.payment_amount" class="text-xs text-csc-ink-subtle">
                     Fee ₱{{ money(trainingReport.training.payment_amount) }}
                 </p>
             </div>
@@ -80,7 +80,7 @@ function pickTraining(id) {
                     :class="
                         subtype === 'revenue'
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="subtype = 'revenue'"
                 >
@@ -94,7 +94,7 @@ function pickTraining(id) {
                     :class="
                         subtype === 'breakdown'
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="subtype = 'breakdown'"
                 >

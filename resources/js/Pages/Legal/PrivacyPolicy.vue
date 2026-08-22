@@ -19,7 +19,7 @@ import LegalLayout from '@/Layouts/LegalLayout.vue';
 
         <section>
             <h2 class="mb-2 text-lg font-semibold text-csc-blue">2. Information We Collect</h2>
-            <ul class="list-inside list-disc space-y-1 text-csc-ink/80">
+            <ul class="list-inside list-disc space-y-1 text-csc-ink-muted">
                 <li><strong>Account data:</strong> name, official email address, agency, position, and role in TIMS.</li>
                 <li>
                     <strong>Google account data:</strong> if you sign in with Google, we receive your Google account
@@ -85,7 +85,7 @@ import LegalLayout from '@/Layouts/LegalLayout.vue';
             </div>
         </section>
 
-        <p class="border-t border-csc-line pt-6 text-xs text-csc-ink/60">
+        <p class="border-t border-csc-line pt-6 text-xs text-csc-ink-subtle">
             See also our
             <Link href="/terms-of-service" class="font-medium text-csc-blue hover:underline">Terms of Service</Link>.
         </p>

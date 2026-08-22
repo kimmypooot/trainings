@@ -59,7 +59,7 @@ const money = (value) =>
 
         <h3 class="mt-5 text-lg leading-snug font-semibold text-csc-blue">{{ program.title }}</h3>
 
-        <div class="mt-5 space-y-2.5 text-sm text-csc-ink/70">
+        <div class="mt-5 space-y-2.5 text-sm text-csc-ink-muted">
             <div class="flex items-center gap-2">
                 <AppIcon name="calendar" size="sm" class="shrink-0 text-csc-blue/60" />
                 <span>

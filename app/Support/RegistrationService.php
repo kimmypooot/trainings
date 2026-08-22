@@ -358,29 +358,13 @@ class RegistrationService
             foreach ($registrations as $registration) {
                 $name = $registration->user->name;
 
-                if ($registration->training_id === $locked->getKey()) {
-                    $skipped[] = "{$name} (already on this training)";
-
-                    continue;
-                }
-
-                if (in_array($registration->user_id, $alreadyThere, true)) {
-                    $skipped[] = "{$name} (already registered for the target)";
-
-                    continue;
-                }
-
-                if (! $registration->status->isCancellable()) {
-                    $skipped[] = "{$name} ({$registration->status->label()})";
-
-                    continue;
-                }
-
                 // Counted as it goes rather than checked once up front: the
                 // batch may be larger than the room left, and stopping at the
                 // limit moves whoever fits instead of refusing everyone.
-                if ($registration->status->occupiesSlot() && $remaining <= 0) {
-                    $skipped[] = "{$name} (target is full)";
+                $blocker = self::transferBlocker($registration, $locked, $alreadyThere, $remaining);
+
+                if ($blocker !== null) {
+                    $skipped[] = "{$name} ({$blocker})";
 
                     continue;
                 }
@@ -421,6 +405,52 @@ class RegistrationService
 
             return ['moved' => $moved, 'skipped' => $skipped];
         });
+    }
+
+    /**
+     * Why this registration cannot be moved onto the target, or null if it can.
+     *
+     * Pulled out of transfer()'s loop so that the affected-participants list can
+     * ask the same question *before* anything moves and get the same answer.
+     * The alternative — a screen with its own idea of who is movable — is worse
+     * than no screen at all: it would show a clean list of twenty names, move
+     * fourteen, and report the other six as skipped in a flash message nobody
+     * reads, which is exactly how somebody stays on a run that will not happen.
+     *
+     * The reason is returned as the phrase that goes in the parentheses, so the
+     * preview and the outcome are worded identically too.
+     *
+     * $remaining is passed in rather than derived because the caller is
+     * counting it down across a batch — see transfer(). A preview showing every
+     * row against the *same* remaining count would call the whole batch movable
+     * when only the first few fit, so a caller previewing a list has to decrement
+     * it the same way.
+     *
+     * @param  array<int, int>  $alreadyThere  user ids already holding a slot on the target
+     */
+    public static function transferBlocker(
+        Registration $registration,
+        Training $target,
+        array $alreadyThere,
+        int $remaining,
+    ): ?string {
+        if ($registration->training_id === $target->getKey()) {
+            return 'already on this training';
+        }
+
+        if (in_array($registration->user_id, $alreadyThere, true)) {
+            return 'already registered for the target';
+        }
+
+        if (! $registration->status->isCancellable()) {
+            return $registration->status->label();
+        }
+
+        if ($registration->status->occupiesSlot() && $remaining <= 0) {
+            return 'target is full';
+        }
+
+        return null;
     }
 
     /**

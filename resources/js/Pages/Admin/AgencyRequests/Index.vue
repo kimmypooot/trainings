@@ -122,7 +122,7 @@ const submitReject = () =>
                     :class="
                         (filters.filter ?? 'ours') === tab.value
                             ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     @click="setFilter(tab.value)"
                 >
@@ -159,20 +159,20 @@ const submitReject = () =>
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">
                                     {{ request.training_title }}
-                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink/50">
+                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
                                         {{ request.request_code }}
                                     </span>
                                 </p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
                                     {{ request.agency_name }} · {{ request.requester }}
-                                    <span class="text-csc-ink/45">&lt;{{ request.requester_email }}&gt;</span>
+                                    <span class="text-csc-ink-subtle">&lt;{{ request.requester_email }}&gt;</span>
                                 </p>
-                                <p class="mt-1 text-sm text-csc-ink/75">
+                                <p class="mt-1 text-sm text-csc-ink-muted">
                                     {{ request.confirmed_start ?? request.proposed_start }} –
                                     {{ request.confirmed_end ?? request.proposed_end }}
                                     · {{ request.confirmed_venue ?? request.proposed_venue }}
-                                    <span v-if="request.confirmed_start" class="text-csc-ink/55">(confirmed)</span>
-                                    <span v-if="request.expected_participants" class="text-csc-ink/55">
+                                    <span v-if="request.confirmed_start" class="text-csc-ink-subtle">(confirmed)</span>
+                                    <span v-if="request.expected_participants" class="text-csc-ink-subtle">
                                         · ~{{ request.expected_participants }} participants
                                     </span>
                                 </p>
@@ -180,7 +180,7 @@ const submitReject = () =>
                             <AppBadge :status="request.status" :label="request.status_label" />
                         </div>
 
-                        <p class="mt-2 text-xs text-csc-ink/55">
+                        <p class="mt-2 text-xs text-csc-ink-subtle">
                             Filed {{ request.submitted_at }}
                             <template v-if="request.assigned_to"> · handled by {{ request.assigned_to }}</template>
                             <template v-else> · unassigned</template>
@@ -190,7 +190,7 @@ const submitReject = () =>
                         <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
                             Declined: {{ request.rejection_reason }}
                         </p>
-                        <p v-if="request.cancellation_reason" class="mt-2 text-sm text-csc-ink/70">
+                        <p v-if="request.cancellation_reason" class="mt-2 text-sm text-csc-ink-muted">
                             Withdrawn: {{ request.cancellation_reason }}
                         </p>
 
@@ -198,10 +198,10 @@ const submitReject = () =>
                             v-if="request.requirements_text"
                             class="mt-3 rounded-lg border border-csc-line bg-csc-mist/40 p-3"
                         >
-                            <h3 class="mb-1 text-xs font-semibold tracking-wide text-csc-ink/70 uppercase">
+                            <h3 class="mb-1 text-xs font-semibold tracking-wide text-csc-ink-muted uppercase">
                                 Requirements sent
                             </h3>
-                            <p class="text-sm whitespace-pre-line text-csc-ink/80">
+                            <p class="text-sm whitespace-pre-line text-csc-ink-muted">
                                 {{ request.requirements_text }}
                             </p>
                         </div>
@@ -209,10 +209,10 @@ const submitReject = () =>
                         <!-- Post-training state, which is what the payment turns on. -->
                         <p v-if="request.completion_submitted" class="mt-2 text-sm text-csc-ink">
                             Documents submitted
-                            <span v-if="request.payment_amount" class="text-csc-ink/55">
+                            <span v-if="request.payment_amount" class="text-csc-ink-subtle">
                                 · ₱{{ request.payment_amount }} declared
                             </span>
-                            <span v-if="request.payment_verified_at" class="text-csc-ink/55">
+                            <span v-if="request.payment_verified_at" class="text-csc-ink-subtle">
                                 · verified {{ request.payment_verified_at }}
                             </span>
                         </p>
@@ -230,7 +230,7 @@ const submitReject = () =>
                                 <li
                                     v-for="document in request.documents"
                                     :key="document.id"
-                                    class="text-xs text-csc-ink/70"
+                                    class="text-xs text-csc-ink-muted"
                                 >
                                     <a
                                         :href="document.url"

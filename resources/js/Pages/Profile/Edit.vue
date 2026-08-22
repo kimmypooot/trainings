@@ -538,7 +538,7 @@ onBeforeUnmount(() => {
                                 />
                             </svg>
                         </p>
-                        <p class="truncate text-sm text-csc-ink/70">{{ user.email }}</p>
+                        <p class="truncate text-sm text-csc-ink-muted">{{ user.email }}</p>
                         <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span
                                 class="inline-block rounded-full bg-csc-blue-tint px-2.5 py-0.5 text-xs font-medium text-csc-blue"
@@ -546,7 +546,7 @@ onBeforeUnmount(() => {
                                 {{ user.role_label }}
                             </span>
                             <p
-                                class="flex items-center gap-1 text-xs text-csc-ink/60"
+                                class="flex items-center gap-1 text-xs text-csc-ink-subtle"
                                 :title="
                                     user.is_verified
                                         ? 'Your email is verified.'
@@ -562,7 +562,7 @@ onBeforeUnmount(() => {
 
                     <div class="w-full shrink-0 sm:w-96 sm:border-l sm:border-csc-line sm:pl-5">
                         <div class="flex items-baseline justify-between gap-3">
-                            <p class="text-xs font-medium text-csc-ink/60">Profile completeness</p>
+                            <p class="text-xs font-medium text-csc-ink-subtle">Profile completeness</p>
                             <p
                                 class="text-sm font-semibold"
                                 :class="completeness.complete ? 'text-success' : 'text-csc-blue'"
@@ -583,7 +583,7 @@ onBeforeUnmount(() => {
                             class="mt-2.5 rounded-lg bg-info-soft px-3 py-2"
                         >
                             <p class="text-xs font-medium text-info">Missing</p>
-                            <p class="mt-0.5 text-xs leading-relaxed text-csc-ink/70">
+                            <p class="mt-0.5 text-xs leading-relaxed text-csc-ink-muted">
                                 {{ completeness.missing.join(', ') }}
                             </p>
                         </div>
@@ -592,7 +592,7 @@ onBeforeUnmount(() => {
                             All set.
                         </p>
 
-                        <p v-if="lastSaved" class="mt-2.5 flex shrink-0 items-center gap-1.5 text-xs text-csc-ink/50">
+                        <p v-if="lastSaved" class="mt-2.5 flex shrink-0 items-center gap-1.5 text-xs text-csc-ink-subtle">
                             <AppIcon name="clock" class="size-3.5" />
                             Last saved {{ lastSaved }}
                         </p>
@@ -649,7 +649,7 @@ onBeforeUnmount(() => {
                         />
                         <div class="min-w-0">
                             <p class="text-sm font-medium text-csc-ink">{{ photoSourceLabel }}</p>
-                            <p class="mt-1 text-xs leading-relaxed text-csc-ink/60">
+                            <p class="mt-1 text-xs leading-relaxed text-csc-ink-subtle">
                                 Use a clear, recent photo of yourself. It is cropped to a square and shown as a
                                 circle.
                             </p>
@@ -668,7 +668,7 @@ onBeforeUnmount(() => {
                                 <button
                                     v-if="user.avatar"
                                     type="button"
-                                    class="text-xs font-medium text-csc-ink/60 underline-offset-2 hover:text-csc-red-ink hover:underline disabled:opacity-50"
+                                    class="text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-csc-red-ink hover:underline disabled:opacity-50"
                                     :disabled="photoBusy"
                                     @click="removePhoto"
                                 >
@@ -679,7 +679,7 @@ onBeforeUnmount(() => {
                             <p v-if="photoError" class="mt-1.5 text-xs font-medium text-csc-red-ink">
                                 {{ photoError }}
                             </p>
-                            <p v-else class="mt-1.5 text-xs text-csc-ink/50">
+                            <p v-else class="mt-1.5 text-xs text-csc-ink-subtle">
                                 JPG, PNG or WebP · up to 2 MB. Photos are squared and resized automatically.
                             </p>
                         </div>
@@ -727,7 +727,7 @@ onBeforeUnmount(() => {
                                 <!-- Status carries an icon and a word, never colour alone. -->
                                 <p
                                     class="mt-0.5 flex items-center gap-1 text-xs"
-                                    :class="user.has_google ? 'text-success' : 'text-csc-ink/50'"
+                                    :class="user.has_google ? 'text-success' : 'text-csc-ink-subtle'"
                                 >
                                     <AppIcon :name="user.has_google ? 'check' : 'link'" class="size-3.5" />
                                     {{ user.has_google ? 'Connected' : 'Not connected' }}
@@ -740,7 +740,7 @@ onBeforeUnmount(() => {
                                     because that is all it is — it never
                                     receives CSC mail.
                                 -->
-                                <p v-if="user.google_email" class="truncate text-xs text-csc-ink/60">
+                                <p v-if="user.google_email" class="truncate text-xs text-csc-ink-subtle">
                                     Signed in as {{ user.google_email }}
                                 </p>
                             </div>
@@ -771,7 +771,7 @@ onBeforeUnmount(() => {
                         </AppButton>
                     </div>
 
-                    <p v-if="!user.google_configured" class="mt-4 text-xs text-csc-ink/50">
+                    <p v-if="!user.google_configured" class="mt-4 text-xs text-csc-ink-subtle">
                         Google sign-in is not configured on this server yet.
                     </p>
 
@@ -782,7 +782,7 @@ onBeforeUnmount(() => {
                     -->
                     <p
                         v-else-if="user.has_google && !user.has_password"
-                        class="mt-4 flex items-start gap-1.5 rounded-lg bg-info-soft px-3 py-2 text-xs text-csc-ink/70"
+                        class="mt-4 flex items-start gap-1.5 rounded-lg bg-info-soft px-3 py-2 text-xs text-csc-ink-muted"
                     >
                         <AppIcon name="shield" class="mt-0.5 size-3.5 shrink-0 text-info" />
                         <span>
@@ -792,7 +792,7 @@ onBeforeUnmount(() => {
                         </span>
                     </p>
 
-                    <p v-else class="mt-4 text-xs text-csc-ink/50">
+                    <p v-else class="mt-4 text-xs text-csc-ink-subtle">
                         {{
                             user.has_google
                                 ? 'You can sign in with Google or with your email and password.'
@@ -807,7 +807,7 @@ onBeforeUnmount(() => {
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <h2 class="text-lg font-semibold text-csc-blue">Profile summary</h2>
-                        <p class="mt-1 text-sm text-csc-ink/70">
+                        <p class="mt-1 text-sm text-csc-ink-muted">
                             Your details as they appear to the CSC. Edit anything that has changed.
                         </p>
                     </div>
@@ -822,7 +822,7 @@ onBeforeUnmount(() => {
                     <h3 class="text-sm font-semibold tracking-wide text-csc-blue uppercase">{{ section.title }}</h3>
                     <dl class="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
                         <div v-for="row in section.rows" :key="row.label">
-                            <dt class="text-xs font-medium text-csc-ink/50">{{ row.label }}</dt>
+                            <dt class="text-xs font-medium text-csc-ink-subtle">{{ row.label }}</dt>
                             <dd class="mt-0.5 text-sm font-medium text-csc-ink">{{ row.value || '—' }}</dd>
                         </div>
                     </dl>
@@ -1033,7 +1033,7 @@ onBeforeUnmount(() => {
                                     />
                                     <span>
                                         <span class="block text-sm font-semibold text-csc-ink">Government employee</span>
-                                        <span class="mt-1 block text-xs leading-relaxed text-csc-ink/60">
+                                        <span class="mt-1 block text-xs leading-relaxed text-csc-ink-subtle">
                                             Employed in a national or local government agency, GOCC, SUC, or other
                                             government institution.
                                         </span>
@@ -1057,7 +1057,7 @@ onBeforeUnmount(() => {
                                     />
                                     <span>
                                         <span class="block text-sm font-semibold text-csc-ink">Private sector / Others</span>
-                                        <span class="mt-1 block text-xs leading-relaxed text-csc-ink/60">
+                                        <span class="mt-1 block text-xs leading-relaxed text-csc-ink-subtle">
                                             Employed in the private sector, an NGO, or another non-government
                                             organization.
                                         </span>
@@ -1187,7 +1187,7 @@ onBeforeUnmount(() => {
             subtitle="Your profile changes have not been saved."
             @close="cancelDiscard"
         >
-            <p class="text-sm leading-relaxed text-csc-ink/70">
+            <p class="text-sm leading-relaxed text-csc-ink-muted">
                 Leaving now will lose everything you have changed in this session. If you need a moment, keep
                 editing and Save before you go.
             </p>
@@ -1206,7 +1206,7 @@ onBeforeUnmount(() => {
             subtitle="You will sign in with your email and password."
             @close="confirmingDisconnect = false"
         >
-            <p class="text-sm leading-relaxed text-csc-ink/70">
+            <p class="text-sm leading-relaxed text-csc-ink-muted">
                 Your training records, registrations, certificates, and profile photo are all unaffected — only
                 the sign-in method changes. You can connect the account again at any time.
             </p>

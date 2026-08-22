@@ -68,19 +68,27 @@ const go = (page) => {
         aria-label="Pagination"
         class="flex flex-col items-center gap-3 sm:flex-row sm:justify-between"
     >
-        <p class="text-xs text-csc-ink/60">
+        <p class="text-xs text-csc-ink-subtle">
             Showing <span class="font-semibold text-csc-ink">{{ from }}</span>–<span
                 class="font-semibold text-csc-ink"
             >{{ to }}</span> of <span class="font-semibold text-csc-ink">{{ total }}</span> {{ label }}
         </p>
 
         <div v-if="hasPages" class="flex flex-wrap items-center gap-1">
+            <!--
+                The inactive branch keeps text-csc-ink/40 where the rest of the
+                app moved to the --color-csc-ink-* tokens. WCAG exempts disabled
+                controls from the contrast floor, and this one is genuinely
+                disabled — `current <= 1`, with disabled:opacity-40 on top. The
+                faintness is the affordance: it is what tells someone there is
+                no previous page to go to.
+            -->
             <button
                 type="button"
                 class="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue disabled:cursor-not-allowed disabled:opacity-40"
                 :class="
                     current > 1
-                        ? 'text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                        ? 'text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                         : 'bg-csc-blue-tint/60 text-csc-ink/40'
                 "
                 :disabled="current <= 1"
@@ -98,7 +106,7 @@ const go = (page) => {
                     :class="
                         page === current
                             ? 'bg-csc-blue text-white'
-                            : 'text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                            : 'text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                     "
                     :aria-label="`Page ${page}`"
                     :aria-current="page === current ? 'page' : undefined"
@@ -106,6 +114,12 @@ const go = (page) => {
                 >
                     {{ page }}
                 </button>
+                <!--
+                    Left at /40 with the disabled arrows above it, and for the
+                    same reason: this is aria-hidden filler standing for "some
+                    pages", not something anyone reads or acts on. Raising it to
+                    the body-text token would make a gap look like a control.
+                -->
                 <span v-else class="px-1 text-csc-ink/40" aria-hidden="true">…</span>
             </template>
 
@@ -114,7 +128,7 @@ const go = (page) => {
                 class="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue disabled:cursor-not-allowed disabled:opacity-40"
                 :class="
                     current < last
-                        ? 'text-csc-ink/70 ring-1 ring-csc-line hover:text-csc-blue'
+                        ? 'text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
                         : 'bg-csc-blue-tint/60 text-csc-ink/40'
                 "
                 :disabled="current >= last"

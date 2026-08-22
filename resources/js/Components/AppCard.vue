@@ -42,7 +42,7 @@ defineProps({
                 <p
                     v-if="subtitle"
                     class="mt-1 text-sm"
-                    :class="tone === 'brand' ? 'text-white/70' : 'text-csc-ink/60'"
+                    :class="tone === 'brand' ? 'text-white/70' : 'text-csc-ink-subtle'"
                 >
                     {{ subtitle }}
                 </p>

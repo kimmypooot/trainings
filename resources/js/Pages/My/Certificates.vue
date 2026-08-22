@@ -35,16 +35,16 @@ const earnedLine = computed(() => {
 
     <AuthenticatedLayout title="Certificates" current="certificates">
         <div class="mx-auto max-w-4xl space-y-5">
-            <p class="text-sm leading-relaxed text-csc-ink/70">
+            <p class="text-sm leading-relaxed text-csc-ink-muted">
                 Certificates are issued by the Civil Service Commission after a training is completed. They appear
                 here once released.
             </p>
 
             <!-- Released -->
             <section v-if="released.length">
-                <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink/60 uppercase">
+                <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink-subtle uppercase">
                     Earned
-                    <span class="ml-1 font-normal normal-case text-csc-ink/45">· {{ earnedLine }}</span>
+                    <span class="ml-1 font-normal normal-case text-csc-ink-subtle">· {{ earnedLine }}</span>
                 </h2>
 
                 <ul class="grid gap-4 sm:grid-cols-2">
@@ -93,13 +93,13 @@ const earnedLine = computed(() => {
                             -->
                             <dl class="mt-4 space-y-2 text-sm">
                                 <div class="flex items-baseline justify-between gap-3">
-                                    <dt class="text-csc-ink/55">Certificate No.</dt>
+                                    <dt class="text-csc-ink-subtle">Certificate No.</dt>
                                     <dd class="font-semibold tracking-wide text-csc-ink tabular-nums">
                                         {{ certificate.number }}
                                     </dd>
                                 </div>
                                 <div class="flex items-baseline justify-between gap-3">
-                                    <dt class="text-csc-ink/55">Issued</dt>
+                                    <dt class="text-csc-ink-subtle">Issued</dt>
                                     <dd class="font-medium text-csc-ink">{{ certificate.issued_at }}</dd>
                                 </div>
                             </dl>
@@ -118,7 +118,7 @@ const earnedLine = computed(() => {
                                 -->
                                 <a
                                     :href="certificate.verify_url"
-                                    class="inline-flex items-center justify-center gap-1.5 rounded text-xs font-medium text-csc-ink/60 transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    class="inline-flex items-center justify-center gap-1.5 rounded text-xs font-medium text-csc-ink-subtle transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                 >
                                     <AppIcon name="shield" size="sm" />
                                     Public verification link
@@ -131,7 +131,7 @@ const earnedLine = computed(() => {
 
             <!-- Completed, not yet released -->
             <section v-if="awaitingRelease.length">
-                <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink/60 uppercase">Being Processed</h2>
+                <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink-subtle uppercase">Being Processed</h2>
                 <ul class="space-y-3">
                     <li
                         v-for="item in awaitingRelease"
@@ -147,7 +147,7 @@ const earnedLine = computed(() => {
                                     {{ item.title }}
                                 </a>
                             </h3>
-                            <p class="mt-1 text-xs text-csc-ink/60">Completed {{ item.completed_at }}</p>
+                            <p class="mt-1 text-xs text-csc-ink-subtle">Completed {{ item.completed_at }}</p>
                         </div>
                         <AppBadge status="processing" label="Awaiting release" />
                     </li>

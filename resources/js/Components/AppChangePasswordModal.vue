@@ -109,7 +109,7 @@ const submit = () =>
             -->
             <div
                 v-if="creating"
-                class="flex items-start gap-2.5 rounded-lg bg-info-soft px-3 py-2.5 text-sm text-csc-ink/75"
+                class="flex items-start gap-2.5 rounded-lg bg-info-soft px-3 py-2.5 text-sm text-csc-ink-muted"
             >
                 <AppIcon name="shield" class="mt-0.5 shrink-0 text-info" size="sm" />
                 <span>
@@ -118,7 +118,7 @@ const submit = () =>
                 </span>
             </div>
 
-            <p class="text-sm text-csc-ink/60">
+            <p class="text-sm text-csc-ink-subtle">
                 {{
                     creating
                         ? 'Choose a password — at least 8 characters with a letter and a number.'
@@ -139,7 +139,7 @@ const submit = () =>
                 <template #affix>
                     <button
                         type="button"
-                        class="rounded p-1 text-csc-ink/50 transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded p-1 text-csc-ink-subtle transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         :aria-label="showCurrent ? 'Hide current password' : 'Show current password'"
                         @click="showCurrent = !showCurrent"
                     >
@@ -160,7 +160,7 @@ const submit = () =>
                 <template #affix>
                     <button
                         type="button"
-                        class="rounded p-1 text-csc-ink/50 transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded p-1 text-csc-ink-subtle transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         :aria-label="showNew ? 'Hide new password' : 'Show new password'"
                         @click="showNew = !showNew"
                     >
@@ -174,7 +174,7 @@ const submit = () =>
                     v-for="requirement in requirements"
                     :key="requirement.label"
                     class="flex items-center gap-2 text-xs"
-                    :class="requirement.met ? 'font-medium text-success' : 'text-csc-ink/55'"
+                    :class="requirement.met ? 'font-medium text-success' : 'text-csc-ink-subtle'"
                 >
                     <AppIcon :name="requirement.met ? 'check' : 'close'" size="sm" class="shrink-0" />
                     {{ requirement.label }}
@@ -193,7 +193,7 @@ const submit = () =>
                 <template #affix>
                     <button
                         type="button"
-                        class="rounded p-1 text-csc-ink/50 transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded p-1 text-csc-ink-subtle transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         :aria-label="showConfirm ? 'Hide confirmation' : 'Show confirmation'"
                         @click="showConfirm = !showConfirm"
                     >

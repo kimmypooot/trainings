@@ -159,23 +159,23 @@ const submitPhysicalOr = () =>
                     class="mb-4 rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm"
                 >
                     <p class="font-medium text-csc-ink">Deposit to</p>
-                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink/80 sm:grid-cols-2">
+                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink-muted sm:grid-cols-2">
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Bank</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Bank</dt>
                             <dd class="font-semibold text-csc-ink">{{ payment_settings.bank_name }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Account name</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Account name</dt>
                             <dd class="text-csc-ink">{{ payment_settings.account_name }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Account no.</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Account no.</dt>
                             <dd class="font-mono font-semibold text-csc-ink">{{ payment_settings.account_number }}</dd>
                         </div>
                     </dl>
                     <p
                         v-if="payment_settings.instructions"
-                        class="mt-2 border-t border-csc-line pt-2 leading-relaxed text-csc-ink/70"
+                        class="mt-2 border-t border-csc-line pt-2 leading-relaxed text-csc-ink-muted"
                     >
                         {{ payment_settings.instructions }}
                     </p>
@@ -190,8 +190,8 @@ const submitPhysicalOr = () =>
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">{{ item.training.title }}</p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">₱{{ money(item.amount) }}</p>
-                                <p class="text-xs text-csc-ink/55">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">₱{{ money(item.amount) }}</p>
+                                <p class="text-xs text-csc-ink-subtle">
                                     {{ item.training.starts_at }}
                                     <span v-if="item.training.mode_label">· {{ item.training.mode_label }}</span>
                                 </p>
@@ -262,7 +262,7 @@ const submitPhysicalOr = () =>
                                     class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink file:mr-3 file:rounded file:border-0 file:bg-csc-blue-tint file:px-3 file:py-1.5 file:text-sm file:text-csc-blue"
                                     @change="form.proof = $event.target.files[0]"
                                 />
-                                <p class="mt-1.5 text-xs text-csc-ink/60">
+                                <p class="mt-1.5 text-xs text-csc-ink-subtle">
                                     <template v-if="proofExpected">
                                         Please attach the transfer slip if you have it — it is what CSC
                                         matches against the bank statement. You can submit without one,
@@ -307,15 +307,15 @@ const submitPhysicalOr = () =>
                                         {{ payment.training.title }}
                                     </a>
                                 </p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
                                     ₱{{ money(payment.amount) }} · {{ payment.method }} ·
                                     {{ payment.payment_date }}
                                 </p>
-                                <p v-if="payment.training.starts_at" class="text-xs text-csc-ink/55">
+                                <p v-if="payment.training.starts_at" class="text-xs text-csc-ink-subtle">
                                     {{ payment.training.starts_at }}
                                     <span v-if="payment.training.mode_label">· {{ payment.training.mode_label }}</span>
                                 </p>
-                                <p v-if="payment.reference_number" class="text-xs text-csc-ink/55">
+                                <p v-if="payment.reference_number" class="text-xs text-csc-ink-subtle">
                                     Ref {{ payment.reference_number }}
                                 </p>
                             </div>
@@ -360,12 +360,12 @@ const submitPhysicalOr = () =>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <p class="text-sm font-medium text-csc-ink">
                                     Refund {{ payment.refund.request_code }}
-                                    <span class="text-csc-ink/55">· ₱{{ money(payment.refund.amount) }}</span>
+                                    <span class="text-csc-ink-subtle">· ₱{{ money(payment.refund.amount) }}</span>
                                 </p>
                                 <AppBadge :status="payment.refund.status" />
                             </div>
 
-                            <p class="mt-1.5 text-sm text-csc-ink/75">{{ payment.refund.message }}</p>
+                            <p class="mt-1.5 text-sm text-csc-ink-muted">{{ payment.refund.message }}</p>
 
                             <p
                                 v-if="payment.refund.rejection_reason"
@@ -387,7 +387,7 @@ const submitPhysicalOr = () =>
                                     v-for="stage in payment.refund.stages"
                                     :key="stage.label"
                                     class="flex items-center gap-1.5 text-xs"
-                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink/40'"
+                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink-subtle'"
                                 >
                                     <AppIcon
                                         :name="stage.reached ? 'check' : 'clock'"
@@ -409,7 +409,7 @@ const submitPhysicalOr = () =>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <p class="text-sm font-medium text-csc-ink">
                                     Physical OR {{ payment.physical_or.request_code }}
-                                    <span v-if="payment.physical_or.courier_name" class="text-csc-ink/55">
+                                    <span v-if="payment.physical_or.courier_name" class="text-csc-ink-subtle">
                                         · {{ payment.physical_or.courier_name }}
                                         <template v-if="payment.physical_or.tracking_number">
                                             {{ payment.physical_or.tracking_number }}
@@ -419,7 +419,7 @@ const submitPhysicalOr = () =>
                                 <AppBadge :status="payment.physical_or.status" />
                             </div>
 
-                            <p class="mt-1.5 text-sm text-csc-ink/75">{{ payment.physical_or.message }}</p>
+                            <p class="mt-1.5 text-sm text-csc-ink-muted">{{ payment.physical_or.message }}</p>
 
                             <p
                                 v-if="payment.physical_or.rejection_reason"
@@ -436,7 +436,7 @@ const submitPhysicalOr = () =>
                                     v-for="stage in payment.physical_or.stages"
                                     :key="stage.label"
                                     class="flex items-center gap-1.5 text-xs"
-                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink/40'"
+                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink-subtle'"
                                 >
                                     <AppIcon
                                         :name="stage.reached ? 'check' : 'clock'"
@@ -573,17 +573,17 @@ const submitPhysicalOr = () =>
 
                 <div class="rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm">
                     <p class="font-medium text-csc-ink">Payment details</p>
-                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink/80">
+                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink-muted">
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Courier fee</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Courier fee</dt>
                             <dd class="font-semibold text-csc-ink">₱{{ money(physical_or_settings?.courier_fee ?? 200) }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">GCash</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">GCash</dt>
                             <dd class="font-mono font-semibold text-csc-ink">{{ physical_or_settings?.gcash_number }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Account name</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Account name</dt>
                             <dd class="text-csc-ink">{{ physical_or_settings?.account_name }}</dd>
                         </div>
                     </dl>

@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\BrandsMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\URL;
  */
 class VerifyEmail extends Notification
 {
+    use BrandsMail;
     use Queueable;
 
     /**
@@ -30,13 +32,16 @@ class VerifyEmail extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
-            ->subject('Verify your CSC TIMS email')
-            ->greeting('Hello '.($notifiable->name ?: 'there').',')
-            ->line('Thanks for registering with CSC TIMS. Please confirm that this is your email address by clicking the button below.')
-            ->action('Verify my email', $this->verificationUrl($notifiable))
-            ->line('This link will expire in 60 minutes. If you did not create this account, you can ignore this email.')
-            ->salutation('— Civil Service Commission Regional Office VIII');
+        return $this->withPreheader(
+            (new MailMessage)
+                ->subject('Verify your CSC TIMS email')
+                ->greeting($this->greetingFor($notifiable))
+                ->line('Thanks for registering with CSC TIMS. Please confirm that this is your email address by clicking the button below.')
+                ->action('Verify my email', $this->verificationUrl($notifiable))
+                ->line('This link will expire in 60 minutes. If you did not create this account, you can ignore this email.')
+                ->salutation($this->signature()),
+            'Confirm your email address to activate your CSC TIMS account.'
+        );
     }
 
     /**

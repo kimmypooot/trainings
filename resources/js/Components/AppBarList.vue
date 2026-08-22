@@ -25,7 +25,7 @@ const peak = computed(() => Math.max(1, ...props.rows.map((row) => row.count)));
 </script>
 
 <template>
-    <p v-if="!rows.length" class="text-sm text-csc-ink/60">{{ emptyText }}</p>
+    <p v-if="!rows.length" class="text-sm text-csc-ink-subtle">{{ emptyText }}</p>
 
     <ul v-else class="space-y-2">
         <li
@@ -34,7 +34,7 @@ const peak = computed(() => Math.max(1, ...props.rows.map((row) => row.count)));
             class="grid items-center gap-3"
             :style="{ gridTemplateColumns: `${labelWidth} 1fr 2.5rem` }"
         >
-            <span class="truncate text-xs text-csc-ink/60" :title="row.label">{{ row.label }}</span>
+            <span class="truncate text-xs text-csc-ink-subtle" :title="row.label">{{ row.label }}</span>
             <!--
                 The bar is decorative: the label and the count either side of it
                 already carry the value, so it is hidden from assistive tech

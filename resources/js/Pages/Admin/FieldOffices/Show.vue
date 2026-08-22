@@ -40,7 +40,7 @@ const jurisdiction = props.office.jurisdiction.join(', ') || props.office.provin
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div class="min-w-0">
                         <p class="text-lg font-semibold text-csc-blue">{{ office.name }}</p>
-                        <p class="mt-0.5 text-sm text-csc-ink/70">
+                        <p class="mt-0.5 text-sm text-csc-ink-muted">
                             {{ office.code.toUpperCase() }} · {{ office.type_label }}
                         </p>
                         <div class="mt-2 flex flex-wrap gap-2">
@@ -67,27 +67,27 @@ const jurisdiction = props.office.jurisdiction.join(', ') || props.office.provin
             <AppCard title="Office Details">
                 <dl class="grid gap-4 text-sm sm:grid-cols-2">
                     <div>
-                        <dt class="text-csc-ink/60">Type</dt>
+                        <dt class="text-csc-ink-subtle">Type</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ office.type_label }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Primary Province</dt>
+                        <dt class="text-csc-ink-subtle">Primary Province</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ office.province ?? '—' }}</dd>
                     </div>
                     <div class="sm:col-span-2">
-                        <dt class="text-csc-ink/60">Jurisdiction</dt>
+                        <dt class="text-csc-ink-subtle">Jurisdiction</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ jurisdiction }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Address</dt>
+                        <dt class="text-csc-ink-subtle">Address</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ office.address ?? '—' }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Contact Number</dt>
+                        <dt class="text-csc-ink-subtle">Contact Number</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ office.contact_number ?? '—' }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Email</dt>
+                        <dt class="text-csc-ink-subtle">Email</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">
                             <a
                                 v-if="office.email"
@@ -100,15 +100,15 @@ const jurisdiction = props.office.jurisdiction.join(', ') || props.office.provin
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Office Head</dt>
+                        <dt class="text-csc-ink-subtle">Office Head</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ office.head_name ?? '—' }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Head Position</dt>
+                        <dt class="text-csc-ink-subtle">Head Position</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ office.head_position ?? '—' }}</dd>
                     </div>
                     <div v-if="office.remarks" class="sm:col-span-2">
-                        <dt class="text-csc-ink/60">Remarks</dt>
+                        <dt class="text-csc-ink-subtle">Remarks</dt>
                         <dd class="mt-0.5 whitespace-pre-line font-medium text-csc-ink">{{ office.remarks }}</dd>
                     </div>
                 </dl>
@@ -128,7 +128,7 @@ const jurisdiction = props.office.jurisdiction.join(', ') || props.office.provin
                             >
                                 {{ registration.training }}
                             </Link>
-                            <p class="mt-0.5 text-xs text-csc-ink/60">
+                            <p class="mt-0.5 text-xs text-csc-ink-subtle">
                                 {{ registration.participant }} · Registered {{ registration.registered_at }}
                             </p>
                         </div>

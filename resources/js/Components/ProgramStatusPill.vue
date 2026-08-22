@@ -38,11 +38,11 @@ const styles = {
         icon: 'M10 8l6 4-6 4V8ZM12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z',
     },
     full: {
-        classes: 'bg-csc-line/60 text-csc-ink/80',
+        classes: 'bg-csc-line/60 text-csc-ink-muted',
         icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM22 21v-2a4 4 0 0 0-3-3.87',
     },
     closed: {
-        classes: 'bg-csc-line/60 text-csc-ink/80',
+        classes: 'bg-csc-line/60 text-csc-ink-muted',
         icon: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5V11Z',
     },
 };
