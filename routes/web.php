@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\PhysicalOrRequestController as AdminPhysicalOrReq
 use App\Http\Controllers\Admin\RequestQueueController as AdminRequestQueueController;
 use App\Http\Controllers\Admin\ScanLinkController as AdminScanLinkController;
 use App\Http\Controllers\Admin\ScannerController;
+use App\Http\Controllers\Admin\SearchController;
 use App\Http\Controllers\Admin\SubjectMatterExpertController as AdminSubjectMatterExpertController;
 use App\Http\Controllers\Admin\TrainingController as AdminTrainingController;
 use App\Http\Controllers\Admin\UndoController as AdminUndoController;
@@ -279,6 +280,15 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
     ->name('admin.')
     ->group(function () {
         Route::get('/', AdminDashboardController::class)->name('dashboard');
+
+        /*
+         * The header search box. It reaches the participants directory and the
+         * trainings catalogue, both of which every staff role already reads
+         * from this same group — so it opens no door that was not already open,
+         * and it carries the field-office scope inside GlobalSearch rather than
+         * relying on this line to narrow it.
+         */
+        Route::get('/search', SearchController::class)->name('search');
 
         // Creating and editing trainings is HRD work; field offices and
         // management get the roster but not the pen.
