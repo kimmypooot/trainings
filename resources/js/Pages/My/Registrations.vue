@@ -16,7 +16,28 @@ import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
 
 const props = defineProps({
     registrations: { type: Array, required: true },
+    /** The status filter in force, or null for everything. */
+    filters: { type: Object, default: () => ({ status: null }) },
+    /** Only the statuses this participant actually has. */
+    statusOptions: { type: Array, default: () => [] },
 });
+
+/*
+ * The status filter, driven by the URL.
+ *
+ * The dashboard's counts link straight in here with ?status=, so the filter has
+ * to survive a cold load rather than living in component state — and a filtered
+ * view is worth bookmarking and sharing with the office anyway.
+ *
+ * `replace` keeps the back button meaningful: flicking between chips should not
+ * bury the page the participant arrived from under a dozen history entries.
+ */
+const filterTo = (status) =>
+    router.get(
+        '/my/registrations',
+        status ? { status } : {},
+        { preserveScroll: true, preserveState: true, replace: true }
+    );
 
 /*
  * Reading a training without leaving the list.
@@ -157,7 +178,65 @@ const submitResubmit = () => {
 
     <AuthenticatedLayout title="My Registrations" current="registrations">
         <div class="mx-auto max-w-4xl space-y-5">
-            <AppCard v-if="!registrations.length" :padded="false">
+            <!--
+                Filter chips, shown only once there is more than one status to
+                choose between — a single chip is a label pretending to be a
+                control. Rendered above the empty state too, so a filter that
+                happens to match nothing can still be cleared.
+            -->
+            <div v-if="statusOptions.length > 1" class="flex flex-wrap gap-2">
+                <button
+                    type="button"
+                    class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    :class="
+                        filters.status
+                            ? 'border-csc-line bg-white text-csc-ink-muted hover:border-csc-blue/40'
+                            : 'border-csc-blue bg-csc-blue text-white'
+                    "
+                    :aria-pressed="!filters.status"
+                    @click="filterTo(null)"
+                >
+                    All
+                </button>
+                <button
+                    v-for="option in statusOptions"
+                    :key="option.value"
+                    type="button"
+                    class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    :class="
+                        filters.status === option.value
+                            ? 'border-csc-blue bg-csc-blue text-white'
+                            : 'border-csc-line bg-white text-csc-ink-muted hover:border-csc-blue/40'
+                    "
+                    :aria-pressed="filters.status === option.value"
+                    @click="filterTo(option.value)"
+                >
+                    {{ option.label }}
+                    <span :class="filters.status === option.value ? 'text-white/70' : 'text-csc-ink-subtle'">
+                        {{ option.count }}
+                    </span>
+                </button>
+            </div>
+
+            <!--
+                Two different nothings: no registrations at all, and none
+                matching the filter. Telling a participant to go browse the
+                catalogue when they have six registrations and a narrow filter
+                on would be plainly wrong.
+            -->
+            <AppCard v-if="!registrations.length && filters.status" :padded="false">
+                <AppEmptyState
+                    title="No registrations with that status"
+                    description="Nothing here matches the filter you have applied."
+                    icon="bookmark"
+                >
+                    <template #action>
+                        <AppButton icon="close" @click="filterTo(null)">Show All</AppButton>
+                    </template>
+                </AppEmptyState>
+            </AppCard>
+
+            <AppCard v-else-if="!registrations.length" :padded="false">
                 <AppEmptyState
                     title="You have not registered for any training yet"
                     description="Browse the catalogue and reserve a slot — your registrations will be listed here."
@@ -171,7 +250,7 @@ const submitResubmit = () => {
 
             <template v-else>
                 <section v-if="upcoming.length">
-                    <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink/60 uppercase">Upcoming</h2>
+                    <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink-subtle uppercase">Upcoming</h2>
                     <ul class="space-y-3">
                         <li
                             v-for="registration in upcoming"
@@ -189,7 +268,7 @@ const submitResubmit = () => {
                                             {{ registration.training.title }}
                                         </button>
                                     </h3>
-                                    <p class="mt-1 text-xs text-csc-ink/60">{{ schedule(registration.training) }}</p>
+                                    <p class="mt-1 text-xs text-csc-ink-subtle">{{ schedule(registration.training) }}</p>
                                 </div>
                                 <AppBadge :status="registration.status" />
                             </div>
@@ -198,11 +277,11 @@ const submitResubmit = () => {
                                 <div class="flex items-start gap-2">
                                     <AppIcon name="map-pin" size="sm" class="mt-0.5 shrink-0" />
                                     <div class="min-w-0">
-                                        <dt class="text-csc-ink/60">Venue</dt>
+                                        <dt class="text-csc-ink-subtle">Venue</dt>
                                         <dd class="mt-0.5 font-medium text-csc-ink">{{ registration.training.venue }}</dd>
                                         <dd
                                             v-if="registration.training.venue_details"
-                                            class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink/60"
+                                            class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink-subtle"
                                         >
                                             {{ registration.training.venue_details }}
                                         </dd>
@@ -212,7 +291,7 @@ const submitResubmit = () => {
                                 <div v-if="registration.training.mode_label" class="flex items-start gap-2">
                                     <AppIcon name="link" size="sm" class="mt-0.5 shrink-0" />
                                     <div>
-                                        <dt class="text-csc-ink/60">Mode</dt>
+                                        <dt class="text-csc-ink-subtle">Mode</dt>
                                         <dd class="mt-0.5 font-medium text-csc-ink">
                                             {{ registration.training.mode_label }}
                                             <span v-if="registration.training.duration_days">
@@ -227,7 +306,7 @@ const submitResubmit = () => {
                                 <div v-if="registration.training.level_label" class="flex items-start gap-2">
                                     <AppIcon name="clipboard" size="sm" class="mt-0.5 shrink-0" />
                                     <div>
-                                        <dt class="text-csc-ink/60">Level</dt>
+                                        <dt class="text-csc-ink-subtle">Level</dt>
                                         <dd class="mt-0.5 font-medium text-csc-ink">
                                             {{ registration.training.level_label }}
                                         </dd>
@@ -237,7 +316,7 @@ const submitResubmit = () => {
                                 <div v-if="registration.training.category" class="flex items-start gap-2">
                                     <AppIcon name="bookmark" size="sm" class="mt-0.5 shrink-0" />
                                     <div>
-                                        <dt class="text-csc-ink/60">Category</dt>
+                                        <dt class="text-csc-ink-subtle">Category</dt>
                                         <dd class="mt-0.5 font-medium text-csc-ink">
                                             {{ registration.training.category }}
                                         </dd>
@@ -247,7 +326,7 @@ const submitResubmit = () => {
                                 <div v-if="registration.training.payment_required" class="flex items-start gap-2">
                                     <AppIcon name="card" size="sm" class="mt-0.5 shrink-0" />
                                     <div>
-                                        <dt class="text-csc-ink/60">Training fee</dt>
+                                        <dt class="text-csc-ink-subtle">Training fee</dt>
                                         <dd class="mt-0.5 font-medium text-csc-ink">
                                             PHP {{ money(registration.training.payment_amount) }}
                                         </dd>
@@ -257,7 +336,7 @@ const submitResubmit = () => {
 
                             <p
                                 v-if="registration.training.description"
-                                class="mt-3 line-clamp-2 text-xs leading-relaxed text-csc-ink/65"
+                                class="mt-3 line-clamp-2 text-xs leading-relaxed text-csc-ink-subtle"
                             >
                                 {{ registration.training.description }}
                             </p>
@@ -317,7 +396,7 @@ const submitResubmit = () => {
                                 </div>
                                 <p
                                     v-if="registration.supervisory_document.remarks"
-                                    class="mt-2 border-t border-csc-line pt-2 text-xs text-csc-ink/70"
+                                    class="mt-2 border-t border-csc-line pt-2 text-xs text-csc-ink-muted"
                                 >
                                     <span class="font-medium">CSC:</span>
                                     {{ registration.supervisory_document.remarks }}
@@ -328,7 +407,7 @@ const submitResubmit = () => {
                 </section>
 
                 <section v-if="past.length">
-                    <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink/60 uppercase">Past</h2>
+                    <h2 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink-subtle uppercase">Past</h2>
                     <ul class="space-y-3">
                         <li
                             v-for="registration in past"
@@ -346,8 +425,8 @@ const submitResubmit = () => {
                                             {{ registration.training.title }}
                                         </button>
                                     </h3>
-                                    <p class="mt-1 text-xs text-csc-ink/60">{{ schedule(registration.training) }}</p>
-                                    <p v-if="registration.training.venue" class="text-xs text-csc-ink/60">
+                                    <p class="mt-1 text-xs text-csc-ink-subtle">{{ schedule(registration.training) }}</p>
+                                    <p v-if="registration.training.venue" class="text-xs text-csc-ink-subtle">
                                         {{ registration.training.venue }}
                                     </p>
                                 </div>
@@ -383,7 +462,7 @@ const submitResubmit = () => {
                                                 >
                                                     {{ output.title }}
                                                 </a>
-                                                <p class="mt-0.5 text-2xs text-csc-ink/55">
+                                                <p class="mt-0.5 text-2xs text-csc-ink-subtle">
                                                     {{ output.filename }} · {{ output.size }} ·
                                                     {{ output.submitted_at }}
                                                 </p>
@@ -392,14 +471,14 @@ const submitResubmit = () => {
                                         </div>
                                         <p
                                             v-if="output.remarks"
-                                            class="mt-2 border-t border-csc-line pt-2 text-2xs text-csc-ink/70"
+                                            class="mt-2 border-t border-csc-line pt-2 text-2xs text-csc-ink-muted"
                                         >
                                             <span class="font-medium">CSC:</span> {{ output.remarks }}
                                         </p>
                                     </li>
                                 </ul>
 
-                                <p v-else class="mt-1 text-xs text-csc-ink/60">
+                                <p v-else class="mt-1 text-xs text-csc-ink-subtle">
                                     You have not submitted an output for this training yet.
                                 </p>
 
@@ -538,41 +617,41 @@ const submitResubmit = () => {
             <template v-if="detailing">
                 <dl class="grid gap-x-6 gap-y-5 text-sm sm:grid-cols-2">
                     <div>
-                        <dt class="text-csc-ink/60">Date</dt>
+                        <dt class="text-csc-ink-subtle">Date</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ schedule(detailing.training) }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Venue</dt>
+                        <dt class="text-csc-ink-subtle">Venue</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.venue }}</dd>
                     </div>
                     <div v-if="detailing.training.mode_label">
-                        <dt class="text-csc-ink/60">Mode</dt>
+                        <dt class="text-csc-ink-subtle">Mode</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.mode_label }}</dd>
                     </div>
                     <div v-if="detailing.training.payment_required">
-                        <dt class="text-csc-ink/60">Fee</dt>
+                        <dt class="text-csc-ink-subtle">Fee</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">₱{{ money(detailing.training.payment_amount) }}</dd>
                     </div>
                     <div v-if="detailing.training.category">
-                        <dt class="text-csc-ink/60">Curriculum</dt>
+                        <dt class="text-csc-ink-subtle">Curriculum</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.category }}</dd>
                     </div>
                     <div v-if="detailing.training.duration_days">
-                        <dt class="text-csc-ink/60">Duration</dt>
+                        <dt class="text-csc-ink-subtle">Duration</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">
                             {{ detailing.training.duration_days }} day{{ detailing.training.duration_days === 1 ? '' : 's' }}
                         </dd>
                     </div>
                     <div v-if="detailing.training.level_label">
-                        <dt class="text-csc-ink/60">Level</dt>
+                        <dt class="text-csc-ink-subtle">Level</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.level_label }}</dd>
                     </div>
                     <div v-if="detailing.training.training_code">
-                        <dt class="text-csc-ink/60">Training code</dt>
+                        <dt class="text-csc-ink-subtle">Training code</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.training_code }}</dd>
                     </div>
                     <div class="sm:col-span-2">
-                        <dt class="text-csc-ink/60">Your registration</dt>
+                        <dt class="text-csc-ink-subtle">Your registration</dt>
                         <dd class="mt-1"><AppBadge :status="detailing.status" /></dd>
                     </div>
                 </dl>
@@ -596,14 +675,14 @@ const submitResubmit = () => {
                     >
                         {{ detailing.training.meeting_link }}
                     </a>
-                    <p class="mt-1.5 text-xs text-csc-ink/60">
+                    <p class="mt-1.5 text-xs text-csc-ink-subtle">
                         Please keep this link to yourself — it is issued to you alone.
                     </p>
                 </div>
 
                 <p
                     v-else-if="joinLockedReason(detailing)"
-                    class="mt-5 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70"
+                    class="mt-5 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink-muted"
                 >
                     <AppIcon name="lock" size="sm" class="mt-0.5 shrink-0" />
                     {{ joinLockedReason(detailing) }}

@@ -896,4 +896,115 @@ class TrainingRegistrationTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page->has('trainings', 0));
     }
+
+    /**
+     * The .ics behind the dashboard's "Add to Calendar".
+     *
+     * Checks the fields a calendar client actually reads, and that the escaping
+     * holds: a comma in a venue that reaches the file unescaped ends the
+     * property early, and some clients then drop the event rather than complain.
+     */
+    public function test_a_registration_can_be_downloaded_as_a_calendar_file(): void
+    {
+        $user = $this->participant();
+        $training = Training::factory()->create([
+            'title' => 'Records Management',
+            'venue' => 'CSC Regional Office VIII, Palo, Leyte',
+            'starts_at' => now()->addWeek(),
+            'ends_at' => now()->addWeek()->addHours(8),
+        ]);
+
+        $registration = RegistrationService::register($user, $training);
+
+        $response = $this->actingAs($user)
+            ->get("/my/registrations/{$registration->id}/calendar")
+            ->assertOk()
+            ->assertHeader('content-type', 'text/calendar; charset=utf-8');
+
+        $body = $response->getContent();
+
+        $this->assertStringContainsString('BEGIN:VEVENT', $body);
+        $this->assertStringContainsString('SUMMARY:Records Management', $body);
+        // The venue's commas survive as escaped commas, not as field breaks.
+        $this->assertStringContainsString('LOCATION:CSC Regional Office VIII\\, Palo\\, Leyte', $body);
+        // Stable UID, so re-importing updates the entry rather than duplicating it.
+        $this->assertStringContainsString("UID:registration-{$registration->id}@", $body);
+        $this->assertStringContainsString('DTSTART:', $body);
+        $this->assertStringContainsString('DTEND:', $body);
+    }
+
+    public function test_someone_elses_registration_cannot_be_downloaded_as_a_calendar_file(): void
+    {
+        $owner = $this->participant();
+        $other = $this->participant();
+
+        $registration = RegistrationService::register($owner, Training::factory()->create());
+
+        $this->actingAs($other)
+            ->get("/my/registrations/{$registration->id}/calendar")
+            ->assertForbidden();
+    }
+
+    /**
+     * The dashboard's counts link in here with ?status=, so the filter has to
+     * narrow the list — otherwise a tile reading "1 Completed" lands on a page
+     * showing everything and the reader counts again.
+     */
+    public function test_the_registrations_list_can_be_filtered_by_status(): void
+    {
+        $user = $this->participant();
+
+        RegistrationService::register($user, Training::factory()->create(['title' => 'Still Open']));
+
+        $completed = RegistrationService::register($user, Training::factory()->create(['title' => 'Finished']));
+        $completed->forceFill(['status' => RegistrationStatus::Completed])->save();
+
+        $this->actingAs($user)
+            ->get('/my/registrations?status=completed')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('registrations', 1)
+                ->where('registrations.0.training.title', 'Finished')
+                ->where('filters.status', 'completed')
+            );
+    }
+
+    /**
+     * A hand-edited or stale status shows everything rather than nothing: an
+     * empty page would read as "you have no registrations", which is a lie the
+     * URL should not be able to tell.
+     */
+    public function test_an_unknown_status_filter_falls_back_to_showing_everything(): void
+    {
+        $user = $this->participant();
+
+        RegistrationService::register($user, Training::factory()->create());
+
+        $this->actingAs($user)
+            ->get('/my/registrations?status=not-a-status')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('registrations', 1)
+                ->where('filters.status', null)
+            );
+    }
+
+    /** The chips only offer statuses the participant actually has. */
+    public function test_filter_chips_cover_only_the_statuses_in_hand(): void
+    {
+        $user = $this->participant();
+
+        $completed = RegistrationService::register($user, Training::factory()->create());
+        $completed->forceFill(['status' => RegistrationStatus::Completed])->save();
+
+        $this->actingAs($user)
+            ->get('/my/registrations')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $options = $page->toArray()['props']['statusOptions'];
+
+                $this->assertSame(['completed'], collect($options)->pluck('value')->all());
+                $this->assertSame(1, $options[0]['count']);
+            });
+    }
 }

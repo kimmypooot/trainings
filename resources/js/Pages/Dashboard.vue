@@ -14,15 +14,23 @@ const props = defineProps({
     summary: { type: Object, required: true },
     nextTraining: { type: Object, default: null },
     recentActivity: { type: Array, default: () => [] },
+    /** Queues the participant is holding up; empty most of the time. */
+    attention: { type: Array, default: () => [] },
     profile: { type: Object, required: true },
 });
 
-const money = (value) =>
-    Number(value).toLocaleString('en-PH', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
+// Built once rather than per call: a formatter is not free to construct, and
+// this one runs on every fee the page prints.
+const peso = new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+});
 
+const money = (value) => peso.format(Number(value));
+
+// Fixed at mount, deliberately: a dashboard left open overnight will still say
+// "Good evening" in the morning, which is a smaller cost than a timer running
+// for the life of every session to correct a greeting nobody re-reads.
 const greeting = computed(() => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -96,11 +104,16 @@ const quickActions = [
  * colour blindness on its own, exactly as AppBadge does.
  */
 const activityTones = {
+    // The fallback matters more than it looks: the feed's kinds are minted
+    // server-side, and a new one arriving here without a matching entry used to
+    // take the whole dashboard down with a TypeError, nowhere near the change
+    // that caused it. An unstyled-but-rendered tile is the better failure.
+    default: { icon: 'clock', node: 'bg-csc-line/60 text-csc-ink-subtle' },
     registered: { icon: 'bookmark', node: 'bg-csc-blue-tint text-csc-blue' },
     approved: { icon: 'check', node: 'bg-info-soft text-info' },
     waitlisted: { icon: 'clock', node: 'bg-warning-soft text-warning' },
     rejected: { icon: 'close', node: 'bg-danger-soft text-danger' },
-    withdrawn: { icon: 'close', node: 'bg-csc-line/60 text-csc-ink/60' },
+    withdrawn: { icon: 'close', node: 'bg-csc-line/60 text-csc-ink-subtle' },
     completed: { icon: 'check', node: 'bg-success-soft text-success' },
     certificate: { icon: 'certificate', node: 'bg-success-soft text-success' },
 };
@@ -124,13 +137,34 @@ const activityGroups = computed(() => {
     return groups;
 });
 
-// Labelled "Approved" rather than "Registered": the count excludes pending
-// registrations, and the badge vocabulary elsewhere already says "Approved".
-const stats = computed(() => [
-    { label: 'Approved', value: props.summary.registered, href: '/my/registrations' },
-    { label: 'Completed', value: props.summary.completed, href: '/my/registrations' },
-    { label: 'Certificates', value: props.summary.certificates, href: '/my/certificates' },
-]);
+const tone = (kind) => activityTones[kind] ?? activityTones.default;
+
+/*
+ * The counts, as handles on the lists behind them.
+ *
+ * Labelled "Approved" rather than "Registered": the count excludes pending
+ * registrations, and the badge vocabulary elsewhere already says "Approved".
+ *
+ * Each carries the status it counts through to the list, so a number lands on
+ * the rows it was counting rather than on an undifferentiated page the reader
+ * then has to scan for them. Pending earns a tile whenever there is one to
+ * show — it is the status a participant may actually need to chase — and
+ * yields to Certificates when there is nothing waiting.
+ */
+const stats = computed(() => {
+    const tiles = [
+        { label: 'Approved', value: props.summary.registered, href: '/my/registrations?status=approved' },
+        { label: 'Completed', value: props.summary.completed, href: '/my/registrations?status=completed' },
+    ];
+
+    tiles.push(
+        props.summary.pending
+            ? { label: 'Pending', value: props.summary.pending, href: '/my/registrations?status=pending' }
+            : { label: 'Certificates', value: props.summary.certificates, href: '/my/certificates' }
+    );
+
+    return tiles;
+});
 </script>
 
 <template>
@@ -143,7 +177,7 @@ const stats = computed(() => [
                 <h2 class="text-xl font-semibold tracking-tight text-csc-blue sm:text-2xl">
                     {{ greetingLine }}
                 </h2>
-                <p class="mt-1.5 text-sm leading-relaxed text-csc-ink/70">{{ statusLine }}</p>
+                <p class="mt-1.5 text-sm leading-relaxed text-csc-ink-muted">{{ statusLine }}</p>
             </div>
 
             <!-- 2. Action required — rendered only when something is genuinely pending -->
@@ -157,6 +191,35 @@ const stats = computed(() => [
                     <AppButton href="/profile" size="sm" variant="ghost">Review</AppButton>
                 </template>
             </AppAlert>
+
+            <!--
+                2b. What the participant owes.
+
+                The feed below says what happened; this says what has not. It
+                renders only when a queue actually has something in it, so the
+                common case is that this block is absent entirely — which is
+                what keeps it worth reading when it is not.
+            -->
+            <AppCard v-if="attention.length" title="Needs your attention">
+                <ul class="space-y-2">
+                    <li v-for="item in attention" :key="item.key">
+                        <Link
+                            :href="item.href"
+                            class="group flex items-center gap-3 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 transition-colors duration-150 hover:border-warning/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        >
+                            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-warning">
+                                <AppIcon :name="item.icon" size="sm" />
+                            </span>
+                            <span class="flex-1 text-sm font-medium text-csc-ink">{{ item.label }}</span>
+                            <AppIcon
+                                name="chevron-right"
+                                size="sm"
+                                class="shrink-0 text-csc-ink-subtle transition-colors group-hover:text-csc-blue"
+                            />
+                        </Link>
+                    </li>
+                </ul>
+            </AppCard>
 
             <!-- 3. Next training — the hero -->
             <AppCard v-if="nextTraining" tone="brand" :title="nextTraining.title" :subtitle="nextTraining.schedule">
@@ -196,14 +259,36 @@ const stats = computed(() => [
                     </div>
                     <div v-if="nextTraining.payment_amount !== null">
                         <dt class="text-white/60">Training fee</dt>
-                        <dd class="mt-0.5 font-medium text-white">PHP {{ money(nextTraining.payment_amount) }}</dd>
+                        <dd class="mt-0.5 font-medium text-white">{{ money(nextTraining.payment_amount) }}</dd>
+                        <!--
+                            A figure on its own reads as either a receipt or a
+                            bill depending on who is looking, so it says which.
+                            Not colour-alone: both states are words first.
+                        -->
+                        <dd class="mt-0.5 text-xs" :class="nextTraining.fee_settled ? 'text-white/60' : 'text-white'">
+                            {{ nextTraining.fee_settled ? 'Settled' : 'Not yet settled' }}
+                        </dd>
                     </div>
                 </dl>
 
                 <template #footer>
                     <div class="flex flex-col gap-2 sm:flex-row">
                         <AppButton :href="nextTraining.url" size="sm" on-dark icon="arrow-right">View Details</AppButton>
-                        <AppButton href="/my/qr" size="sm" variant="ghost" on-dark>Show QR Code</AppButton>
+                        <!--
+                            Withheld on a pending registration: a QR the scanner
+                            will refuse is worse than no button, because the
+                            participant only finds out at the door.
+                        -->
+                        <AppButton v-if="nextTraining.can_check_in" href="/my/qr" size="sm" variant="ghost" on-dark>
+                            Show QR Code
+                        </AppButton>
+                        <!--
+                            A plain anchor, not a Link: this is a file download,
+                            and Inertia would try to render the .ics as a page.
+                        -->
+                        <AppButton :href="nextTraining.calendar_url" external size="sm" variant="ghost" on-dark icon="calendar">
+                            Add to Calendar
+                        </AppButton>
                     </div>
                 </template>
             </AppCard>
@@ -222,7 +307,7 @@ const stats = computed(() => [
 
             <!-- 4. Quick actions -->
             <div>
-                <h3 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink/60 uppercase">Quick Actions</h3>
+                <h3 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink-subtle uppercase">Quick Actions</h3>
                 <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <Link
                         v-for="action in quickActions"
@@ -235,7 +320,7 @@ const stats = computed(() => [
                         </span>
                         <span class="mt-3 block">
                             <span class="block text-sm font-semibold text-csc-ink">{{ action.label }}</span>
-                            <span class="mt-0.5 block text-xs text-csc-ink/60">{{ action.description }}</span>
+                            <span class="mt-0.5 block text-xs text-csc-ink-subtle">{{ action.description }}</span>
                         </span>
                     </Link>
                 </div>
@@ -256,7 +341,7 @@ const stats = computed(() => [
                 -->
                 <div v-if="recentActivity.length" class="space-y-8">
                     <section v-for="group in activityGroups" :key="group.label">
-                        <h3 class="mb-4 text-2xs font-semibold tracking-wider text-csc-ink/50 uppercase">
+                        <h3 class="mb-4 text-2xs font-semibold tracking-wider text-csc-ink-subtle uppercase">
                             {{ group.label }}
                         </h3>
 
@@ -268,9 +353,9 @@ const stats = computed(() => [
                                 >
                                     <span
                                         class="inline-flex size-10 shrink-0 items-center justify-center rounded-lg"
-                                        :class="activityTones[entry.kind].node"
+                                        :class="tone(entry.kind).node"
                                     >
-                                        <AppIcon :name="activityTones[entry.kind].icon" />
+                                        <AppIcon :name="tone(entry.kind).icon" />
                                     </span>
 
                                     <span class="min-w-0 flex-1">
@@ -279,14 +364,22 @@ const stats = computed(() => [
                                         >
                                             {{ entry.title }}
                                         </span>
-                                        <span class="mt-0.5 block truncate text-sm leading-5 text-csc-ink/70">
+                                        <!--
+                                            Titled, because a training name is
+                                            exactly the sort of long string
+                                            truncate eats without recourse.
+                                        -->
+                                        <span
+                                            :title="entry.subject"
+                                            class="mt-0.5 block truncate text-sm leading-5 text-csc-ink-muted"
+                                        >
                                             {{ entry.subject }}
                                         </span>
                                         <time
                                             v-if="entry.at"
                                             :datetime="entry.at"
                                             :title="entry.at_exact"
-                                            class="mt-2 block text-xs leading-4 text-csc-ink/50"
+                                            class="mt-2 block text-xs leading-4 text-csc-ink-subtle"
                                         >
                                             {{ entry.at_label }}
                                         </time>
@@ -306,7 +399,12 @@ const stats = computed(() => [
             </AppCard>
 
             <!-- 6. Summary counts — navigational, deliberately last -->
-            <div class="grid grid-cols-3 gap-3">
+            <!--
+                Three abreast only once the row can hold three. Below ~26rem
+                these are ~90px columns carrying a text-3xl figure and a label,
+                and the label is what breaks first.
+            -->
+            <div class="grid grid-cols-1 gap-3 min-[26rem]:grid-cols-3">
                 <AppStat
                     v-for="stat in stats"
                     :key="stat.label"

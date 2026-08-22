@@ -12,7 +12,10 @@ use App\Support\SupervisoryDocumentService;
 use App\Support\SupervisoryEligibility;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+// Aliased because `Response` in this file already means Inertia's.
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,15 +28,43 @@ class RegistrationController extends Controller
      */
     public function index(Request $request): Response
     {
+        /*
+         * The status filter the dashboard's counts link through.
+         *
+         * A tile reading "3 Approved" that lands on an undifferentiated list
+         * makes the reader do the counting again, so each count carries its
+         * status here. Parsed through the enum rather than trusted: an unknown
+         * value becomes null and shows everything, which is the honest reading
+         * of a hand-edited or stale URL — the alternative is an empty page that
+         * looks like the participant has no registrations at all.
+         */
+        $status = RegistrationStatus::tryFrom($request->string('status')->toString());
+
         // payments rides along because hasSettledFee() reads it, and the join
         // link below asks that of every row — without it this is one query per
         // registration.
         $registrations = Registration::with(['training', 'cancellationRequests', 'outputs', 'payments'])
             ->where('user_id', $request->user()->getKey())
+            ->when($status, fn ($query) => $query->where('registrations.status', $status))
             ->join('trainings', 'trainings.id', '=', 'registrations.training_id')
             ->orderByDesc('trainings.starts_at')
             ->select('registrations.*')
             ->get();
+
+        /*
+         * Counts for the filter chips, taken unfiltered so the chips do not
+         * rewrite themselves each time one is chosen.
+         *
+         * toBase(), so the grouped rows come back as plain values: an Eloquent
+         * result would cast `status` to the enum, and an enum cannot be an
+         * array key.
+         */
+        $counts = Registration::where('user_id', $request->user()->getKey())
+            ->toBase()
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->all();
 
         return Inertia::render('My/Registrations', [
             'registrations' => $registrations->map(fn (Registration $registration) => [
@@ -142,6 +173,20 @@ class RegistrationController extends Controller
                     'url' => route('trainings.show', $registration->training->slug),
                 ],
             ])->all(),
+            'filters' => [
+                'status' => $status?->value,
+            ],
+            // Only statuses the participant actually has get a chip: a filter
+            // that leads to a guaranteed empty list is not worth offering.
+            'statusOptions' => collect(RegistrationStatus::cases())
+                ->filter(fn (RegistrationStatus $case) => ($counts[$case->value] ?? 0) > 0)
+                ->map(fn (RegistrationStatus $case) => [
+                    'value' => $case->value,
+                    'label' => $case->label(),
+                    'count' => $counts[$case->value],
+                ])
+                ->values()
+                ->all(),
         ]);
     }
 
@@ -202,6 +247,66 @@ class RegistrationController extends Controller
                 .number_format((float) $training->payment_amount, 2)
                 .' fee below to confirm your slot.'
         );
+    }
+
+    /**
+     * The training, as a calendar file the participant can keep.
+     *
+     * A dashboard that names a date the participant has to copy into their own
+     * calendar by hand is a dashboard that will be missed, so this hands them
+     * the event itself. Owner-only: a registration is the thing being
+     * exported, and it is nobody else's appointment.
+     *
+     * Times are written in UTC with a trailing Z rather than with a VTIMEZONE
+     * block — every calendar client resolves that to the reader's own zone
+     * correctly, and it spares us shipping tzdata inside the file.
+     */
+    public function calendar(Request $request, Registration $registration): HttpResponse
+    {
+        abort_unless($registration->user_id === $request->user()->getKey(), 403);
+
+        $training = $registration->loadMissing('training')->training;
+
+        // An open-ended run still has to occupy something, or a client will
+        // render it as a zero-length blip that is easy to miss.
+        $ends = $training->ends_at ?? $training->starts_at->copy()->addHours(8);
+
+        $stamp = fn ($date) => $date->clone()->utc()->format('Ymd\THis\Z');
+
+        // Text fields are escaped and CRLF-folded per RFC 5545: a comma or a
+        // newline in a venue would otherwise end the property early and some
+        // clients drop the whole event rather than complain.
+        $escape = fn (?string $value) => str_replace(
+            ['\\', "\n", "\r", ',', ';'],
+            ['\\\\', '\\n', '', '\\,', '\\;'],
+            (string) $value
+        );
+
+        $lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//CSC TIMS//Training//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:PUBLISH',
+            'BEGIN:VEVENT',
+            // Stable across re-downloads, so re-importing updates the existing
+            // entry instead of leaving the participant with two of them.
+            'UID:registration-'.$registration->getKey().'@'.parse_url(config('app.url'), PHP_URL_HOST),
+            'DTSTAMP:'.$stamp(now()),
+            'DTSTART:'.$stamp($training->starts_at),
+            'DTEND:'.$stamp($ends),
+            'SUMMARY:'.$escape($training->title),
+            'LOCATION:'.$escape($training->venue),
+            'DESCRIPTION:'.$escape(route('trainings.show', $training->slug)),
+            'URL:'.route('trainings.show', $training->slug),
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ];
+
+        return response(implode("\r\n", $lines)."\r\n", 200, [
+            'Content-Type' => 'text/calendar; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="'.Str::slug($training->title).'.ics"',
+        ]);
     }
 
     /**
