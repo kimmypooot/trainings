@@ -16,9 +16,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Registration;
 use App\Models\ScanLink;
+use App\Models\SubjectMatterExpert;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\RegistrationService;
+use App\Support\RescheduleService;
+use App\Support\SmeEvaluationService;
 use App\Support\SupervisoryDocumentService;
 use App\Support\UndoService;
 use DateTimeImmutable;
@@ -144,7 +147,7 @@ class TrainingController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function formOptions(): array
+    private function formOptions(?Training $training = null): array
     {
         return [
             'statuses' => array_map(
@@ -154,18 +157,52 @@ class TrainingController extends Controller
             'modes' => TrainingMode::options(),
             'levels' => TrainingLevel::options(),
             'curricula' => Curriculum::options(),
+            'experts' => $this->expertOptions($training),
+            'expertsUrl' => route('admin.smes.index'),
         ];
+    }
+
+    /**
+     * The picker's options: every active expert, plus any inactive one this
+     * run already carries.
+     *
+     * The second half matters. An expert retired after being assigned would
+     * otherwise vanish from the select, and saving the form — which posts what
+     * the select holds — would drop them from a programme that has already been
+     * announced with their name on it.
+     *
+     * @return array<int, array{value: int, label: string}>
+     */
+    private function expertOptions(?Training $training): array
+    {
+        $options = collect(SubjectMatterExpert::options());
+
+        if ($training === null) {
+            return $options->all();
+        }
+
+        $assigned = $training->subjectMatterExperts
+            ->reject(fn (SubjectMatterExpert $expert) => $expert->is_active)
+            ->map(fn (SubjectMatterExpert $expert) => [
+                'value' => $expert->getKey(),
+                'label' => $expert->displayName().' (inactive)',
+            ]);
+
+        return $options->concat($assigned)->unique('value')->values()->all();
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
+        $experts = $this->pullExperts($data);
 
         $training = Training::create([
             ...$data,
             'slug' => $this->uniqueSlug($data['title']),
             'created_by' => $request->user()->getKey(),
         ]);
+
+        $this->syncExperts($training, $experts);
 
         return redirect()
             ->route('admin.trainings.index')
@@ -175,41 +212,193 @@ class TrainingController extends Controller
     public function edit(Training $training): Response
     {
         return Inertia::render('Admin/Trainings/Form', [
+            'training' => $this->formPayload($training),
+            'rescheduling' => null,
+            // Passed the run so an expert retired since the assignment stays
+            // selectable — see expertOptions().
+            ...$this->formOptions($training),
+        ]);
+    }
+
+    /**
+     * One training as the form reads it.
+     *
+     * Shared by edit and reschedule so a field added to the form is carried
+     * into a rescheduled copy automatically. The alternative — a second literal
+     * of this list inside reschedule() — is how a replacement run quietly loses
+     * its supervisory flag or its promissory policy a release after someone
+     * adds one.
+     *
+     * @return array<string, mixed>
+     */
+    private function formPayload(Training $training): array
+    {
+        $training->loadMissing('subjectMatterExperts');
+
+        return [
+            'id' => $training->id,
+            'title' => $training->title,
+            'training_code' => $training->training_code,
+            'description' => $training->description,
+            'category' => $training->category,
+            'level' => $training->level?->value,
+            'venue' => $training->venue,
+            'venue_details' => $training->venue_details,
+            'meeting_link' => $training->meeting_link,
+            'mode' => $training->mode->value,
+            'starts_at' => $training->starts_at->format('Y-m-d\TH:i'),
+            'ends_at' => $training->ends_at->format('Y-m-d\TH:i'),
+            'duration_days' => $training->duration_days,
+            'registration_opens_at' => $training->registration_opens_at?->format('Y-m-d\TH:i'),
+            'registration_closes_at' => $training->registration_closes_at?->format('Y-m-d\TH:i'),
+            'capacity' => $training->capacity,
+            'signatory_name' => $training->signatory_name,
+            /*
+             * Carried as the form posts them, which is also what makes a
+             * rescheduled run inherit its predecessor's panel: the replacement
+             * is usually the same programme with the same people on a later
+             * date, and retyping the roster of experts is how one of them gets
+             * left off.
+             */
+            'subject_matter_experts' => $training->subjectMatterExperts
+                ->map(fn (SubjectMatterExpert $expert) => [
+                    'id' => $expert->getKey(),
+                    'topic' => $expert->pivot->topic,
+                    'days' => is_string($expert->pivot->days)
+                        ? json_decode($expert->pivot->days, true)
+                        : $expert->pivot->days,
+                ])
+                ->all(),
+            'prerequisites' => $training->prerequisites,
+            'target_participants' => $training->target_participants,
+            'payment_required' => $training->payment_required,
+            'payment_amount' => $training->payment_amount,
+            'accepts_promissory' => $training->accepts_promissory,
+            'accepts_walk_ins' => $training->accepts_walk_ins,
+            'is_supervisory' => $training->is_supervisory,
+            'status' => $training->status->value,
+            'rescheduled_from_training_id' => $training->rescheduled_from_training_id,
+        ];
+    }
+
+    /**
+     * The form for the run that will replace this one.
+     *
+     * A reschedule is a new record, not an edit — see the migration that added
+     * `rescheduled_from_training_id` for why the original has to stand. But it
+     * is a new record that differs from its predecessor in about three fields,
+     * so it opens as a copy: everything is carried over except the dates, which
+     * are the point of the exercise and are left blank so nobody publishes the
+     * old ones by pressing save too quickly.
+     *
+     * The status is carried over rather than blanked, because it is the one
+     * decision that has to be made deliberately: a transfer refuses a target
+     * that is not published, so a draft replacement is a run nobody can be
+     * moved onto.
+     */
+    public function reschedule(Training $training): Response
+    {
+        return Inertia::render('Admin/Trainings/Form', [
+            'training' => [
+                ...$this->formPayload($training),
+                'id' => null,
+                'starts_at' => null,
+                'ends_at' => null,
+                'registration_opens_at' => null,
+                'registration_closes_at' => null,
+                // A code identifies one run, so the copy must not claim the
+                // original's — the column is unique and would reject it anyway.
+                'training_code' => null,
+                'rescheduled_from_training_id' => $training->getKey(),
+            ],
+            'rescheduling' => [
+                'id' => $training->id,
+                'title' => $training->title,
+                'starts_at' => $training->starts_at->format('d M Y, g:i A'),
+                'affected' => Registration::where('training_id', $training->getKey())
+                    ->whereIn('status', RescheduleService::affectedStatuses())
+                    ->count(),
+            ],
+            ...$this->formOptions($training),
+        ]);
+    }
+
+    /**
+     * Who a rescheduled run has left stranded, and where they can go.
+     *
+     * Deliberately a separate screen from the roster rather than a filter on
+     * it. The roster is a list of people at an event; this is a list of
+     * decisions about money, read at a different moment by someone asking a
+     * different question, and folding it into the roster's filters would bury
+     * it under the attendance and certificate columns that matter on the day.
+     */
+    public function affected(Request $request, Training $training): Response
+    {
+        $target = $this->rescheduleTargetFor($request, $training);
+
+        $affected = RescheduleService::affected(
+            $training,
+            $target,
+            $request->user()->scopedFieldOfficeId(),
+        );
+
+        return Inertia::render('Admin/Trainings/Affected', [
             'training' => [
                 'id' => $training->id,
                 'title' => $training->title,
-                'training_code' => $training->training_code,
-                'description' => $training->description,
-                'category' => $training->category,
-                'level' => $training->level?->value,
+                'starts_at' => $training->starts_at->format('d M Y, g:i A'),
                 'venue' => $training->venue,
-                'venue_details' => $training->venue_details,
-                'meeting_link' => $training->meeting_link,
-                'mode' => $training->mode->value,
-                'starts_at' => $training->starts_at->format('Y-m-d\TH:i'),
-                'ends_at' => $training->ends_at->format('Y-m-d\TH:i'),
-                'duration_days' => $training->duration_days,
-                'registration_opens_at' => $training->registration_opens_at?->format('Y-m-d\TH:i'),
-                'registration_closes_at' => $training->registration_closes_at?->format('Y-m-d\TH:i'),
-                'capacity' => $training->capacity,
-                'facilitator_name' => $training->facilitator_name,
-                'facilitator_contact' => $training->facilitator_contact,
-                'prerequisites' => $training->prerequisites,
-                'target_participants' => $training->target_participants,
+                'status_label' => $training->status->label(),
                 'payment_required' => $training->payment_required,
-                'payment_amount' => $training->payment_amount,
-                'accepts_promissory' => $training->accepts_promissory,
-                'accepts_walk_ins' => $training->accepts_walk_ins,
-                'is_supervisory' => $training->is_supervisory,
-                'status' => $training->status->value,
+                'payment_amount' => $training->payment_amount === null
+                    ? null
+                    : (float) $training->payment_amount,
+                /*
+                 * Surfaced because it is a live hazard rather than a detail: a
+                 * run still open while its replacement is on offer keeps taking
+                 * registrations for dates that will not happen, and each one
+                 * lands on this list a day later.
+                 */
+                'still_open' => $training->status->isOpenToParticipants(),
             ],
-            ...$this->formOptions(),
+            'target' => $target === null ? null : [
+                'id' => $target->id,
+                'title' => $target->title,
+                'starts_at' => $target->starts_at->format('d M Y, g:i A'),
+                'venue' => $target->venue,
+                'payment_amount' => $target->payment_amount === null
+                    ? null
+                    : (float) $target->payment_amount,
+                // A transfer refuses a target that is not published, so the
+                // screen says so up front instead of letting the move fail.
+                'accepts_transfers' => $target->status->isOpenToParticipants(),
+                'status_label' => $target->status->label(),
+                // What finance will have to chase, or refund, per head. Already
+                // recorded per transfer in the activity log; shown here because
+                // this is where the decision is actually made.
+                'fee_difference' => round(
+                    (float) ($target->payment_amount ?? 0) - (float) ($training->payment_amount ?? 0),
+                    2,
+                ),
+            ],
+            'affected' => $affected->all(),
+            'summary' => RescheduleService::summarise($affected),
+            'scopedTo' => $request->user()->scopedFieldOfficeId() === null
+                ? null
+                : $request->user()->fieldOffice?->name,
+            // Where a selection can go. Same rule as the roster's transfer
+            // dialog: open runs only, never this one.
+            'transferTargets' => $this->transferTargetsFor($training),
         ]);
     }
 
     public function update(Request $request, Training $training): RedirectResponse
     {
-        $training->update($this->validated($request, $training));
+        $data = $this->validated($request, $training);
+        $experts = $this->pullExperts($data);
+
+        $training->update($data);
+        $this->syncExperts($training, $experts);
 
         return redirect()
             ->route('admin.trainings.index')
@@ -223,8 +412,12 @@ class TrainingController extends Controller
     {
         $officeId = $request->user()->scopedFieldOfficeId();
 
+        // dayEvaluations rides along with attendances because
+        // SmeEvaluationService::progressFor() reads both, and without it the
+        // evaluation column would cost a query per participant.
         $registrations = Registration::with([
-            'user.profile.fieldOffice', 'attendances', 'certificate', 'payments', 'supervisoryDocumentReviewer',
+            'user.profile.fieldOffice', 'attendances', 'certificate', 'payments',
+            'supervisoryDocumentReviewer', 'dayEvaluations',
         ])
             ->where('training_id', $training->getKey())
             // Field-office staff see only their own office's participants on
@@ -250,6 +443,10 @@ class TrainingController extends Controller
                 'status_label' => $training->status->label(),
                 'duration_days' => $training->duration_days,
                 'is_supervisory' => $training->is_supervisory,
+                // Whether this run collects evaluations at all. A training with
+                // no panel assigned has nothing to chase, so the roster drops
+                // the column rather than showing a page of dashes.
+                'collects_evaluations' => $training->subjectMatterExperts()->exists(),
                 // Drives the counter-payment dialog: whether there is a fee to
                 // collect at all, what it comes to, and whether a promissory
                 // note is on offer for this run.
@@ -280,7 +477,12 @@ class TrainingController extends Controller
              */
             'can' => [
                 'record_payment' => $request->user()->collectsPayments(),
+                // The roster is read by roles that may not reschedule from it.
+                'reschedule' => $request->user()->role->managesTrainings(),
             ],
+            // Whether this run has already been rescheduled, so the roster can
+            // point at the affected list rather than offering to start again.
+            'rescheduledTo' => $training->reschedules()->latest('id')->first()?->only(['id', 'title']),
             'paymentMethods' => array_values(array_filter(
                 PaymentMethod::options(),
                 fn (array $option) => $training->accepts_promissory
@@ -302,15 +504,7 @@ class TrainingController extends Controller
             'supervisoryDocumentStatuses' => SupervisoryDocumentStatus::options(),
             // Where a selection can be moved to. Only open runs, and never this
             // one — a transfer to the training you are already on is a misclick.
-            'transferTargets' => Training::visible()
-                ->whereKeyNot($training->getKey())
-                ->orderBy('starts_at')
-                ->get()
-                ->map(fn (Training $option) => [
-                    'value' => $option->id,
-                    'label' => $option->title.' — '.$option->starts_at->format('d M Y'),
-                ])
-                ->all(),
+            'transferTargets' => $this->transferTargetsFor($training),
             // Live stations only. A revoked or expired link is not something an
             // operator can act on, and listing them would bury the one or two
             // links that actually open a door today.
@@ -371,6 +565,16 @@ class TrainingController extends Controller
                         'remarks' => $attendance->remarks,
                     ])->all(),
                 'credited_days' => $registration->creditedDays(),
+                /*
+                 * Evaluation progress, for the column field offices chase from.
+                 *
+                 * Measured against the days actually open to this participant,
+                 * not against the length of the run — a three-day training on
+                 * its second morning owes one evaluation, not three, and a
+                 * column that said 0/3 on day one would have every office
+                 * chasing people for sessions that have not happened.
+                 */
+                'evaluation' => SmeEvaluationService::progressFor($registration),
                 'can_complete' => $registration->status === RegistrationStatus::Approved
                     && $registration->hasSufficientAttendance(),
                 'certificate_number' => $registration->certificate?->isReleased()
@@ -404,6 +608,14 @@ class TrainingController extends Controller
                 'checked_in_today' => $registrations
                     ->filter(fn (Registration $r) => $r->attendances
                         ->firstWhere('training_day', $training->dayNumberFor(now()))?->time_in !== null)
+                    ->count(),
+                // Participants with at least one session still unevaluated —
+                // the figure a field office works down, scoped to its own
+                // people exactly as the roster rows are.
+                'evaluations_outstanding' => $registrations
+                    ->filter(fn (Registration $r) => $r->status->occupiesSlot()
+                        && SmeEvaluationService::progressFor($r)['outstanding'] !== []
+                    )
                     ->count(),
                 // Documents awaiting a verdict, so the supervising staff get a
                 // single figure for the work in front of them.
@@ -751,6 +963,54 @@ class TrainingController extends Controller
     }
 
     /**
+     * Where a selection taken off this training can be moved to.
+     *
+     * Open runs only, and never this one — a transfer to the training you are
+     * already on is a misclick. Shared by the roster's transfer dialog and the
+     * affected list so the two cannot offer different destinations.
+     *
+     * @return array<int, array{value: int, label: string}>
+     */
+    private function transferTargetsFor(Training $training): array
+    {
+        return Training::visible()
+            ->whereKeyNot($training->getKey())
+            ->orderBy('starts_at')
+            ->get()
+            ->map(fn (Training $option) => [
+                'value' => $option->id,
+                'label' => $option->title.' — '.$option->starts_at->format('d M Y'),
+            ])
+            ->all();
+    }
+
+    /**
+     * The run the affected list should be measured against.
+     *
+     * An explicit ?target= wins, because the office frequently weighs two
+     * candidate dates against the same roster before committing to either.
+     * Failing that it falls back to the replacement already recorded against
+     * this run, which is the common case and means the screen is useful the
+     * moment it is opened rather than after a dropdown is touched.
+     *
+     * The newest reschedule is chosen where a run was split across several: it
+     * is the one still being filled, the earlier ones having been dealt with
+     * already.
+     */
+    private function rescheduleTargetFor(Request $request, Training $training): ?Training
+    {
+        $requested = $request->integer('target');
+
+        if ($requested > 0) {
+            return Training::whereKey($requested)
+                ->whereKeyNot($training->getKey())
+                ->first();
+        }
+
+        return $training->reschedules()->latest('id')->first();
+    }
+
+    /**
      * Re-resolve a route-bound registration against the field-office scope.
      *
      * Route-model binding does not know about scoping, so an action that only
@@ -894,8 +1154,27 @@ class TrainingController extends Controller
             ],
             // Null means no limit.
             'capacity' => ['nullable', 'integer', 'min:1', 'max:10000'],
-            'facilitator_name' => ['nullable', 'string', 'max:128'],
-            'facilitator_contact' => ['nullable', 'string', 'max:32'],
+            // Who signs the certificate for this run. Not the panel of experts
+            // below: an expert delivers the session, the signatory attests to
+            // it, and the two are rarely the same person.
+            'signatory_name' => ['nullable', 'string', 'max:128'],
+            /*
+             * The panel. Sent as a list so the order is HRD's — it is the order
+             * the participant's evaluation form asks about them in, which for a
+             * sequenced programme is the order they actually spoke.
+             *
+             * `days` narrows an expert to particular training days; an empty or
+             * absent list means the whole run. The day numbers are bounded by
+             * the run's own length, checked below rather than here because
+             * duration_days may be derived from the dates at save time.
+             */
+            'subject_matter_experts' => ['array', 'max:20'],
+            'subject_matter_experts.*.id' => [
+                'required', 'integer', Rule::exists('subject_matter_experts', 'id'),
+            ],
+            'subject_matter_experts.*.topic' => ['nullable', 'string', 'max:255'],
+            'subject_matter_experts.*.days' => ['nullable', 'array'],
+            'subject_matter_experts.*.days.*' => ['integer', 'min:1', 'max:365'],
             'prerequisites' => ['nullable', 'string', 'max:5000'],
             'target_participants' => ['nullable', 'string', 'max:5000'],
             'payment_required' => ['boolean'],
@@ -919,7 +1198,24 @@ class TrainingController extends Controller
             // certificate is defensible.
             'is_supervisory' => ['boolean'],
             'status' => ['required', Rule::enum(TrainingStatus::class)],
+            /*
+             * Set once, when a replacement run is created from the form that
+             * the reschedule action opens. It is provenance — which run this
+             * one was published to replace — so it is accepted on create and
+             * ignored on edit: repointing it later would rewrite history, and
+             * `notIn` on the training being edited stops the obvious cycle of
+             * a run recorded as its own predecessor.
+             */
+            'rescheduled_from_training_id' => [
+                'nullable', 'integer',
+                Rule::notIn(array_filter([$training?->getKey()])),
+                Rule::exists('trainings', 'id'),
+            ],
         ]);
+
+        if ($training !== null) {
+            unset($data['rescheduled_from_training_id']);
+        }
 
         return $this->withDerivedDefaults($data, $training);
     }
@@ -974,6 +1270,72 @@ class TrainingController extends Controller
         } while (Training::where('training_code', $code)->exists());
 
         return $code;
+    }
+
+    /**
+     * Lift the expert assignments out of the validated attributes.
+     *
+     * They are not columns on `trainings`, so they must not reach create() or
+     * update() — mass assignment would either throw or, worse, be silently
+     * dropped by the Fillable list and take the whole panel with it.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, array<string, mixed>>
+     */
+    private function pullExperts(array &$data): array
+    {
+        $experts = $data['subject_matter_experts'] ?? [];
+        unset($data['subject_matter_experts']);
+
+        return $experts;
+    }
+
+    /**
+     * Write the panel, in the order the form listed it.
+     *
+     * sync() rather than an append: removing a row from the form has to remove
+     * the assignment, or an expert taken off the programme keeps appearing on
+     * participants' evaluation forms. Evaluations already filed survive that —
+     * they hang off the day evaluation, not off the assignment — which is
+     * deliberate: a session that happened stays evaluated even if the office
+     * later corrects who was billed for it.
+     *
+     * Day numbers outside the run are dropped rather than rejected. Shortening
+     * a training from five days to three is a legitimate edit that should not
+     * be blocked by a stale tick on day 4, and the alternative — keeping it —
+     * is a number that matches no day and quietly excludes the expert from
+     * every form.
+     *
+     * @param  array<int, array<string, mixed>>  $experts
+     */
+    private function syncExperts(Training $training, array $experts): void
+    {
+        $lastDay = max(1, $training->duration_days ?? 1);
+
+        $payload = [];
+
+        foreach (array_values($experts) as $index => $expert) {
+            $days = collect($expert['days'] ?? [])
+                ->map(fn ($day) => (int) $day)
+                ->filter(fn (int $day) => $day >= 1 && $day <= $lastDay)
+                ->unique()
+                ->sort()
+                ->values()
+                ->all();
+
+            // Last one wins on a duplicated expert — the pivot is unique on
+            // (training, expert) and sync() would otherwise fail the save on
+            // what is, from HRD's side, a double-click.
+            $payload[(int) $expert['id']] = [
+                'topic' => $expert['topic'] ?? null,
+                // Null, not an empty array: null is the documented "every day"
+                // and `[]` would read as "no days at all".
+                'days' => $days === [] ? null : json_encode($days),
+                'sort_order' => $index,
+            ];
+        }
+
+        $training->subjectMatterExperts()->sync($payload);
     }
 
     private function uniqueSlug(string $title): string

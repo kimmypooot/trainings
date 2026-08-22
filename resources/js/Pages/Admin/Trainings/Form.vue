@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
@@ -11,13 +11,30 @@ import AppTextarea from '@/Components/AppTextarea.vue';
 
 const props = defineProps({
     training: { type: Object, default: null },
+    // Set when this form is creating the replacement for a run that was called
+    // off, so the page can say which one and how many people are waiting on it.
+    rescheduling: { type: Object, default: null },
     statuses: { type: Array, required: true },
     modes: { type: Array, required: true },
     levels: { type: Array, required: true },
     curricula: { type: Array, required: true },
+    experts: { type: Array, default: () => [] },
+    expertsUrl: { type: String, default: '/admin/smes' },
 });
 
-const isEdit = computed(() => props.training !== null);
+/*
+ * Keyed on the id rather than on `training` being present, because a
+ * reschedule arrives here with the old run's details prefilled but no id: it is
+ * a new record that happens to start life as a copy, and treating it as an edit
+ * would overwrite the very run the office is trying to preserve.
+ */
+const isEdit = computed(() => Boolean(props.training?.id));
+
+const pageTitle = computed(() => {
+    if (props.rescheduling) return 'Reschedule Training';
+
+    return isEdit.value ? 'Edit Training' : 'New Training';
+});
 
 const form = useForm({
     title: props.training?.title ?? '',
@@ -35,8 +52,14 @@ const form = useForm({
     registration_opens_at: props.training?.registration_opens_at ?? '',
     registration_closes_at: props.training?.registration_closes_at ?? '',
     capacity: props.training?.capacity ?? '',
-    facilitator_name: props.training?.facilitator_name ?? '',
-    facilitator_contact: props.training?.facilitator_contact ?? '',
+    signatory_name: props.training?.signatory_name ?? '',
+    // Days arrive as null for "the whole run"; the checkbox group needs an
+    // array, and syncExperts() reads an empty one back as null again.
+    subject_matter_experts: (props.training?.subject_matter_experts ?? []).map((assignment) => ({
+        id: assignment.id,
+        topic: assignment.topic ?? '',
+        days: assignment.days ?? [],
+    })),
     prerequisites: props.training?.prerequisites ?? '',
     target_participants: props.training?.target_participants ?? '',
     payment_required: props.training?.payment_required ?? false,
@@ -47,6 +70,9 @@ const form = useForm({
     accepts_walk_ins: props.training?.accepts_walk_ins ?? false,
     is_supervisory: props.training?.is_supervisory ?? false,
     status: props.training?.status ?? 'draft',
+    // Provenance, carried on a rescheduled copy so the new run knows which one
+    // it replaces. Null everywhere else; the server ignores it on an edit.
+    rescheduled_from_training_id: props.training?.rescheduled_from_training_id ?? null,
 });
 
 // Anyone attending remotely needs a link, so hybrid asks for one too — the
@@ -70,6 +96,64 @@ const venueHint = computed(() =>
 // date before the start is the mistake v1 guarded hardest against.
 const minEnd = computed(() => form.starts_at || undefined);
 
+/*
+ * The day checkboxes follow whatever duration the form currently holds, not
+ * what was saved — shortening a run while editing has to take the ticks for the
+ * days that no longer exist with it, or HRD is left ticking day 5 of a 3-day
+ * training. The server drops out-of-range days too; this is what stops them
+ * being offered in the first place.
+ */
+const dayCount = computed(() => {
+    const stated = Number(form.duration_days);
+
+    if (Number.isFinite(stated) && stated >= 1) return Math.min(stated, 60);
+
+    // Blank duration means "derive it from the dates", which is what the server
+    // does on save — mirrored here so the pickers are right before saving.
+    if (!form.starts_at || !form.ends_at) return 1;
+
+    const start = new Date(form.starts_at);
+    const end = new Date(form.ends_at);
+    const days = Math.floor((end.setHours(0, 0, 0, 0) - start.setHours(0, 0, 0, 0)) / 86400000) + 1;
+
+    return Math.min(Math.max(days, 1), 60);
+});
+
+const dayNumbers = computed(() => Array.from({ length: dayCount.value }, (_, i) => i + 1));
+
+const unassignedExperts = computed(() =>
+    props.experts.filter(
+        (expert) => !form.subject_matter_experts.some((assignment) => assignment.id === expert.value)
+    )
+);
+
+/**
+ * Options for one row: everyone not already picked, plus this row's own
+ * selection — without it the select would have no option matching its value and
+ * would render blank.
+ */
+const availableExperts = (index) => {
+    const chosen = form.subject_matter_experts[index]?.id;
+
+    return props.experts.filter(
+        (expert) =>
+            expert.value === chosen ||
+            !form.subject_matter_experts.some((assignment) => assignment.id === expert.value)
+    );
+};
+
+const addExpert = () => {
+    const next = unassignedExperts.value[0];
+
+    if (!next) return;
+
+    form.subject_matter_experts.push({ id: next.value, topic: '', days: [] });
+};
+
+const removeExpert = (index) => {
+    form.subject_matter_experts.splice(index, 1);
+};
+
 const submit = () => {
     if (isEdit.value) {
         form.put(`/admin/trainings/${props.training.id}`);
@@ -82,12 +166,29 @@ const submit = () => {
 </script>
 
 <template>
-    <Head :title="isEdit ? 'Edit Training' : 'New Training'" />
+    <Head :title="pageTitle" />
 
-    <AuthenticatedLayout :title="isEdit ? 'Edit Training' : 'New Training'" current="admin-trainings">
+    <AuthenticatedLayout :title="pageTitle" current="admin-trainings">
         <div class="mx-auto max-w-4xl space-y-5">
             <AppAlert v-if="Object.keys(form.errors).length" tone="danger">
                 Please review the highlighted fields below.
+            </AppAlert>
+
+            <!--
+                Says what is being preserved as much as what is being created.
+                The dates are the only fields deliberately left blank, and the
+                count is here because it is what makes the capacity decision
+                below a real one rather than a copied number.
+            -->
+            <AppAlert
+                v-if="rescheduling"
+                tone="info"
+                :title="`New schedule for “${rescheduling.title}”`"
+            >
+                The original run on {{ rescheduling.starts_at }} keeps its record and its history.
+                Set the new dates below, then move its
+                {{ rescheduling.affected }} registered participant(s) across from the affected list.
+                Publish this run before moving anyone — participants cannot be moved onto a draft.
             </AppAlert>
 
             <form class="space-y-5" novalidate @submit.prevent="submit">
@@ -217,20 +318,116 @@ const submit = () => {
                     </div>
                 </AppCard>
 
-                <AppCard title="Facilitation and Audience">
+                <AppCard
+                    title="Subject Matter Experts"
+                    subtitle="Who delivers this training. Participants evaluate them at the end of each training day."
+                >
                     <div class="grid gap-5">
-                        <div class="grid gap-5 sm:grid-cols-2">
-                            <AppInput
-                                v-model="form.facilitator_name"
-                                label="Facilitator"
-                                :error="form.errors.facilitator_name"
-                            />
-                            <AppInput
-                                v-model="form.facilitator_contact"
-                                label="Facilitator Contact"
-                                :error="form.errors.facilitator_contact"
-                            />
+                        <AppAlert v-if="!experts.length" tone="warning" title="No experts on file">
+                            Add resource persons under
+                            <Link :href="expertsUrl" class="font-semibold underline">
+                                Subject Matter Experts
+                            </Link>
+                            first — a training with none assigned collects no evaluations.
+                        </AppAlert>
+
+                        <p v-if="form.errors.subject_matter_experts" class="text-sm text-danger">
+                            {{ form.errors.subject_matter_experts }}
+                        </p>
+
+                        <div
+                            v-for="(assignment, index) in form.subject_matter_experts"
+                            :key="index"
+                            class="rounded-xl border border-csc-line p-4"
+                        >
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <AppSelect
+                                    v-model="assignment.id"
+                                    label="Expert"
+                                    :options="availableExperts(index)"
+                                    :error="form.errors[`subject_matter_experts.${index}.id`]"
+                                    required
+                                />
+                                <AppInput
+                                    v-model="assignment.topic"
+                                    label="Topic or Session"
+                                    placeholder="e.g. Plenary and workshop"
+                                    :error="form.errors[`subject_matter_experts.${index}.topic`]"
+                                />
+                            </div>
+
+                            <!--
+                                Day pickers only on a multi-day run. On a
+                                one-day training every assignment covers the
+                                only day there is, and the control would be a
+                                single checkbox that must never be unticked.
+                            -->
+                            <fieldset v-if="dayNumbers.length > 1" class="mt-4">
+                                <legend class="text-xs font-semibold text-csc-ink-muted">
+                                    Days present
+                                </legend>
+                                <p class="mt-0.5 text-xs text-csc-ink-subtle">
+                                    Leave all unticked if this expert is present for the whole run.
+                                </p>
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <label
+                                        v-for="day in dayNumbers"
+                                        :key="day"
+                                        class="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+                                        :class="
+                                            assignment.days.includes(day)
+                                                ? 'border-csc-blue bg-csc-blue-tint text-csc-blue'
+                                                : 'border-csc-line text-csc-ink-muted hover:bg-csc-blue-tint/50'
+                                        "
+                                    >
+                                        <input
+                                            v-model="assignment.days"
+                                            type="checkbox"
+                                            :value="day"
+                                            class="size-3.5 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                                        />
+                                        Day {{ day }}
+                                    </label>
+                                </div>
+                            </fieldset>
+
+                            <div class="mt-3 flex justify-end">
+                                <button
+                                    type="button"
+                                    class="text-xs font-semibold text-danger hover:underline"
+                                    @click="removeExpert(index)"
+                                >
+                                    Remove
+                                </button>
+                            </div>
                         </div>
+
+                        <div>
+                            <AppButton
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                icon="plus"
+                                :disabled="!unassignedExperts.length"
+                                @click="addExpert"
+                            >
+                                Add Expert
+                            </AppButton>
+                            <p v-if="!unassignedExperts.length && experts.length" class="mt-2 text-xs text-csc-ink-subtle">
+                                Every expert on file is already assigned to this run.
+                            </p>
+                        </div>
+                    </div>
+                </AppCard>
+
+                <AppCard title="Audience and Credit">
+                    <div class="grid gap-5">
+                        <AppInput
+                            v-model="form.signatory_name"
+                            label="Certificate Signatory"
+                            hint="Printed on the signature line of this run's certificates. Usually the Regional Director, not an expert above."
+                            :error="form.errors.signatory_name"
+                        />
 
                         <AppTextarea
                             v-model="form.target_participants"
@@ -254,7 +451,7 @@ const submit = () => {
                             />
                             <span class="text-sm text-csc-ink">
                                 Supervisory Development Course (SDC)
-                                <span class="mt-0.5 block text-xs text-csc-ink/60">
+                                <span class="mt-0.5 block text-xs text-csc-ink-subtle">
                                     Participants must submit an output before completion is credited.
                                 </span>
                             </span>
@@ -281,7 +478,7 @@ const submit = () => {
                             />
                             <span class="text-sm text-csc-ink">
                                 This training requires payment
-                                <span class="mt-0.5 block text-xs text-csc-ink/60">
+                                <span class="mt-0.5 block text-xs text-csc-ink-subtle">
                                     Participants are asked to upload proof of payment after registering.
                                 </span>
                             </span>
@@ -306,7 +503,7 @@ const submit = () => {
                                 />
                                 <span class="text-sm text-csc-ink">
                                     Accept promissory notes
-                                    <span class="mt-0.5 block text-xs text-csc-ink/60">
+                                    <span class="mt-0.5 block text-xs text-csc-ink-subtle">
                                         A slot is held while the agency settles the fee later.
                                     </span>
                                 </span>
@@ -327,7 +524,7 @@ const submit = () => {
                             />
                             <span class="text-sm text-csc-ink">
                                 Accept walk-in participants
-                                <span class="mt-0.5 block text-xs text-csc-ink/60">
+                                <span class="mt-0.5 block text-xs text-csc-ink-subtle">
                                     Staff can admit someone at the venue after registration closes, even
                                     once the slots are taken. Going over the limit is allowed and flagged
                                     at the desk, so plan for extra chairs and meals.
@@ -351,7 +548,7 @@ const submit = () => {
                 <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
                     <AppButton href="/admin/trainings" variant="ghost" size="lg">Cancel</AppButton>
                     <AppButton type="submit" size="lg" :loading="form.processing" icon="check">
-                        {{ isEdit ? 'Save Changes' : 'Create Training' }}
+                        {{ rescheduling ? 'Create New Schedule' : isEdit ? 'Save Changes' : 'Create Training' }}
                     </AppButton>
                 </div>
             </form>

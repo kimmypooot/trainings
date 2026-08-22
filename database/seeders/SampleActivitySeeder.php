@@ -20,7 +20,10 @@ use App\Models\Certificate;
 use App\Models\Payment;
 use App\Models\RefundRequest;
 use App\Models\Registration;
+use App\Models\SmeEvaluation;
+use App\Models\SubjectMatterExpert;
 use App\Models\Training;
+use App\Models\TrainingDayEvaluation;
 use App\Models\TrainingRequest;
 use App\Models\User;
 use Database\Factories\RegistrationFactory;
@@ -62,6 +65,9 @@ class SampleActivitySeeder extends Seeder
 
     private Collection $staff;
 
+    /** The pool of resource persons runs are staffed from. */
+    private Collection $experts;
+
     /** @var array<string, int> */
     private array $tally = [];
 
@@ -89,6 +95,8 @@ class SampleActivitySeeder extends Seeder
             $this->participants = User::where('role', Role::Participant)->whereHas('profile')->get();
             $this->staff = User::whereIn('role', [Role::Admin->value, Role::SuperAdmin->value])->get();
         }
+
+        $this->experts = $this->subjectMatterExperts();
 
         foreach ($this->blueprint() as $spec) {
             $this->training($spec);
@@ -177,8 +185,8 @@ class SampleActivitySeeder extends Seeder
                 'registration_opens_at' => $starts->copy()->subDays(30),
                 'registration_closes_at' => $starts->copy()->subDays(3),
                 'capacity' => $capacity,
-                'facilitator_name' => mb_strtoupper(fake()->name()),
-                'facilitator_contact' => '09'.fake()->numerify('#########'),
+                // Who signs the certificate, which is not the panel below.
+                'signatory_name' => mb_strtoupper(fake()->name()),
                 'prerequisites' => fake()->boolean(40) ? 'None.' : 'Participants must have completed the orientation course.',
                 'target_participants' => 'Second-level personnel of national and local government agencies.',
                 'payment_required' => $paid,
@@ -190,6 +198,8 @@ class SampleActivitySeeder extends Seeder
         );
 
         $this->count('trainings');
+
+        $this->assignExperts($training, $days);
 
         // A draft has not been announced, so nobody could have registered.
         if ($status === TrainingStatus::Draft) {
@@ -252,6 +262,7 @@ class SampleActivitySeeder extends Seeder
             $this->count('registrations');
 
             $this->attendance($registration, $training);
+            $this->evaluations($registration, $training);
             $this->certificate($registration, $training);
             $this->payment($registration, $training);
             $this->cancellationRequest($registration, $training);
@@ -770,6 +781,187 @@ class SampleActivitySeeder extends Seeder
                 'uploaded_by' => $uploader->getKey(),
                 'created_at' => $at,
             ]);
+        }
+    }
+
+    /**
+     * The standing panel of resource persons.
+     *
+     * Named rather than faked, and matched on name so re-running keeps the same
+     * people: their ratings accumulate across runs of the seeder, and a fresh
+     * set of strangers each pass would leave every expert with one evaluation
+     * and the SME screens looking like they do not work.
+     */
+    private function subjectMatterExperts(): Collection
+    {
+        $roster = [
+            ['Leilani C. Parel', 'Chief HR Specialist', 'Supervisory development, coaching, performance management.'],
+            ['Ramon T. Villanueva', 'Supervising HR Specialist', 'Records management, ISO documentation.'],
+            ['Cristina M. Dagohoy', 'Director II', 'Public service ethics, accountability, RA 6713.'],
+            ['Arnel B. Sabalza', 'HR Specialist II', 'Data privacy, cybersecurity awareness, digital tools.'],
+            ['Ma. Teresa L. Ocampo', 'Chief HR Specialist', 'Gender and development, workplace inclusion.'],
+            ['Joel P. Bacareza', 'Supervising HR Specialist', 'Frontline service, ARTA compliance.'],
+        ];
+
+        return collect($roster)->map(function (array $expert) {
+            [$name, $position, $expertise] = $expert;
+
+            $record = SubjectMatterExpert::updateOrCreate(
+                ['name' => $name],
+                [
+                    'position' => $position,
+                    'organization' => 'Civil Service Commission RO VIII',
+                    'email' => Str::slug($name, '.').'@csc.gov.ph',
+                    'contact_number' => '09'.fake()->numerify('#########'),
+                    'expertise' => $expertise,
+                    'is_active' => true,
+                    'created_by' => $this->staff->random()->getKey(),
+                ]
+            );
+
+            if ($record->wasRecentlyCreated) {
+                $this->count('subject matter experts');
+            }
+
+            return $record;
+        });
+    }
+
+    /**
+     * Staff a run with one to three experts.
+     *
+     * A multi-day programme gets its panel split across the days — which is
+     * the case the `days` pivot column exists for, and the one worth having in
+     * demo data, because it is where an evaluation form showing the wrong
+     * expert would be visible.
+     */
+    private function assignExperts(Training $training, int $days): void
+    {
+        if ($training->subjectMatterExperts()->exists()) {
+            return;
+        }
+
+        $panel = $this->experts->shuffle()->take(fake()->numberBetween(1, min(3, $days + 1)));
+
+        $payload = [];
+
+        foreach ($panel->values() as $index => $expert) {
+            // One expert covers the whole run; a panel divides it, each taking
+            // roughly consecutive days.
+            $assigned = $panel->count() === 1
+                ? null
+                : json_encode(
+                    collect(range(1, $days))
+                        ->filter(fn (int $day) => $day % $panel->count() === $index % $panel->count())
+                        ->values()
+                        ->all()
+                );
+
+            $payload[$expert->getKey()] = [
+                'topic' => fake()->randomElement([
+                    'Session proper', 'Plenary and workshop', 'Lecture and case study', null,
+                ]),
+                'days' => $assigned === '[]' ? null : $assigned,
+                'sort_order' => $index,
+            ];
+        }
+
+        $training->subjectMatterExperts()->sync($payload);
+    }
+
+    /**
+     * Evaluations for days the participant actually attended.
+     *
+     * Deliberately not everyone: a response rate of 100% is the one number the
+     * screens will never show in real use, and demo data that implies it hides
+     * the very column an office reads first.
+     */
+    private function evaluations(Registration $registration, Training $training): void
+    {
+        if (! $registration->status->occupiesSlot() || $training->starts_at->isFuture()) {
+            return;
+        }
+
+        $training->loadMissing('subjectMatterExperts');
+
+        $credited = $registration->attendances()
+            ->get()
+            ->filter(fn (Attendance $attendance) => $attendance->credits());
+
+        foreach ($credited as $attendance) {
+            if (fake()->boolean(35)) {
+                continue;
+            }
+
+            $experts = $training->expertsForDay($attendance->training_day);
+
+            if ($experts->isEmpty()) {
+                continue;
+            }
+
+            $evaluation = TrainingDayEvaluation::updateOrCreate(
+                [
+                    'registration_id' => $registration->getKey(),
+                    'day_number' => $attendance->training_day,
+                ],
+                [
+                    'training_id' => $training->getKey(),
+                    'learned' => fake()->boolean(70)
+                        ? fake()->randomElement([
+                            'The documentation requirements I can apply to our own filing system.',
+                            'How to run a coaching conversation without it becoming a reprimand.',
+                            'The reporting timelines — I had been computing them wrongly.',
+                        ])
+                        : null,
+                    'liked_most' => fake()->boolean(60)
+                        ? fake()->randomElement([
+                            'The workshop portion. Actual documents, not slides.',
+                            'The open forum in the afternoon.',
+                            'The examples drawn from LGU practice.',
+                        ])
+                        : null,
+                    'needs_improvement' => fake()->boolean(45)
+                        ? fake()->randomElement([
+                            'The venue was cold and the audio cut out after lunch.',
+                            'More time for the group activity.',
+                            'Handouts arrived only at the end of the session.',
+                        ])
+                        : null,
+                    'suggestions' => fake()->boolean(30)
+                        ? 'Please run this again next semester for the rest of our office.'
+                        : null,
+                    'submitted_at' => $attendance->attendance_date->copy()->setTime(17, fake()->numberBetween(5, 55)),
+                ]
+            );
+
+            foreach ($experts as $expert) {
+                // Skewed high, the way voluntary feedback actually arrives —
+                // a uniform 1-to-5 spread would make every average land on 3
+                // and the results screens meaningless.
+                $draw = fn () => fake()->randomElement([5, 5, 5, 4, 4, 4, 4, 3, 3, 2]);
+
+                SmeEvaluation::updateOrCreate(
+                    [
+                        'training_day_evaluation_id' => $evaluation->getKey(),
+                        'subject_matter_expert_id' => $expert->getKey(),
+                    ],
+                    [
+                        'knowledge_rating' => $draw(),
+                        'interaction_rating' => $draw(),
+                        'engagement_rating' => $draw(),
+                        'pace_rating' => $draw(),
+                        'comments' => fake()->boolean(35)
+                            ? fake()->randomElement([
+                                'Very clear and patient with questions.',
+                                'Knows the material but spoke too quickly after lunch.',
+                                'Best resource person we have had this year.',
+                            ])
+                            : null,
+                    ]
+                );
+            }
+
+            $this->count('evaluations');
         }
     }
 
