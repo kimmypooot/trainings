@@ -24,17 +24,6 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
         ]);
 
-        // VS Code port forwarding (and ngrok/Cloudflare Tunnel) terminate TLS at
-        // their edge and reach PHP over plain http on loopback, describing the
-        // real request in X-Forwarded-*. Without trusting those headers Laravel
-        // believes every request is http://localhost, so route() and asset()
-        // emit http:// URLs that the browser then blocks as mixed content on an
-        // https tunnel — the page loads but its assets and links do not.
-        //
-        // '*' is safe here only because nothing but a local tunnel or the local
-        // web server can reach this app. A public deployment must narrow this to
-        // the actual proxy addresses, otherwise a client can spoof its own
-        // scheme, host, and IP.
         // The public scanning station carries its own credential — an encrypted
         // grant in X-Scan-Grant, checked on every request — and is the one part
         // of the app expected to POST from a page the service worker served
@@ -51,10 +40,42 @@ return Application::configure(basePath: dirname(__DIR__))
             'station/*/sync',
         ]);
 
-        $middleware->trustProxies(at: '*', headers: Request::HEADER_X_FORWARDED_FOR
-            | Request::HEADER_X_FORWARDED_HOST
-            | Request::HEADER_X_FORWARDED_PORT
-            | Request::HEADER_X_FORWARDED_PROTO);
+        /*
+         * VS Code port forwarding (and ngrok/Cloudflare Tunnel) terminate TLS at
+         * their edge and reach PHP over plain http on loopback, describing the
+         * real request in X-Forwarded-*. Without trusting those headers Laravel
+         * believes every request is http://localhost, so route() and asset()
+         * emit http:// URLs that the browser then blocks as mixed content on an
+         * https tunnel — the page loads but its assets and links do not.
+         *
+         * Which proxies to believe is a property of the deployment rather than
+         * of the code, so it comes from TRUSTED_PROXIES, and the default is to
+         * trust nothing. X-Forwarded-For is what every IP-keyed throttle in
+         * routes/web.php counts against, so a blanket '*' on a reachable host
+         * hands an attacker a fresh rate-limit bucket per forged header: the
+         * three-per-minute cap on password reset becomes no cap at all. Failing
+         * closed costs a tunnelled dev session one .env line; failing open
+         * costs the throttles entirely, and costs them silently.
+         *
+         * '*' is still available for exactly that tunnel case — but it now has
+         * to be asked for. TrustProxiesTest is the guard on the default.
+         */
+        $trustedProxies = trim((string) env('TRUSTED_PROXIES', ''));
+
+        $middleware->trustProxies(
+            at: match (true) {
+                $trustedProxies === '' => null,
+                $trustedProxies === '*' => '*',
+                default => array_values(array_filter(
+                    array_map(trim(...), explode(',', $trustedProxies)),
+                    fn (string $proxy) => $proxy !== '',
+                )),
+            },
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
