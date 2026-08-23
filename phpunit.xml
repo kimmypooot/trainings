@@ -18,6 +18,17 @@
         </include>
     </source>
     <php>
+        <!--
+            ProfilePhotoTest builds a deliberately oversized upload to prove the
+            downscaler works, and that fixture does not fit in the 128M a stock
+            php.ini allows. Pinned here rather than left to the machine because
+            PHP dies with a fatal rather than a test failure: phpunit never gets
+            to write a summary, the wrapper still exits 0, and a suite that
+            stopped a third of the way through reads as a pass. Note that a
+            command-line -d flag does not help — `artisan test` spawns a child
+            process that re-reads php.ini — so the limit has to live in here.
+        -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
