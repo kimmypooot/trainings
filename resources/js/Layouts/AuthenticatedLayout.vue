@@ -227,23 +227,15 @@ const navGroups = [
         ],
     },
     {
-        key: 'administration',
-        label: 'Administration',
+        /*
+         * Reading surfaces, split out of the administration pile below: both
+         * report on work that already happened and neither changes anything.
+         * Management reaches only this group, which is the shape of the role —
+         * oversight without a control.
+         */
+        key: 'insights',
+        label: 'Insights',
         items: [
-            {
-                key: 'admin-field-offices',
-                label: 'Field Offices',
-                href: '/admin/field-offices',
-                roles: ['admin', 'superadmin'],
-                icon: 'building',
-            },
-            {
-                key: 'admin-smes',
-                label: 'Subject Matter Experts',
-                href: '/admin/smes',
-                roles: ['admin', 'superadmin'],
-                icon: 'users',
-            },
             {
                 // Management sees the results without the directory: reading
                 // how a programme was received is oversight, maintaining the
@@ -261,6 +253,35 @@ const navGroups = [
                 roles: STAFF_ROLES,
                 icon: 'analytics',
             },
+        ],
+    },
+    {
+        /*
+         * Reference data — the lists the rest of the app picks from. All three
+         * are maintained rather than administered: an office, an expert and a
+         * mail template are things HRD edits in the course of running
+         * trainings, not decisions about who may use the system. That is the
+         * line between this group and the one below it, and it is why the
+         * singleton settings are not here — each one lives on the screen it
+         * governs, behind that screen's own gate (see routes/web.php).
+         */
+        key: 'setup',
+        label: 'Setup',
+        items: [
+            {
+                key: 'admin-field-offices',
+                label: 'Field Offices',
+                href: '/admin/field-offices',
+                roles: ['admin', 'superadmin'],
+                icon: 'building',
+            },
+            {
+                key: 'admin-smes',
+                label: 'Subject Matter Experts',
+                href: '/admin/smes',
+                roles: ['admin', 'superadmin'],
+                icon: 'users',
+            },
             {
                 key: 'admin-emails',
                 label: 'Emails',
@@ -268,6 +289,18 @@ const navGroups = [
                 roles: ['admin', 'superadmin'],
                 icon: 'envelope',
             },
+        ],
+    },
+    {
+        /*
+         * Who may use the system, what they did, and whether the site is open
+         * at all. Everything here is superadmin's except the user directory,
+         * which HRD reads — so for an admin this group is a single link and
+         * the rest of the old Administration list has moved to Setup.
+         */
+        key: 'administration',
+        label: 'Administration',
+        items: [
             {
                 key: 'admin-users',
                 label: 'Users & Roles',
