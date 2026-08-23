@@ -26,13 +26,14 @@ vendor/bin/pint --dirty   # only what you touched
 php artisan migrate:fresh --seed   # demo data
 php artisan tims:send-reminders --days=1
 php artisan tims:import-google-avatars
+php artisan tims:backup            # db + storage/app/private into one zip (scheduled 02:00)
 ```
 
 Dev DB and the test suite run on MySQL under XAMPP (dev `csc_tims-db`, tests `csc_tims_test`); `tests/TestCase.php` auto-creates the test database, so `composer test` needs no manual SQL — but MySQL must be running. `phpunit.xml` pins queue to `sync` and mail to `array`, so queued notifications execute inline in tests.
 
 Seeded demo logins (password `Password123`): `superadmin@csc.gov.ph`, `admin@csc.gov.ph`, `fieldoffice@csc.gov.ph`, `management@csc.gov.ph`, `participant@example.com`. `DatabaseSeeder` order matters: offices → demo logins → randomised users → activity.
 
-`.env` details that bite: `APP_URL` is baked into queued mail and into certificates at render time, so a wrong value is permanent in already-issued documents. `VITE_DEV_ORIGIN` exists for tunnelled dev (VS Code port forwarding / ngrok), which is also why `bootstrap/app.php` trusts *all* proxies — that must be narrowed before any public deployment. Google sign-in needs `GOOGLE_CLIENT_ID`/`SECRET`/`REDIRECT_URI`, and the callback host must match the host the flow started on.
+`.env` details that bite: `APP_URL` is baked into queued mail and into certificates at render time, so a wrong value is permanent in already-issued documents. `VITE_DEV_ORIGIN` exists for tunnelled dev (VS Code port forwarding / ngrok), which also needs `TRUSTED_PROXIES=*` — proxy trust defaults to *nothing*, because `X-Forwarded-For` is what every IP-keyed `throttle:` counts against and trusting it blindly hands out a fresh rate-limit bucket per forged header (`TrustProxiesTest` guards the default). Google sign-in needs `GOOGLE_CLIENT_ID`/`SECRET`/`REDIRECT_URI`, and the callback host must match the host the flow started on.
 
 ## Architecture
 
