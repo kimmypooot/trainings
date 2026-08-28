@@ -12,6 +12,7 @@ import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppStat from '@/Components/AppStat.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import { formatDateRange } from '@/dateRange';
 
 defineProps({
     expert: { type: Object, required: true },
@@ -131,7 +132,8 @@ const format = (value) => (value === null || value === undefined ? '—' : value
                         <div class="min-w-0">
                             <p class="text-sm font-medium text-csc-ink">{{ assignment.title }}</p>
                             <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                                {{ assignment.training_code }} · {{ assignment.starts_at }} ·
+                                {{ assignment.training_code }} ·
+                                {{ formatDateRange(assignment.starts_at, assignment.ends_at) }} ·
                                 {{ assignment.status_label }}
                                 <span v-if="assignment.topic"> · {{ assignment.topic }}</span>
                             </p>

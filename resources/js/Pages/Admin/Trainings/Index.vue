@@ -7,6 +7,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import { spansMultipleDays } from '@/dateRange';
 
 const props = defineProps({
     trainings: { type: Object, required: true },
@@ -146,9 +147,9 @@ const totals = computed(() => {
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <p class="text-[11px] leading-snug text-csc-ink-muted">
-                                        {{ training.starts_at }}<template v-if="training.ends_at && training.ends_at !== training.starts_at"> –</template>
+                                        {{ training.starts_at }}<template v-if="spansMultipleDays(training.starts_at, training.ends_at)"> –</template>
                                     </p>
-                                    <p v-if="training.ends_at && training.ends_at !== training.starts_at" class="text-[11px] leading-snug text-csc-ink-muted">
+                                    <p v-if="spansMultipleDays(training.starts_at, training.ends_at)" class="text-[11px] leading-snug text-csc-ink-muted">
                                         {{ training.ends_at }}
                                     </p>
                                 </td>
@@ -202,9 +203,9 @@ const totals = computed(() => {
                             <div class="min-w-0">
                                 <p class="text-sm font-semibold text-csc-ink">{{ training.title }}</p>
                                 <p class="mt-0.5 text-[11px] leading-snug text-csc-ink-subtle">
-                                    {{ training.starts_at }}<template v-if="training.ends_at && training.ends_at !== training.starts_at"> –</template>
+                                    {{ training.starts_at }}<template v-if="spansMultipleDays(training.starts_at, training.ends_at)"> –</template>
                                 </p>
-                                <p v-if="training.ends_at && training.ends_at !== training.starts_at" class="text-[11px] leading-snug text-csc-ink-subtle">
+                                <p v-if="spansMultipleDays(training.starts_at, training.ends_at)" class="text-[11px] leading-snug text-csc-ink-subtle">
                                     {{ training.ends_at }}
                                 </p>
                                 <p class="text-xs text-csc-ink-subtle">{{ training.venue }}</p>

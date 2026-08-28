@@ -14,6 +14,8 @@ import AppSelect from '@/Components/AppSelect.vue';
 import AppSkeleton from '@/Components/AppSkeleton.vue';
 import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
 import TrainingRegistrationForm from '@/Components/TrainingRegistrationForm.vue';
+import { formatDateRange, spansMultipleDays } from '@/dateRange';
+import { registrationCardToneFor } from '@/statusTone';
 
 const props = defineProps({
     trainings: { type: Object, required: true },
@@ -115,6 +117,13 @@ const fetchDetails = (training) => {
         preserveState: true,
         preserveScroll: true,
         preserveUrl: true,
+        // A hover-preload is a courtesy, not a request the participant is
+        // waiting on — if it fails (a network blip, or a stale asset version
+        // after a fresh deploy, which Inertia already recovers from on its
+        // own by reloading the page), there is nothing for this call to do
+        // beyond not surfacing an unhandled rejection. A click still opens
+        // the modal and asks again.
+        onError: () => {},
     });
 };
 
@@ -173,6 +182,11 @@ const slotsDetail = (training) =>
     training.capacity === null
         ? 'No limit'
         : `${training.slots_remaining} of ${training.capacity} remaining`;
+
+// A registered card is tinted by its status — see resources/js/statusTone.js
+// for why "approved" reads green here specifically, distinct from the info
+// tone AppBadge gives it in the footer badge on the same card.
+const cardTone = (training) => registrationCardToneFor(training.is_registered, training.registration_status);
 </script>
 
 <template>
@@ -253,7 +267,8 @@ const slotsDetail = (training) =>
                 <article
                     v-for="training in trainings.data"
                     :key="training.id"
-                    class="relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-csc-line bg-white transition-shadow duration-150 hover:shadow-md"
+                    class="relative flex cursor-pointer flex-col overflow-hidden rounded-xl border transition-shadow duration-150 hover:shadow-md"
+                    :class="cardTone(training)"
                     @mouseenter="preloadDetails(training)"
                     @mouseleave="cancelPreload"
                     @focusin="preloadDetails(training)"
@@ -279,7 +294,7 @@ const slotsDetail = (training) =>
                             <!-- The run's range stays on a single row: a dash
                                  joins start and end when the run spans days. -->
                             <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                                {{ training.starts_at }}<template v-if="training.ends_at && training.ends_at !== training.starts_at"> – {{ training.ends_at }}</template>
+                                {{ formatDateRange(training.starts_at, training.ends_at) }}
                             </p>
 
                             <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
@@ -297,7 +312,14 @@ const slotsDetail = (training) =>
                         </div>
                     </div>
 
-                    <div class="mt-auto flex items-center justify-between gap-2 border-t border-csc-line px-5 py-3">
+                    <!--
+                        flex-wrap: the button grew a visible border and padding
+                        when it stopped being a bare text link, and "Opens
+                        {date}" is long enough that the two together can outrun
+                        a narrow phone's card width. Wrapping to a second line
+                        beats the alternative of either one clipping.
+                    -->
+                    <div class="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-csc-line px-5 py-3">
                         <AppBadge v-if="training.is_registered" :status="training.registration_status" />
                         <span v-else-if="training.is_full" class="text-xs font-semibold text-danger">Full</span>
                         <span v-else-if="training.registration_closed" class="text-xs font-semibold text-csc-ink-subtle">
@@ -311,13 +333,9 @@ const slotsDetail = (training) =>
                         </span>
                         <span v-else class="text-xs font-medium text-csc-ink-subtle">Open</span>
 
-                        <button
-                            type="button"
-                            class="relative rounded text-xs font-semibold text-csc-blue transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            @click="openDetails(training)"
-                        >
+                        <AppButton variant="ghost" size="sm" @click="openDetails(training)">
                             View Details
-                        </button>
+                        </AppButton>
                     </div>
                 </article>
             </div>
@@ -359,7 +377,7 @@ const slotsDetail = (training) =>
                             <dt class="text-csc-ink-subtle">Date</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">
                                 {{ modalTraining.starts_at }}
-                                <template v-if="modalTraining.ends_at && modalTraining.ends_at !== modalTraining.starts_at">
+                                <template v-if="spansMultipleDays(modalTraining.starts_at, modalTraining.ends_at)">
                                     <span class="text-csc-ink-subtle">– {{ modalTraining.ends_at }}</span>
                                 </template>
                             </dd>
@@ -420,7 +438,7 @@ const slotsDetail = (training) =>
                     />
 
                     <div v-else class="mt-6 border-t border-csc-line pt-5">
-                        <AppSkeleton variant="text" count="3" label="Loading training details" />
+                        <AppSkeleton variant="text" :count="3" label="Loading training details" />
                     </div>
                 </template>
 

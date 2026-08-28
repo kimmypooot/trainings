@@ -13,6 +13,7 @@ import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     registrations: { type: Array, required: true },
@@ -65,8 +66,7 @@ const money = (value) =>
         maximumFractionDigits: 2,
     });
 
-const schedule = (training) =>
-    training.ends_at ? `${training.starts_at} – ${training.ends_at}` : training.starts_at;
+const schedule = (training) => formatDateRange(training.starts_at, training.ends_at);
 
 /*
  * Why the join link is not in the dialog yet.

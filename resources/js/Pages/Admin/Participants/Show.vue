@@ -10,6 +10,7 @@ import AppCard from '@/Components/AppCard.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppStat from '@/Components/AppStat.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     participant: { type: Object, required: true },
@@ -234,7 +235,8 @@ const confirm = () => {
                                 {{ registration.title }}
                             </Link>
                             <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                                Starts {{ registration.starts_at }} · Registered {{ registration.registered_at }}
+                                {{ formatDateRange(registration.starts_at, registration.ends_at) }} ·
+                                Registered {{ registration.registered_at }}
                             </p>
                         </div>
                         <div class="flex shrink-0 flex-wrap gap-2">

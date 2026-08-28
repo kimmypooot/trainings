@@ -104,6 +104,7 @@ class SubjectMatterExpertController extends Controller
                 'title' => $training->title,
                 'training_code' => $training->training_code,
                 'starts_at' => $training->starts_at->format('d M Y'),
+                'ends_at' => $training->ends_at->format('d M Y'),
                 'status_label' => $training->status->label(),
                 'topic' => $training->pivot->topic,
                 'results_url' => route('admin.trainings.evaluations', $training),

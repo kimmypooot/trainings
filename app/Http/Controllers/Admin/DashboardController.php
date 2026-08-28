@@ -85,7 +85,11 @@ class DashboardController extends Controller
                 'id' => $training->id,
                 'title' => $training->title,
                 'venue' => $training->venue,
-                'starts_at' => $training->starts_at->format('d M Y, g:i A'),
+                // Date only, and paired with ends_at, so a multi-day run reads
+                // as a range on this tile the same way it does everywhere else
+                // — 'when' already carries the relative timing this dropped.
+                'starts_at' => $training->starts_at->format('d M Y'),
+                'ends_at' => $training->ends_at->format('d M Y'),
                 'when' => $training->starts_at->diffForHumans(),
                 'registered' => $training->active_count,
                 'capacity' => $training->capacity,

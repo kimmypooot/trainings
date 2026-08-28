@@ -5,6 +5,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import ProgramStatusPill from '@/Components/ProgramStatusPill.vue';
+import { spansMultipleDays } from '@/dateRange';
 
 /**
  * The full catalogue view of one program, for anonymous visitors.
@@ -81,7 +82,7 @@ const money = (value) =>
                     <dd class="mt-0.5 font-medium text-csc-ink">
                         {{ program.starts_at }}
                         <!-- A single-day run stores the same date twice; "Oct 4 – Oct 4" is noise. -->
-                        <template v-if="program.ends_at && program.ends_at !== program.starts_at">
+                        <template v-if="spansMultipleDays(program.starts_at, program.ends_at)">
                             <span class="text-csc-ink-subtle">– {{ program.ends_at }}</span>
                         </template>
                     </dd>

@@ -158,6 +158,7 @@ class ParticipantController extends Controller
                 'status' => $registration->status->value,
                 'title' => $registration->training->title,
                 'starts_at' => $registration->training->starts_at->format('d M Y'),
+                'ends_at' => $registration->training->ends_at->format('d M Y'),
                 'registered_at' => $registration->created_at?->format('d M Y'),
                 'payment' => $this->paymentLabel($registration),
                 'roster_url' => route('admin.trainings.roster', $registration->training),

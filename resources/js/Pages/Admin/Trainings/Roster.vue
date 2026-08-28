@@ -13,6 +13,7 @@ import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -33,6 +34,11 @@ const props = defineProps({
 
 const page = usePage();
 const errors = computed(() => Object.values(page.props.errors ?? {}));
+
+// The run's date, as a range where it spans more than one day — read by both
+// the on-screen header and the printed attendance sheet, so a sheet printed
+// for day 2 or 3 of a run still shows the whole span it belongs to.
+const trainingDateRange = computed(() => formatDateRange(props.training.starts_at, props.training.ends_at));
 
 /* -------------------------------------------------------------------------- */
 /* Scanning stations                                                           */
@@ -745,7 +751,7 @@ const printedAt = new Date().toLocaleString();
                 Showing participants from <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
 
-            <AppCard :title="training.title" :subtitle="`${training.starts_at} · ${training.venue}`" class="print:hidden">
+            <AppCard :title="training.title" :subtitle="`${trainingDateRange} · ${training.venue}`" class="print:hidden">
                 <!--
                     Six tiles always, plus one each for a supervisory course and
                     a run that collects evaluations — so the track has to hold
@@ -1854,7 +1860,7 @@ const printedAt = new Date().toLocaleString();
                     </p>
                     <h1 class="mt-2 text-xl font-bold">{{ training.title }}</h1>
                     <p class="mt-1 text-sm">
-                        {{ training.starts_at }} · {{ training.venue }} · {{ training.status_label }}
+                        {{ trainingDateRange }} · {{ training.venue }} · {{ training.status_label }}
                     </p>
                 </header>
 

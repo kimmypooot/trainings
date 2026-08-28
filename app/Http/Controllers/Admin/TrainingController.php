@@ -347,6 +347,7 @@ class TrainingController extends Controller
                 'id' => $training->id,
                 'title' => $training->title,
                 'starts_at' => $training->starts_at->format('d M Y, g:i A'),
+                'ends_at' => $training->ends_at->format('d M Y, g:i A'),
                 'venue' => $training->venue,
                 'status_label' => $training->status->label(),
                 'payment_required' => $training->payment_required,
@@ -365,6 +366,7 @@ class TrainingController extends Controller
                 'id' => $target->id,
                 'title' => $target->title,
                 'starts_at' => $target->starts_at->format('d M Y, g:i A'),
+                'ends_at' => $target->ends_at->format('d M Y, g:i A'),
                 'venue' => $target->venue,
                 'payment_amount' => $target->payment_amount === null
                     ? null
@@ -439,6 +441,7 @@ class TrainingController extends Controller
                 'title' => $training->title,
                 'venue' => $training->venue,
                 'starts_at' => $training->starts_at->format('d M Y, g:i A'),
+                'ends_at' => $training->ends_at->format('d M Y, g:i A'),
                 'capacity' => $training->capacity,
                 'status_label' => $training->status->label(),
                 'duration_days' => $training->duration_days,
@@ -979,7 +982,11 @@ class TrainingController extends Controller
             ->get()
             ->map(fn (Training $option) => [
                 'value' => $option->id,
-                'label' => $option->title.' — '.$option->starts_at->format('d M Y'),
+                'label' => $option->title.' — '.$option->starts_at->format('d M Y').(
+                    $option->ends_at->isSameDay($option->starts_at)
+                        ? ''
+                        : ' – '.$option->ends_at->format('d M Y')
+                ),
             ])
             ->all();
     }

@@ -4,6 +4,7 @@ import { Head, usePage } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import { spansMultipleDays } from '@/dateRange';
 
 /**
  * The result of a certificate check.
@@ -126,7 +127,7 @@ const printResult = () => window.print();
                             <dd class="mt-1.5 text-sm font-medium text-csc-ink">
                                 {{ certificate.starts_at }}
                                 <!-- A single-day run stores the same date twice. -->
-                                <template v-if="certificate.ends_at !== certificate.starts_at">
+                                <template v-if="spansMultipleDays(certificate.starts_at, certificate.ends_at)">
                                     – {{ certificate.ends_at }}
                                 </template>
                             </dd>

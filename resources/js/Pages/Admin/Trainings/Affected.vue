@@ -21,6 +21,7 @@ import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -124,10 +125,17 @@ const selectedValue = computed(() =>
 
 const moving = ref(false);
 
+// The training's date, rendered as a range where it spans more than one day —
+// used both in the header and to pre-fill the reason a transfer is offered.
+const trainingDateRange = computed(() => formatDateRange(props.training.starts_at, props.training.ends_at));
+const targetDateRange = computed(() =>
+    props.target ? formatDateRange(props.target.starts_at, props.target.ends_at) : ''
+);
+
 const form = useForm({
     target_training_id: props.target?.id ?? '',
     reason: props.target
-        ? `“${props.training.title}” on ${props.training.starts_at} was rescheduled.`
+        ? `“${props.training.title}” on ${trainingDateRange.value} was rescheduled.`
         : '',
     ids: [],
 });
@@ -178,7 +186,7 @@ const exportUrl = computed(() => {
                     </p>
                     <h1 class="mt-1 text-2xl font-semibold text-csc-ink">{{ training.title }}</h1>
                     <p class="mt-1 text-sm text-csc-ink-muted">
-                        {{ training.starts_at }} · {{ training.venue }}
+                        {{ trainingDateRange }} · {{ training.venue }}
                     </p>
                     <p v-if="scopedTo" class="mt-1 text-xs text-csc-ink-subtle">
                         Showing {{ scopedTo }} participants only.
@@ -265,7 +273,7 @@ const exportUrl = computed(() => {
                     <div v-if="target" class="space-y-3">
                         <p class="text-sm text-csc-ink-muted">
                             <span class="font-medium text-csc-ink">{{ target.title }}</span>
-                            — {{ target.starts_at }} · {{ target.venue }}
+                            — {{ targetDateRange }} · {{ target.venue }}
                         </p>
 
                         <!--

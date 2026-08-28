@@ -20,6 +20,8 @@ php artisan test --filter=ExportScopingTest
 php artisan test tests/Feature/UndoTest.php
 php artisan test --testsuite=Feature
 
+npm run test               # Vitest — pure-JS helpers and shared components only, not pages
+
 vendor/bin/pint           # formatting (no pint.json — Laravel preset)
 vendor/bin/pint --dirty   # only what you touched
 
@@ -92,6 +94,8 @@ Never hardcode hex values — everything is a Tailwind v4 `@theme` token.
 ## Testing
 
 Feature tests under `tests/Feature` are organised by workflow (registration, attendance, certificates, payments, refunds, request workflows, agency requests, scan links, roster bulk actions, undo, scoping, analytics, seeders). There is no Pest — plain PHPUnit with Laravel's `TestCase`. New domain behaviour belongs in the matching workflow test; new admin surface belongs in `AdminAreaTest`.
+
+Client-side logic that has no server round-trip to exercise it lives outside PHPUnit's reach entirely, so those pieces (`resources/js/dateRange.js`, `resources/js/statusTone.js`, and shared components like `AppFileField`) carry their own `*.test.js` beside the file they test, run with `npm run test` (Vitest + `@vue/test-utils`, config in `vitest.config.js`). This is deliberately narrow — Inertia pages are not unit-tested; the workflow they drive is already covered end-to-end by the matching PHPUnit feature test, and mounting a full page component under jsdom would just be a slower, weaker copy of that.
 
 ## Notes
 

@@ -10,6 +10,7 @@ import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppSkeleton from '@/Components/AppSkeleton.vue';
 import AppStat from '@/Components/AppStat.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     stats: { type: Object, required: true },
@@ -174,7 +175,8 @@ const capped = (rows, total) => rows?.length >= props.modalLimit && total > prop
                         <div class="min-w-0">
                             <p class="text-sm font-medium text-csc-ink">{{ training.title }}</p>
                             <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                                {{ training.starts_at }} · {{ training.venue }} · {{ training.when }}
+                                {{ formatDateRange(training.starts_at, training.ends_at) }} · {{ training.venue }} ·
+                                {{ training.when }}
                             </p>
                         </div>
                         <div class="flex items-center gap-3 sm:shrink-0">

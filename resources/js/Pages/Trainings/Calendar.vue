@@ -5,6 +5,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import { spansMultipleDays } from '@/dateRange';
 
 defineProps({
     month: { type: Object, required: true },
@@ -137,7 +138,7 @@ const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                 {{ training.title }}
                             </Link>
                             <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                                {{ training.starts_at }}<span v-if="training.ends_at"> – {{ training.ends_at }}</span>
+                                {{ training.starts_at }}<span v-if="spansMultipleDays(training.starts_at, training.ends_at)"> – {{ training.ends_at }}</span>
                                 <span v-if="training.venue"> · {{ training.venue }}</span>
                                 · {{ training.mode_label }}
                             </p>
