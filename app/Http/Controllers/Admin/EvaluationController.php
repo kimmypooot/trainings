@@ -27,6 +27,9 @@ class EvaluationController extends Controller
     {
         $trainings = Training::query()
             ->has('subjectMatterExperts')
+            // Needed to work out which days actually collect an evaluation,
+            // which is the denominator below.
+            ->with('subjectMatterExperts')
             // Nothing to report on a run that has not begun; the list is a
             // reading screen, not a schedule.
             ->where('starts_at', '<=', now())
@@ -42,8 +45,16 @@ class EvaluationController extends Controller
 
         return Inertia::render('Admin/Evaluations/Index', [
             'trainings' => $trainings->map(function (Training $training) {
-                // Denominator: one evaluation per slot-holder per training day.
-                $possible = $training->expected_count * max(1, $training->duration_days ?? 1);
+                /*
+                 * Denominator: one evaluation per slot-holder per *evaluated*
+                 * day, which is not the same as per training day. A session
+                 * that carries over is rated once at its end, so a two-day run
+                 * with one expert throughout asks for one form, not two —
+                 * dividing by duration_days would report half the response
+                 * rate the run actually earned.
+                 */
+                $evaluationDays = count($training->evaluationDays());
+                $possible = $training->expected_count * $evaluationDays;
 
                 return [
                     'id' => $training->id,
@@ -51,6 +62,7 @@ class EvaluationController extends Controller
                     'training_code' => $training->training_code,
                     'starts_at' => $training->starts_at->format('d M Y'),
                     'duration_days' => max(1, $training->duration_days ?? 1),
+                    'evaluation_days' => $evaluationDays,
                     'status_label' => $training->status->label(),
                     'experts' => $training->subject_matter_experts_count,
                     'submissions' => $training->day_evaluations_count,
@@ -93,12 +105,16 @@ class EvaluationController extends Controller
                 'name' => $expert->name,
                 'display_name' => $expert->displayName(),
                 'topic' => $expert->pivot->topic,
-                // Pivot columns come back as raw JSON — there is no cast on an
-                // anonymous pivot — and the page renders "Days 1, 3", not a
-                // string that happens to look like an array.
-                'days' => is_string($expert->pivot->days)
-                    ? json_decode($expert->pivot->days, true)
-                    : $expert->pivot->days,
+                // Normalised through the model rather than read off the pivot:
+                // the column is raw JSON with null for "the whole run", and the
+                // page renders "Days 1, 3", not a string that happens to look
+                // like an array.
+                'days' => $training->daysForExpert($expert),
+                // The day(s) this assignment is actually rated on — the end of
+                // each unbroken stretch. Shown because "present days 1-3,
+                // rated on day 3" is the thing HRD needs to be able to check
+                // when a coordinator asks why day 1 collected nothing.
+                'evaluated_on' => $training->evaluationDaysForExpert($expert),
                 'url' => $mayOpenExperts ? route('admin.smes.show', $expert) : null,
             ])->all(),
             'results' => SmeEvaluationService::resultsFor($training),

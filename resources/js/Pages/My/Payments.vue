@@ -42,6 +42,12 @@ const proofExpected = computed(
     () => props.methods.find((method) => method.value === form.payment_method)?.expects_proof ?? false
 );
 
+const proofHint = computed(() =>
+    proofExpected.value
+        ? 'Please attach the transfer slip if you have it — it is what CSC matches against the bank statement. You can submit without one, and staff will follow up. PDF or image, up to 5 MB. Only you and CSC finance staff can open it.'
+        : 'PDF or image, up to 5 MB. Only you and CSC finance staff can open it.'
+);
+
 // Offered only where the training was published as accepting one. The server
 // applies the same rule — this keeps the option from appearing where it would
 // only be rejected.
@@ -251,29 +257,14 @@ const submitPhysicalOr = () =>
                                 the fee is paid and verified.
                             </AppAlert>
 
-                            <div>
-                                <label for="proof" class="mb-1.5 block text-sm font-medium text-csc-ink">
-                                    {{ isPromissory ? 'Signed Promissory Note' : 'Proof of Payment' }}
-                                </label>
-                                <input
-                                    id="proof"
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink file:mr-3 file:rounded file:border-0 file:bg-csc-blue-tint file:px-3 file:py-1.5 file:text-sm file:text-csc-blue"
-                                    @change="form.proof = $event.target.files[0]"
-                                />
-                                <p class="mt-1.5 text-xs text-csc-ink-subtle">
-                                    <template v-if="proofExpected">
-                                        Please attach the transfer slip if you have it — it is what CSC
-                                        matches against the bank statement. You can submit without one,
-                                        and staff will follow up.
-                                    </template>
-                                    PDF or image, up to 5 MB. Only you and CSC finance staff can open it.
-                                </p>
-                                <p v-if="form.errors.proof" class="mt-1.5 text-xs font-medium text-csc-red-ink">
-                                    {{ form.errors.proof }}
-                                </p>
-                            </div>
+                            <AppFileField
+                                id="proof"
+                                :label="isPromissory ? 'Signed Promissory Note' : 'Proof of Payment'"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                :hint="proofHint"
+                                :error="form.errors.proof"
+                                @change="form.proof = $event"
+                            />
 
                             <div class="flex flex-wrap justify-end gap-3">
                                 <AppButton variant="ghost" type="button" @click="paying = null">

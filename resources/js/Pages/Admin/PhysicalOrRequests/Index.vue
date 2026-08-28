@@ -214,12 +214,13 @@ const submitSettings = () =>
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <input
+                <AppInput
                     v-model="search"
+                    label=""
                     type="search"
                     placeholder="Find by name, OR or request code…"
                     aria-label="Find physical OR requests"
-                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue sm:max-w-xs"
+                    class="sm:max-w-xs"
                 />
                 <AppButton size="sm" icon="settings" class="sm:ml-auto" @click="openSettings">
                     GCash &amp; delivery settings

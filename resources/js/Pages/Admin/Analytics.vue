@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppAlert from '@/Components/AppAlert.vue';
+import AppTabs from '@/Components/AppTabs.vue';
 import Overview from '@/Pages/Admin/Analytics/Overview.vue';
 import TrainingReport from '@/Pages/Admin/Analytics/TrainingReport.vue';
 import PeriodReport from '@/Pages/Admin/Analytics/PeriodReport.vue';
@@ -19,9 +20,9 @@ const props = defineProps({
 });
 
 const tabs = [
-    { key: 'overview', label: 'Overview' },
-    { key: 'training', label: 'By Training' },
-    { key: 'period', label: 'By Period' },
+    { key: 'overview', label: 'Overview', icon: 'analytics' },
+    { key: 'training', label: 'By Training', icon: 'calendar' },
+    { key: 'period', label: 'By Period', icon: 'clock' },
 ];
 
 // The tab is the only part the server needs to switch views; each report tab
@@ -42,24 +43,12 @@ function switchTab(key) {
                 Figures cover <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
 
-            <div class="flex flex-wrap gap-2" role="tablist" aria-label="Analytics view">
-                <button
-                    v-for="tab in tabs"
-                    :key="tab.key"
-                    type="button"
-                    role="tab"
-                    :aria-selected="view === tab.key"
-                    class="rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        view === tab.key
-                            ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                    "
-                    @click="switchTab(tab.key)"
-                >
-                    {{ tab.label }}
-                </button>
-            </div>
+            <AppTabs
+                :model-value="view"
+                :tabs="tabs"
+                aria-label="Analytics view"
+                @update:model-value="switchTab"
+            />
 
             <Overview v-if="view === 'overview'" :overview="overview" />
             <TrainingReport

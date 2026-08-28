@@ -7,6 +7,8 @@ import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppInput from '@/Components/AppInput.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import AppStat from '@/Components/AppStat.vue';
 
@@ -97,42 +99,35 @@ const copyVerifyUrl = async (certificate) => {
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <input
+                <AppInput
                     v-model="search"
+                    label=""
                     type="search"
                     placeholder="Search by number, participant, or training…"
                     aria-label="Search certificates"
-                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue xl:col-span-2"
+                    class="xl:col-span-2"
                 />
-                <select
+                <AppSelect
                     v-model="training"
+                    label=""
                     aria-label="Filter by training"
-                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                >
-                    <option value="">All trainings</option>
-                    <option v-for="option in trainings" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                    </option>
-                </select>
-                <select
+                    placeholder="All trainings"
+                    :options="trainings"
+                />
+                <AppSelect
                     v-model="emailed"
+                    label=""
                     aria-label="Filter by delivery"
-                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                >
-                    <option value="">Emailed or not</option>
-                    <option value="1">Emailed</option>
-                    <option value="0">Not yet emailed</option>
-                </select>
-                <select
+                    placeholder="Emailed or not"
+                    :options="[{ value: '1', label: 'Emailed' }, { value: '0', label: 'Not yet emailed' }]"
+                />
+                <AppSelect
                     v-model="year"
+                    label=""
                     aria-label="Filter by issue year"
-                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                >
-                    <option value="">All years</option>
-                    <option v-for="option in years" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                    </option>
-                </select>
+                    placeholder="All years"
+                    :options="years"
+                />
             </div>
 
             <div class="flex justify-end">

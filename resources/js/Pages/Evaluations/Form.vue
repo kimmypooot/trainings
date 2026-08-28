@@ -114,6 +114,22 @@ const ratingName = (expertId, key) => `rating-${expertId}-${key}`;
                     :subtitle="expert.topic || expert.organization"
                 >
                     <div class="space-y-5">
+                        <!--
+                            A session that ran across more than one day is rated
+                            once, here, at its end. Saying so matters: without
+                            it the participant answers for this afternoon only
+                            and the earlier days go unjudged.
+                        -->
+                        <p
+                            v-if="expert.days && expert.days.length > 1"
+                            class="rounded-lg bg-csc-blue-tint px-3 py-2 text-xs text-csc-ink-muted"
+                        >
+                            This session ran over
+                            {{ expert.days.length }} days (day
+                            {{ expert.days[0] }}–{{ expert.days[expert.days.length - 1] }}).
+                            Your answers below cover all of them.
+                        </p>
+
                         <fieldset
                             v-for="criterion in criteria"
                             :key="criterion.key"

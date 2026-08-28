@@ -428,11 +428,14 @@ class AnalyticsController extends Controller
     private function trainingOptions(): array
     {
         return Training::orderByDesc('starts_at')
-            ->get(['id', 'title', 'starts_at'])
+            ->get(['id', 'title', 'starts_at', 'ends_at'])
             ->map(fn (Training $training) => [
                 'value' => $training->getKey(),
+                // The full span, not just the month: two runs of the same
+                // course four weeks apart both read "Foundations — Mar 2026"
+                // and the picker gave no way to tell which one was selected.
                 'label' => $training->starts_at
-                    ? $training->title.' — '.$training->starts_at->format('M Y')
+                    ? $training->title.' — '.$training->dateRange()
                     : $training->title,
             ])
             ->values()
@@ -465,7 +468,11 @@ class AnalyticsController extends Controller
             'training' => [
                 'id' => $training->getKey(),
                 'title' => $training->title,
-                'starts_at' => $training->starts_at?->format('d M Y'),
+                // The span rather than the start. A three-day run reported as
+                // one date reads as a one-day run, and the reader has no way
+                // to tell the difference from inside the report.
+                'dates' => $training->dateRange(),
+                'duration_days' => $training->duration_days,
                 'payment_amount' => $training->payment_amount,
             ],
             'revenue' => $canSeeMoney ? $this->revenueBlock($registrations) : null,

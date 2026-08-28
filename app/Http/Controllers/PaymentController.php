@@ -305,7 +305,10 @@ class PaymentController extends Controller
 
         $isOwner = $refundRequest->payment->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->collectsPayments(), 403);
+        if (! $isOwner) {
+            abort_unless($request->user()->collectsPayments(), 403);
+            $this->assertPaymentInScope($request, $refundRequest->payment);
+        }
 
         // Served inline rather than as an attachment: the officer who acts on
         // the claim reviews the receipt on screen, not after opening a download.
@@ -314,6 +317,25 @@ class PaymentController extends Controller
             null,
             ['Content-Disposition' => 'inline; filename="proof-of-payment"'],
         );
+    }
+
+    /**
+     * Field-office scoping for the two proof routes above, mirroring
+     * Admin\PaymentController::scopedPayment() — a field office's collecting
+     * officer may verify only its own money, and must not be able to open
+     * another office's payment proof by walking ids in the URL either.
+     */
+    private function assertPaymentInScope(Request $request, Payment $payment): void
+    {
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        if ($officeId === null) {
+            return;
+        }
+
+        $payment->loadMissing('user.profile');
+
+        abort_unless($payment->user->profile?->field_office_id === $officeId, 404);
     }
 
     /**
@@ -326,7 +348,10 @@ class PaymentController extends Controller
 
         $isOwner = $payment->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->collectsPayments(), 403);
+        if (! $isOwner) {
+            abort_unless($request->user()->collectsPayments(), 403);
+            $this->assertPaymentInScope($request, $payment);
+        }
 
         // Inline, not attachment: the collecting officer has to actually look
         // at the uploaded proof before it is verified, and a download adds a

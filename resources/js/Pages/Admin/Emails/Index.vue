@@ -183,23 +183,13 @@ const deleteTemplate = (template) =>
                 subtitle="Goes to the selected participants by email and as an in-app notification."
             >
                 <form class="grid gap-5" novalidate @submit.prevent="submit">
-                    <div>
-                        <label for="training" class="mb-1.5 block text-sm font-medium text-csc-ink">
-                            Training <span class="text-csc-red-ink" aria-hidden="true">*</span>
-                        </label>
-                        <select
-                            id="training"
-                            v-model="form.training_id"
-                            class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                        >
-                            <option v-for="option in trainings" :key="option.value" :value="option.value">
-                                {{ option.label }}
-                            </option>
-                        </select>
-                        <p v-if="form.errors.training_id" class="mt-1.5 text-xs font-medium text-csc-red-ink">
-                            {{ form.errors.training_id }}
-                        </p>
-                    </div>
+                    <AppSelect
+                        v-model="form.training_id"
+                        label="Training"
+                        required
+                        :options="trainings"
+                        :error="form.errors.training_id"
+                    />
 
                     <fieldset>
                         <legend class="mb-1.5 text-sm font-medium text-csc-ink">Send to</legend>

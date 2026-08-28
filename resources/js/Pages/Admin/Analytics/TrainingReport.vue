@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppCard from '@/Components/AppCard.vue';
+import AppTabs from '@/Components/AppTabs.vue';
+import { formatMoney } from '@/charts';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import RevenuePanel from '@/Pages/Admin/Analytics/RevenuePanel.vue';
@@ -18,8 +20,28 @@ const props = defineProps({
 // client state. Revenue is only offered to roles that can see money.
 const subtype = ref(props.canSeeMoney ? 'revenue' : 'breakdown');
 
-const money = (value) =>
-    Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Revenue is dropped from the strip entirely rather than shown disabled:
+// a role that cannot see money has no use for a greyed-out tab telling it so.
+const subtypes = computed(() => [
+    ...(props.canSeeMoney ? [{ key: 'revenue', label: 'Revenue', icon: 'card' }] : []),
+    { key: 'breakdown', label: 'Breakdown', icon: 'users' },
+]);
+
+const money = formatMoney;
+
+/*
+ * The session count, beside the span.
+ *
+ * Not derivable from the dates on screen: a training running three Fridays
+ * spans a month but is three days of attendance, and the span alone would have
+ * a reader counting weekdays to guess. Suppressed for a single-day run, where
+ * the date already says it.
+ */
+const durationLabel = computed(() => {
+    const days = props.trainingReport?.training?.duration_days ?? 1;
+
+    return days > 1 ? `${days} days` : null;
+});
 
 const revenueExportUrl = computed(() => {
     if (!props.selectedTrainingId) return '';
@@ -61,45 +83,32 @@ function pickTraining(id) {
         />
 
         <template v-else>
-            <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-csc-line pt-4">
-                <p class="text-sm font-semibold text-csc-ink">{{ trainingReport.training.title }}</p>
-                <p class="text-xs text-csc-ink-subtle">{{ trainingReport.training.starts_at }}</p>
-                <p v-if="trainingReport.training.payment_amount" class="text-xs text-csc-ink-subtle">
-                    Fee ₱{{ money(trainingReport.training.payment_amount) }}
-                </p>
+            <!--
+                The scope, stated as a heading rather than a line of grey
+                metadata. This strip is what a printed report is read from, so
+                it names the run every number below it belongs to.
+            -->
+            <div
+                class="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-csc-blue-tint px-4 py-3.5"
+            >
+                <p class="text-base font-semibold text-csc-blue">{{ trainingReport.training.title }}</p>
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+                    <p class="text-sm text-csc-ink-muted">
+                        {{ trainingReport.training.dates }}
+                        <span v-if="durationLabel" class="text-csc-ink-subtle">· {{ durationLabel }}</span>
+                    </p>
+                    <p v-if="trainingReport.training.payment_amount" class="text-sm text-csc-ink-muted">
+                        Fee
+                        <span class="font-semibold text-csc-ink tabular-nums">
+                            {{ money(trainingReport.training.payment_amount) }}
+                        </span>
+                    </p>
+                </div>
             </div>
 
             <!-- The two report forms share one scope. -->
-            <div class="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Report form">
-                <button
-                    v-if="canSeeMoney"
-                    type="button"
-                    role="tab"
-                    :aria-selected="subtype === 'revenue'"
-                    class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        subtype === 'revenue'
-                            ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                    "
-                    @click="subtype = 'revenue'"
-                >
-                    Revenue
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="subtype === 'breakdown'"
-                    class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        subtype === 'breakdown'
-                            ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                    "
-                    @click="subtype = 'breakdown'"
-                >
-                    Breakdown
-                </button>
+            <div class="mt-4">
+                <AppTabs v-model="subtype" :tabs="subtypes" aria-label="Report form" size="sm" />
             </div>
 
             <div class="mt-4">

@@ -7,7 +7,9 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppInput from '@/Components/AppInput.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 
 const props = defineProps({
     users: { type: Object, required: true },
@@ -90,23 +92,22 @@ const confirm = () => {
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex flex-1 flex-col gap-3 sm:flex-row">
-                    <input
+                    <AppInput
                         v-model="search"
+                        label=""
                         type="search"
                         placeholder="Search by name or email…"
                         aria-label="Search staff accounts"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue sm:max-w-xs"
+                        class="sm:max-w-xs"
                     />
-                    <select
+                    <AppSelect
                         v-model="role"
+                        label=""
                         aria-label="Filter by role"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue sm:max-w-52"
-                    >
-                        <option value="">All roles</option>
-                        <option v-for="option in roles" :key="option.value" :value="option.value">
-                            {{ option.label }}
-                        </option>
-                    </select>
+                        placeholder="All roles"
+                        :options="roles"
+                        class="sm:max-w-52"
+                    />
                 </div>
 
                 <AppButton v-if="canManage" href="/admin/users/create" icon="plus">

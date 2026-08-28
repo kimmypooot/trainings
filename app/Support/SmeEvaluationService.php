@@ -24,9 +24,13 @@ use Illuminate\Validation\ValidationException;
  *
  * The unit of work is a *training day*, not a training: a participant rates the
  * experts they watched that day, on the evening of that day, while the session
- * is still fresh. Everything here therefore keys on the pair (registration,
- * day number), and the database carries a unique index on exactly that pair so
- * a double submit updates rather than duplicates.
+ * is still fresh. An expert whose session carries on into the next day is the
+ * exception — they are rated once, at the end of the last day they deliver, so
+ * a two-day session is judged whole rather than twice in halves.
+ *
+ * Everything here therefore keys on the pair (registration, day number), and
+ * the database carries a unique index on exactly that pair so a double submit
+ * updates rather than duplicates.
  *
  * Three questions the rest of the app asks this class:
  *   - what can this participant evaluate right now (openDaysFor / pendingFor)
@@ -52,8 +56,16 @@ class SmeEvaluationService
      * say entirely, and the office would rather have a late evaluation than
      * none — `submitted_at` records how promptly each one arrived.
      *
+     * Not every day of a run collects one. An expert who is back tomorrow is
+     * rated at the end of their last day rather than each evening — see
+     * Training::expertsEvaluatedOnDay() for why — so a day whose experts all
+     * carry over has nothing to ask and is closed with a sentence saying where
+     * the form went. On a run delivered by one expert throughout, that means a
+     * single evaluation on the final day.
+     *
      * @return array<int, array{
      *     day: int, date: CarbonImmutable, experts: Collection<int, SubjectMatterExpert>,
+     *     continuing: Collection<int, SubjectMatterExpert>,
      *     evaluation: ?TrainingDayEvaluation, open: bool, reason: ?string
      * }>
      */
@@ -86,13 +98,23 @@ class SmeEvaluationService
 
         return collect($training->trainingDays())
             ->map(function (array $day) use ($training, $submitted, $attendance, $today, $registration) {
-                $experts = $training->expertsForDay($day['day']);
-                $reason = self::blockingReason($registration, $day, $experts, $attendance, $today);
+                $experts = $training->expertsEvaluatedOnDay($day['day']);
+
+                // Present today, but back tomorrow: named so the participant's
+                // list can still say who they saw on a day that asks nothing.
+                $continuing = $training->expertsForDay($day['day'])
+                    ->reject(fn (SubjectMatterExpert $expert) => $experts->contains('id', $expert->getKey()))
+                    ->values();
+
+                $reason = self::blockingReason(
+                    $registration, $training, $day, $experts, $continuing, $attendance, $today
+                );
 
                 return [
                     'day' => $day['day'],
                     'date' => $day['date'],
                     'experts' => $experts,
+                    'continuing' => $continuing,
                     'evaluation' => $submitted->get($day['day']),
                     'open' => $reason === null,
                     'reason' => $reason,
@@ -109,13 +131,16 @@ class SmeEvaluationService
      * simply missing reads as a bug, and the office ends up fielding the call.
      *
      * @param  array{day: int, date: CarbonImmutable}  $day
-     * @param  Collection<int, SubjectMatterExpert>  $experts
+     * @param  Collection<int, SubjectMatterExpert>  $experts  due to be rated tonight
+     * @param  Collection<int, SubjectMatterExpert>  $continuing  present, but back tomorrow
      * @param  Collection<int, Attendance>  $attendance
      */
     private static function blockingReason(
         Registration $registration,
+        Training $training,
         array $day,
         Collection $experts,
+        Collection $continuing,
         Collection $attendance,
         CarbonImmutable $today,
     ): ?string {
@@ -124,6 +149,22 @@ class SmeEvaluationService
         }
 
         if ($experts->isEmpty()) {
+            /*
+             * A carried-over session is not a misconfigured day, and telling
+             * the participant that no expert is assigned — when they watched
+             * one all afternoon — is how the office gets the phone call. Name
+             * the day the form will appear on instead; the earliest one, since
+             * that is the next thing that will be asked of them.
+             */
+            if ($continuing->isNotEmpty()) {
+                $next = $continuing
+                    ->map(fn (SubjectMatterExpert $expert) => $training->evaluationDayForExpert($expert, $day['day']))
+                    ->filter()
+                    ->min();
+
+                return "This session continues on the next training day — you will evaluate it at the end of day {$next}.";
+            }
+
             return 'No subject matter expert has been assigned to this day yet.';
         }
 
@@ -264,6 +305,7 @@ class SmeEvaluationService
      *
      * @return array{
      *     day: int, date: CarbonImmutable, experts: Collection<int, SubjectMatterExpert>,
+     *     continuing: Collection<int, SubjectMatterExpert>,
      *     evaluation: ?TrainingDayEvaluation, open: bool, reason: ?string
      * }
      */
@@ -287,10 +329,11 @@ class SmeEvaluationService
     /**
      * File (or amend) one participant's evaluation of one training day.
      *
-     * Ratings arrive keyed by expert id. Experts not assigned to the day are
-     * rejected rather than ignored: a payload naming somebody who was not there
-     * is either a stale form or a probe, and silently dropping it would leave
-     * the participant believing they rated someone they did not.
+     * Ratings arrive keyed by expert id. Experts not up for evaluation on the
+     * day are rejected rather than ignored: a payload naming somebody who was
+     * not there — or whose session has not finished yet — is either a stale form
+     * or a probe, and silently dropping it would leave the participant believing
+     * they rated someone they did not.
      *
      * The whole submission is one transaction — a day whose narrative saved but
      * whose ratings did not would count as submitted and never be offered
@@ -312,18 +355,18 @@ class SmeEvaluationService
 
         if ($unknown !== []) {
             throw ValidationException::withMessages([
-                'ratings' => 'One of the experts on this form is not assigned to this training day.',
+                'ratings' => 'One of the experts on this form is not being evaluated on this training day.',
             ]);
         }
 
-        // Every assigned expert must be rated. A partially completed form is
-        // the participant skipping the person they had least to say about,
+        // Every expert due tonight must be rated. A partially completed form
+        // is the participant skipping the person they had least to say about,
         // which is exactly the rating the office needs.
         $missing = $allowed->keys()->diff(array_keys($ratings));
 
         if ($missing->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'ratings' => 'Please rate every subject matter expert for this day.',
+                'ratings' => 'Please rate every subject matter expert on this form.',
             ]);
         }
 

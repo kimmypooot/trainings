@@ -66,8 +66,11 @@ const heading = computed(() =>
                                 Day {{ day.day }}
                                 <span class="font-normal text-csc-ink-muted">· {{ day.date }}</span>
                             </p>
-                            <p v-if="day.experts.length" class="mt-0.5 text-xs text-csc-ink-subtle">
-                                {{ day.experts.join(' · ') }}
+                            <p
+                                v-if="day.experts.length || day.continuing.length"
+                                class="mt-0.5 text-xs text-csc-ink-subtle"
+                            >
+                                {{ [...day.experts, ...day.continuing].join(' · ') }}
                             </p>
                             <p
                                 v-if="!day.open && !day.submitted"
@@ -97,7 +100,15 @@ const heading = computed(() =>
                             >
                                 View or amend
                             </Link>
-                            <span v-else class="text-xs text-csc-ink-subtle">Not yet open</span>
+                            <!--
+                                A day whose sessions all carry over never opens
+                                — it is not waiting, it is folded into a later
+                                day — so "Not yet open" would be a small lie the
+                                participant would keep coming back to check.
+                            -->
+                            <span v-else class="text-xs text-csc-ink-subtle">
+                                {{ !day.experts.length && day.continuing.length ? 'Continues' : 'Not yet open' }}
+                            </span>
                         </div>
                     </li>
                 </ul>

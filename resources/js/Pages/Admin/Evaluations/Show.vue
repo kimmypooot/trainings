@@ -37,8 +37,46 @@ const visibleComments = computed(() =>
         : props.comments.filter((comment) => comment.day === Number(dayFilter.value))
 );
 
-const assignedDays = (assignment) =>
-    assignment.days?.length ? `Days ${assignment.days.join(', ')}` : 'All days';
+/**
+ * "Days 1–3" reads better than "Days 1, 2, 3", and an assignment covering the
+ * whole run is the common case that deserves the short label.
+ */
+const spans = (list) =>
+    list.reduce((out, day) => {
+        const last = out[out.length - 1];
+
+        if (last && last[1] === day - 1) last[1] = day;
+        else out.push([day, day]);
+
+        return out;
+    }, []);
+
+const dayList = (list) =>
+    spans(list)
+        .map(([from, to]) => (from === to ? `${from}` : `${from}–${to}`))
+        .join(', ');
+
+const assignedDays = (assignment) => {
+    const days = assignment.days ?? [];
+
+    if (!days.length) return 'No days';
+    if (days.length === props.training.duration_days) return 'All days';
+
+    return `Days ${dayList(days)}`;
+};
+
+/**
+ * Where this assignment's feedback lands. Only worth saying when it differs
+ * from the days they were present — an expert on one day is rated on that day,
+ * and labelling it would be noise.
+ */
+const ratedOn = (assignment) => {
+    const on = assignment.evaluated_on ?? [];
+
+    if (!on.length || on.length === (assignment.days ?? []).length) return null;
+
+    return `rated on day ${dayList(on)}`;
+};
 </script>
 
 <template>
@@ -87,7 +125,10 @@ const assignedDays = (assignment) =>
                                 {{ assignment.topic }}
                             </span>
                         </div>
-                        <span class="text-xs text-csc-ink-subtle">{{ assignedDays(assignment) }}</span>
+                        <span class="text-xs text-csc-ink-subtle">
+                            {{ assignedDays(assignment) }}
+                            <span v-if="ratedOn(assignment)">· {{ ratedOn(assignment) }}</span>
+                        </span>
                     </li>
                 </ul>
             </AppCard>

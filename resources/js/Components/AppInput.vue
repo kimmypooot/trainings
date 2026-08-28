@@ -1,5 +1,5 @@
 <script setup>
-import { computed, useId } from 'vue';
+import { computed, useAttrs, useId } from 'vue';
 
 const props = defineProps({
     modelValue: { type: [String, Number], default: '' },
@@ -20,6 +20,21 @@ const emit = defineEmits(['update:modelValue']);
 // control, not on the wrapper div it would otherwise land on — a `min` silently
 // applied to a <div> is a constraint the browser never enforces.
 defineOptions({ inheritAttrs: false });
+
+/*
+ * class/style are the one exception: a caller placing this field in a grid or
+ * flex row (`class="xl:col-span-2"`) means the *wrapper*, since that is the
+ * grid/flex item — not the <input> two levels down, where it would silently
+ * do nothing. Split them out of $attrs so the rest still reaches the control.
+ */
+const attrs = useAttrs();
+const rootClass = computed(() => attrs.class);
+const rootStyle = computed(() => attrs.style);
+const controlAttrs = computed(() => {
+    const { class: _class, style: _style, ...rest } = attrs;
+
+    return rest;
+});
 
 const onInput = (event) => {
     const value = props.uppercase ? event.target.value.toUpperCase() : event.target.value;
@@ -47,15 +62,23 @@ const describedBy = computed(() => {
 </script>
 
 <template>
-    <div>
-        <label :for="inputId" class="mb-1.5 block text-sm font-medium text-csc-ink">
+    <div :class="rootClass" :style="rootStyle">
+        <!--
+            An empty label is how a dense filter toolbar opts out of the visible
+            caption — the placeholder and an aria-label passed through $attrs
+            carry the meaning instead. Rendering an empty <label> anyway would
+            still associate with the input and blank out its accessible name for
+            a screen reader, so the element is dropped entirely rather than
+            left invisible. Mirrors AppSelect's placeholder handling below.
+        -->
+        <label v-if="label" :for="inputId" class="mb-1.5 block text-sm font-medium text-csc-ink">
             {{ label }}
             <span v-if="required" class="text-csc-red-ink" aria-hidden="true">*</span>
         </label>
 
         <div class="relative">
             <input
-                v-bind="$attrs"
+                v-bind="controlAttrs"
                 :id="inputId"
                 :type="type"
                 :value="modelValue"

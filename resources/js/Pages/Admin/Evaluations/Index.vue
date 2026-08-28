@@ -60,6 +60,16 @@ defineProps({
                                     {{ training.training_code }} · {{ training.starts_at }} ·
                                     {{ training.duration_days }}
                                     day{{ training.duration_days === 1 ? '' : 's' }} ·
+                                    <!--
+                                        Only worth spelling out where the two
+                                        differ, which is exactly where somebody
+                                        would otherwise read the denominator as
+                                        wrong: a session carried across days is
+                                        rated once, at its end.
+                                    -->
+                                    <template v-if="training.evaluation_days !== training.duration_days">
+                                        {{ training.evaluation_days }} evaluated ·
+                                    </template>
                                     {{ training.status_label }}
                                 </p>
                             </td>

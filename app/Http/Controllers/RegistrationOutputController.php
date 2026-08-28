@@ -65,7 +65,18 @@ class RegistrationOutputController extends Controller
 
         $isOwner = $output->registration->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->role->isStaff(), 403);
+        if (! $isOwner) {
+            abort_unless($request->user()->role->isStaff(), 403);
+
+            // Same office guard as the participant detail page and the roster
+            // this output is reached from.
+            $officeId = $request->user()->scopedFieldOfficeId();
+
+            if ($officeId !== null) {
+                $output->registration->loadMissing('user.profile');
+                abort_unless($output->registration->user->profile?->field_office_id === $officeId, 404);
+            }
+        }
 
         return Storage::disk(self::DISK)->download($output->file_path, $output->original_filename);
     }

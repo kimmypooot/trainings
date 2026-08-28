@@ -4,6 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppInput from '@/Components/AppInput.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 
@@ -60,21 +61,12 @@ const toggle = (id) => {
                         type="search"
                     />
 
-                    <div>
-                        <label for="module" class="mb-1.5 block text-sm font-medium text-csc-ink">
-                            Area
-                        </label>
-                        <select
-                            id="module"
-                            v-model="module"
-                            class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                        >
-                            <option value="">All areas</option>
-                            <option v-for="option in modules" :key="option.value" :value="option.value">
-                                {{ option.label }}
-                            </option>
-                        </select>
-                    </div>
+                    <AppSelect
+                        v-model="module"
+                        label="Area"
+                        placeholder="All areas"
+                        :options="modules"
+                    />
                 </div>
             </AppCard>
 

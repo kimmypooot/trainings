@@ -389,12 +389,13 @@ const rejectRefund = (refund) => {
                 <!-- Find and narrow. Rows re-query the server; the chips count
                      the whole queue so their numbers never move under a filter. -->
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <input
+                    <AppInput
                         v-model="search"
+                        label=""
                         type="search"
                         placeholder="Find by name, OR number or reference…"
                         aria-label="Find payments"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue sm:max-w-xs"
+                        class="sm:max-w-xs"
                     />
 
                     <AppSelect

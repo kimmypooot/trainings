@@ -3,89 +3,144 @@ import { computed } from 'vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppBarList from '@/Components/AppBarList.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppDonutChart from '@/Components/AppDonutChart.vue';
+import AppShareBar from '@/Components/AppShareBar.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
+import AppTrendChart from '@/Components/AppTrendChart.vue';
+import { formatMoney } from '@/charts';
 
 /**
  * The live dashboard: what has happened so far, across every training. Kept as
  * the default tab of the analytics page — the report generator sits beside it.
+ *
+ * The cuts are grouped by the question they answer rather than by where the
+ * data comes from: how much has happened (the tiles and the trend), how it is
+ * going (attendance), who is being trained (the profile block), and where they
+ * come from. Each cut also picks its form by what the data *is* — see the
+ * notes on the individual charts, and the palette notes in app.css.
  */
 const props = defineProps({
     overview: { type: Object, required: true },
 });
 
-// The month strip is drawn as columns rather than rows, so it keeps its own
-// peak; every other breakdown uses AppBarList, which works its own out.
-const monthPeak = computed(() =>
-    Math.max(1, ...props.overview.registrationsByMonth.map((row) => row.count))
+const trend = computed(() =>
+    props.overview.registrationsByMonth.map((row) => ({ label: row.month, value: row.count }))
 );
 
+// The sparkline on the registrations tile is the same series as the chart
+// below it, at thumbnail size — the number gains its shape without the tile
+// having to become a chart.
+const sparkline = computed(() => props.overview.registrationsByMonth.map((row) => row.count));
+
 const tiles = computed(() => [
-    { label: 'Trainings', value: props.overview.headline.trainings },
-    { label: 'Registrations', value: props.overview.headline.registrations },
-    { label: 'Completed', value: props.overview.headline.completed },
-    { label: 'Certificates Issued', value: props.overview.headline.certificates },
+    {
+        label: 'Trainings',
+        value: props.overview.headline.trainings,
+        icon: 'calendar',
+        tone: 'brand',
+    },
+    {
+        label: 'Registrations',
+        value: props.overview.headline.registrations,
+        icon: 'users',
+        tone: 'brand',
+        caption: `Since ${props.overview.range.since}`,
+        spark: sparkline.value,
+    },
+    {
+        label: 'Completed',
+        value: props.overview.headline.completed,
+        icon: 'check',
+        tone: 'success',
+    },
+    {
+        label: 'Certificates Issued',
+        value: props.overview.headline.certificates,
+        icon: 'certificate',
+        tone: 'brand',
+    },
+]);
+
+/*
+ * The attendance ring's centre is the completion rate, not the row count: the
+ * rate is the figure the office is judged on, and the statuses around it are
+ * the breakdown of how it got there. A ring with a bare total in the middle
+ * would be a breakdown of nothing in particular.
+ */
+const attendanceCenter = computed(() =>
+    props.overview.attendance.rate === null ? '—' : `${props.overview.attendance.rate}%`
+);
+
+/*
+ * Ordered cuts take the one-hue ramp so the colour carries the sequence;
+ * unordered ones are all the same blue, because the bar length already says
+ * everything hue could. Sex, funding source and the like are small
+ * part-to-whole splits and read better as a single share bar than as two or
+ * three lonely bars.
+ */
+const profileShares = computed(() => [
+    { key: 'sex', label: 'Sex' },
+    { key: 'chargeTo', label: 'Charged To' },
+]);
+
+const profileBars = computed(() => [
+    { key: 'ageBand', label: 'Age Band', tone: 'ordinal', width: '7rem' },
+    { key: 'positionLevel', label: 'Position Level', tone: 'ordinal', width: '11rem' },
+    { key: 'employmentStatus', label: 'Nature of Appointment', tone: 'brand', width: '11rem' },
+    { key: 'sector', label: 'Sector', tone: 'brand', width: '11rem' },
 ]);
 </script>
 
 <template>
     <div class="space-y-5">
         <!-- Headline -->
-        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div
+        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <AppStatTile
                 v-for="tile in tiles"
                 :key="tile.label"
-                class="rounded-xl border border-csc-line bg-white p-4"
-            >
-                <p class="text-2xl font-bold text-csc-blue">{{ tile.value }}</p>
-                <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ tile.label }}</p>
-            </div>
+                :label="tile.label"
+                :value="tile.value"
+                :caption="tile.caption"
+                :icon="tile.icon"
+                :tone="tile.tone"
+                :spark="tile.spark"
+            />
         </div>
 
-        <AppCard title="Registrations Over Time" :subtitle="`Since ${overview.range.since}`">
-            <ul class="space-y-2">
-                <li
-                    v-for="row in overview.registrationsByMonth"
-                    :key="row.month"
-                    class="grid grid-cols-[6rem_1fr_2.5rem] items-center gap-3"
-                >
-                    <span class="text-xs text-csc-ink-subtle">{{ row.month }}</span>
-                    <span class="h-2.5 rounded-full bg-csc-blue-tint">
-                        <span
-                            class="block h-full rounded-full bg-csc-blue transition-all duration-150"
-                            :style="{ width: `${(row.count / monthPeak) * 100}%` }"
-                        />
-                    </span>
-                    <span class="text-right text-xs font-medium text-csc-ink">{{ row.count }}</span>
-                </li>
-            </ul>
+        <AppCard
+            title="Registrations Over Time"
+            :subtitle="`Monthly, since ${overview.range.since}.`"
+        >
+            <AppTrendChart
+                :rows="trend"
+                value-label="Registrations"
+                empty-text="No registrations in this window yet."
+            />
         </AppCard>
 
         <div class="grid gap-5 lg:grid-cols-2">
-            <AppCard title="Attendance">
+            <AppCard
+                title="Attendance"
+                subtitle="Share of recorded days that counted toward completion."
+            >
                 <p v-if="overview.attendance.rate === null" class="text-sm text-csc-ink-subtle">
                     No attendance has been recorded yet.
                 </p>
 
-                <template v-else>
-                    <p class="text-3xl font-bold text-csc-blue">{{ overview.attendance.rate }}%</p>
-                    <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                        of {{ overview.attendance.total }} recorded days counted toward completion
-                    </p>
-
-                    <ul class="mt-5 space-y-2">
-                        <li
-                            v-for="row in overview.attendance.byStatus"
-                            :key="row.label"
-                            class="flex items-center justify-between text-sm"
-                        >
-                            <span class="text-csc-ink-muted">{{ row.label }}</span>
-                            <span class="font-medium text-csc-ink">{{ row.count }}</span>
-                        </li>
-                    </ul>
-                </template>
+                <AppDonutChart
+                    v-else
+                    :rows="overview.attendance.byStatus"
+                    :center-value="attendanceCenter"
+                    center-label="of days credited"
+                />
             </AppCard>
 
-            <AppCard title="By Category">
-                <AppBarList :rows="overview.byCategory" empty-text="No registrations yet." />
+            <AppCard title="By Category" subtitle="Registrations per training category.">
+                <AppBarList
+                    :rows="overview.byCategory"
+                    :limit="8"
+                    empty-text="No registrations yet."
+                />
             </AppCard>
         </div>
 
@@ -102,30 +157,18 @@ const tiles = computed(() => [
             title="Participant Profile"
             subtitle="Counted per registration — one person attending three trainings counts three times."
         >
-            <div class="grid gap-6 sm:grid-cols-2">
-                <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Sex</h3>
-                    <AppBarList :rows="overview.demographics.sex" label-width="7rem" />
+            <div class="grid gap-x-8 gap-y-7 sm:grid-cols-2">
+                <div v-for="cut in profileShares" :key="cut.key">
+                    <h3 class="mb-2.5 text-sm font-semibold text-csc-ink">{{ cut.label }}</h3>
+                    <AppShareBar :rows="overview.demographics[cut.key]" />
                 </div>
-                <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Age Band</h3>
-                    <AppBarList :rows="overview.demographics.ageBand" label-width="7rem" />
-                </div>
-                <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Position Level</h3>
-                    <AppBarList :rows="overview.demographics.positionLevel" label-width="11rem" />
-                </div>
-                <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Nature of Appointment</h3>
-                    <AppBarList :rows="overview.demographics.employmentStatus" label-width="11rem" />
-                </div>
-                <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Sector</h3>
-                    <AppBarList :rows="overview.demographics.sector" label-width="11rem" />
-                </div>
-                <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Charged To</h3>
-                    <AppBarList :rows="overview.demographics.chargeTo" label-width="7rem" />
+                <div v-for="cut in profileBars" :key="cut.key">
+                    <h3 class="mb-2.5 text-sm font-semibold text-csc-ink">{{ cut.label }}</h3>
+                    <AppBarList
+                        :rows="overview.demographics[cut.key]"
+                        :tone="cut.tone"
+                        :label-width="cut.width"
+                    />
                 </div>
             </div>
         </AppCard>
@@ -134,14 +177,14 @@ const tiles = computed(() => [
             title="Where Participants Come From"
             subtitle="Their own region and province, not the field office they are assigned to."
         >
-            <div class="grid gap-6 sm:grid-cols-2">
+            <div class="grid gap-x-8 gap-y-7 sm:grid-cols-2">
                 <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Region</h3>
-                    <AppBarList :rows="overview.demographics.region" label-width="13rem" />
+                    <h3 class="mb-2.5 text-sm font-semibold text-csc-ink">Region</h3>
+                    <AppBarList :rows="overview.demographics.region" label-width="13rem" :limit="10" />
                 </div>
                 <div>
-                    <h3 class="mb-2 text-sm font-medium text-csc-ink">Province</h3>
-                    <AppBarList :rows="overview.demographics.province" label-width="11rem" />
+                    <h3 class="mb-2.5 text-sm font-semibold text-csc-ink">Province</h3>
+                    <AppBarList :rows="overview.demographics.province" label-width="11rem" :limit="10" />
                 </div>
             </div>
         </AppCard>
@@ -154,26 +197,33 @@ const tiles = computed(() => [
             <AppBarList :rows="overview.topAgencies" label-width="14rem" />
         </AppCard>
 
-        <AppCard v-if="overview.payments" title="Payments">
-            <div class="grid grid-cols-3 gap-4">
-                <div>
-                    <p class="text-2xl font-bold text-csc-blue">
-                        {{ Number(overview.payments.verified_total).toLocaleString() }}
-                    </p>
-                    <p class="text-xs text-csc-ink-subtle">PHP verified</p>
-                </div>
-                <div>
-                    <p class="text-2xl font-bold text-warning">{{ overview.payments.pending_count }}</p>
-                    <p class="text-xs text-csc-ink-subtle">Awaiting verification</p>
-                </div>
-                <div>
-                    <p class="text-2xl font-bold text-danger">{{ overview.payments.rejected_count }}</p>
-                    <p class="text-xs text-csc-ink-subtle">Rejected</p>
-                </div>
-            </div>
-        </AppCard>
+        <div v-if="overview.payments" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <AppStatTile
+                label="Verified"
+                :value="formatMoney(overview.payments.verified_total)"
+                caption="Money that has actually arrived"
+                icon="card"
+                tone="success"
+            />
+            <AppStatTile
+                label="Awaiting verification"
+                :value="overview.payments.pending_count"
+                caption="Claims, not yet money"
+                icon="clock"
+                tone="warning"
+            />
+            <AppStatTile
+                label="Rejected"
+                :value="overview.payments.rejected_count"
+                icon="warning"
+                tone="danger"
+            />
+        </div>
 
-        <AppCard title="Exports" subtitle="Downloads honour the same field-office scoping as these figures.">
+        <AppCard
+            title="Exports"
+            subtitle="Downloads honour the same field-office scoping as these figures."
+        >
             <div class="flex flex-wrap gap-3">
                 <AppButton href="/admin/exports/participants" variant="ghost" size="sm" icon="download" external>
                     Participants (CSV)

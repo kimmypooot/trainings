@@ -53,6 +53,12 @@ class EvaluationController extends Controller
                         'experts' => $day['experts']
                             ->map(fn (SubjectMatterExpert $expert) => $expert->displayName())
                             ->all(),
+                        // Experts who were there but are back tomorrow. Named
+                        // separately so a day that asks nothing still shows who
+                        // delivered it, instead of reading as an empty row.
+                        'continuing' => $day['continuing']
+                            ->map(fn (SubjectMatterExpert $expert) => $expert->displayName())
+                            ->all(),
                         'submitted' => $day['evaluation'] !== null,
                         'submitted_at' => $day['evaluation']?->submitted_at->format('d M Y, g:i A'),
                         'open' => $day['open'],
@@ -113,6 +119,10 @@ class EvaluationController extends Controller
                 'position' => $expert->position,
                 'organization' => $expert->organization,
                 'topic' => $expert->pivot->topic,
+                // The days this rating covers. On a session that carried over,
+                // the participant is rating two afternoons at once and has to
+                // be told so — otherwise they answer for today only.
+                'days' => $registration->training->expertStretchAroundDay($expert, $day),
             ])->all(),
             // Prefilled when amending: the participant is correcting what they
             // said, not writing it again from a blank page.

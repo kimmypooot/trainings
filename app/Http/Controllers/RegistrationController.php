@@ -319,7 +319,20 @@ class RegistrationController extends Controller
 
         $isOwner = $registration->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->role->isStaff(), 403);
+        if (! $isOwner) {
+            abort_unless($request->user()->role->isStaff(), 403);
+
+            // Same office guard as the participant detail page and the roster
+            // this document is reached from — a field-office user must not be
+            // able to open another office's designation order by walking
+            // registration ids in the URL.
+            $officeId = $request->user()->scopedFieldOfficeId();
+
+            if ($officeId !== null) {
+                $registration->loadMissing('user.profile');
+                abort_unless($registration->user->profile?->field_office_id === $officeId, 404);
+            }
+        }
 
         return Storage::disk(self::DISK)->download($registration->supporting_document_path);
     }

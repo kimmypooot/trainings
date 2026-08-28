@@ -8,6 +8,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
     training: { type: Object, default: null },
@@ -152,6 +153,38 @@ const addExpert = () => {
 
 const removeExpert = (index) => {
     form.subject_matter_experts.splice(index, 1);
+};
+
+/**
+ * Where this assignment's evaluation lands, mirroring
+ * Training::evaluationDaysForExpert(): an expert is rated once per unbroken
+ * stretch of days they are present for, at the end of that stretch.
+ *
+ * Shown live rather than left for HRD to infer, because ticking days 1 and 2 is
+ * the moment somebody decides whether they meant "one session over two days" or
+ * "two sessions" — and the difference is only visible in what gets asked of the
+ * room afterwards.
+ */
+const evaluationDays = (assignment) => {
+    const days = assignment.days?.length
+        ? [...assignment.days].sort((a, b) => a - b)
+        : dayNumbers.value;
+
+    return days.filter((day) => !days.includes(day + 1));
+};
+
+const evaluationNote = (assignment) => {
+    const on = evaluationDays(assignment);
+
+    if (on.length === 0) return null;
+
+    // One rating per day they attend is the un-noteworthy case: saying it would
+    // put a line of explanation under every single-day assignment.
+    if (on.length === (assignment.days?.length || dayNumbers.value.length)) return null;
+
+    return on.length === 1
+        ? `Evaluated once, at the end of day ${on[0]}.`
+        : `Evaluated at the end of days ${on.join(' and ')}.`;
 };
 
 const submit = () => {
@@ -368,6 +401,8 @@ const submit = () => {
                                 </legend>
                                 <p class="mt-0.5 text-xs text-csc-ink-subtle">
                                     Leave all unticked if this expert is present for the whole run.
+                                    Consecutive days count as one session — participants rate it
+                                    once, at the end of the last of them.
                                 </p>
                                 <div class="mt-2 flex flex-wrap gap-2">
                                     <label
@@ -389,6 +424,14 @@ const submit = () => {
                                         Day {{ day }}
                                     </label>
                                 </div>
+
+                                <p
+                                    v-if="evaluationNote(assignment)"
+                                    class="mt-2 flex items-center gap-1.5 text-xs text-csc-ink-muted"
+                                >
+                                    <AppIcon name="clipboard" class="size-3.5 shrink-0" aria-hidden="true" />
+                                    {{ evaluationNote(assignment) }}
+                                </p>
                             </fieldset>
 
                             <div class="mt-3 flex justify-end">

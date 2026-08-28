@@ -9,7 +9,9 @@ import AppCard from '@/Components/AppCard.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AppInput from '@/Components/AppInput.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import AppSelect from '@/Components/AppSelect.vue';
 import AppStat from '@/Components/AppStat.vue';
 
 const props = defineProps({
@@ -135,47 +137,42 @@ const confirm = () => {
 
             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div class="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <input
+                    <AppInput
                         v-model="search"
+                        label=""
                         type="search"
                         placeholder="Search by name, email, agency, or mobile…"
                         aria-label="Search participants"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue xl:col-span-3"
+                        class="xl:col-span-3"
                     />
-                    <select
+                    <AppSelect
                         v-model="status"
+                        label=""
                         aria-label="Filter by account status"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                    >
-                        <option value="">All statuses</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Deactivated</option>
-                    </select>
-                    <select
+                        placeholder="All statuses"
+                        :options="[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Deactivated' }]"
+                    />
+                    <AppSelect
                         v-model="verified"
+                        label=""
                         aria-label="Filter by email verification"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                    >
-                        <option value="">All verifications</option>
-                        <option value="1">Email verified</option>
-                        <option value="0">Email unverified</option>
-                    </select>
-                    <select
+                        placeholder="All verifications"
+                        :options="[{ value: '1', label: 'Email verified' }, { value: '0', label: 'Email unverified' }]"
+                    />
+                    <AppSelect
                         v-model="sector"
+                        label=""
                         aria-label="Filter by sector"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                    >
-                        <option value="">All sectors</option>
-                        <option v-for="option in options.sectors" :key="option" :value="option">{{ option }}</option>
-                    </select>
-                    <select
+                        placeholder="All sectors"
+                        :options="options.sectors"
+                    />
+                    <AppSelect
                         v-model="region"
+                        label=""
                         aria-label="Filter by region"
-                        class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                    >
-                        <option value="">All regions</option>
-                        <option v-for="option in options.regions" :key="option" :value="option">{{ option }}</option>
-                    </select>
+                        placeholder="All regions"
+                        :options="options.regions"
+                    />
                 </div>
 
                 <!-- external: a streamed download, which Inertia's XHR layer cannot follow. -->

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, useId } from 'vue';
+import { computed, useAttrs, useId } from 'vue';
 import AppIcon from '@/Components/AppIcon.vue';
 
 const props = defineProps({
@@ -14,6 +14,23 @@ const props = defineProps({
 });
 
 defineEmits(['update:modelValue']);
+
+// Same reasoning as AppInput: anything not declared above (aria-label for a
+// labelless toolbar filter, chief among them) must reach the <select> itself,
+// not the wrapper div — an attribute Vue would otherwise apply there silently.
+defineOptions({ inheritAttrs: false });
+
+// class/style are the exception, for the same reason as AppInput: a caller
+// sizing this field in a grid or flex row means the wrapper, not the <select>
+// two levels down.
+const attrs = useAttrs();
+const rootClass = computed(() => attrs.class);
+const rootStyle = computed(() => attrs.style);
+const controlAttrs = computed(() => {
+    const { class: _class, style: _style, ...rest } = attrs;
+
+    return rest;
+});
 
 // Accepts either a plain list of strings or {value, label} pairs, so options
 // backed by a reference table can carry an id while fixed lists stay simple.
@@ -40,7 +57,7 @@ const describedBy = computed(() => {
 </script>
 
 <template>
-    <div>
+    <div :class="rootClass" :style="rootStyle">
         <label v-if="label" :for="selectId" class="mb-1.5 block text-sm font-medium text-csc-ink">
             {{ label }}
             <span v-if="required" class="text-csc-red-ink" aria-hidden="true">*</span>
@@ -48,6 +65,7 @@ const describedBy = computed(() => {
 
         <div class="relative">
             <select
+                v-bind="controlAttrs"
                 :id="selectId"
                 :value="modelValue"
                 :required="required"

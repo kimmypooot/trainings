@@ -7,6 +7,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AppInput from '@/Components/AppInput.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import AppSelect from '@/Components/AppSelect.vue';
@@ -199,12 +200,13 @@ const slotsDetail = (training) =>
 
             <!-- Search + filters -->
             <div class="flex flex-col gap-3">
-                <input
+                <AppInput
                     v-model="search"
+                    label=""
                     type="search"
                     placeholder="Search by title, code, or venue…"
                     aria-label="Search trainings"
-                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue lg:max-w-xs"
+                    class="lg:max-w-xs"
                 />
 
                 <div class="flex flex-wrap items-end gap-3">

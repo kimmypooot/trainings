@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppCard from '@/Components/AppCard.vue';
+import AppTabs from '@/Components/AppTabs.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import RevenuePanel from '@/Pages/Admin/Analytics/RevenuePanel.vue';
 import BreakdownPanel from '@/Pages/Admin/Analytics/BreakdownPanel.vue';
@@ -15,6 +16,13 @@ const props = defineProps({
 // Revenue and breakdown both ride in the same payload, so the sub-tab is pure
 // client state. Revenue is only offered to roles that can see money.
 const subtype = ref(props.canSeeMoney ? 'revenue' : 'breakdown');
+
+// Revenue is dropped from the strip entirely rather than shown disabled:
+// a role that cannot see money has no use for a greyed-out tab telling it so.
+const subtypes = computed(() => [
+    ...(props.canSeeMoney ? [{ key: 'revenue', label: 'Revenue', icon: 'card' }] : []),
+    { key: 'breakdown', label: 'Breakdown', icon: 'users' },
+]);
 
 const periodType = ref(props.period.value);
 const year = ref(props.period.year);
@@ -116,43 +124,29 @@ const breakdownExportUrl = computed(
             />
         </div>
 
-        <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-csc-line pt-4">
-            <p class="text-sm font-semibold text-csc-blue">{{ periodReport.label }}</p>
-            <p class="text-xs text-csc-ink-subtle">
-                {{ periodReport.conducted }} training(s) conducted, {{ periodReport.participants }} registration(s)
-            </p>
+        <!--
+            The scope, stated as a heading rather than a line of grey metadata.
+            This strip is what a printed report is read from, so it names the
+            period and the two figures that qualify every number below it.
+        -->
+        <div
+            class="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-csc-blue-tint px-4 py-3.5"
+        >
+            <p class="text-base font-semibold text-csc-blue">{{ periodReport.label }}</p>
+            <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+                <p class="text-sm text-csc-ink-muted">
+                    <span class="font-semibold text-csc-ink tabular-nums">{{ periodReport.conducted }}</span>
+                    training(s) conducted
+                </p>
+                <p class="text-sm text-csc-ink-muted">
+                    <span class="font-semibold text-csc-ink tabular-nums">{{ periodReport.participants }}</span>
+                    registration(s)
+                </p>
+            </div>
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Report form">
-            <button
-                v-if="canSeeMoney"
-                type="button"
-                role="tab"
-                :aria-selected="subtype === 'revenue'"
-                class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                :class="
-                    subtype === 'revenue'
-                        ? 'bg-csc-blue text-white'
-                        : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                "
-                @click="subtype = 'revenue'"
-            >
-                Revenue
-            </button>
-            <button
-                type="button"
-                role="tab"
-                :aria-selected="subtype === 'breakdown'"
-                class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                :class="
-                    subtype === 'breakdown'
-                        ? 'bg-csc-blue text-white'
-                        : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                "
-                @click="subtype = 'breakdown'"
-            >
-                Breakdown
-            </button>
+        <div class="mt-4">
+            <AppTabs v-model="subtype" :tabs="subtypes" aria-label="Report form" size="sm" />
         </div>
 
         <div class="mt-4">

@@ -50,9 +50,17 @@ class SmeEvaluationTest extends TestCase
     /**
      * A participant approved on a running training with one expert on the panel.
      *
+     * `$expertDays` narrows that expert to particular days; null is the
+     * whole-run assignment. It matters more than it looks: an expert who is
+     * back tomorrow is not evaluated tonight, so on a multi-day run a whole-run
+     * assignment is rated once, on the final day, and every intermediate day is
+     * closed. A test that wants day 1 answerable has to say the expert finishes
+     * on day 1.
+     *
+     * @param  array<int, int>|null  $expertDays
      * @return array{0: User, 1: Training, 2: Registration, 3: SubjectMatterExpert}
      */
-    private function scenario(int $days = 1): array
+    private function scenario(int $days = 1, ?array $expertDays = null): array
     {
         $participant = $this->participant();
         $training = Training::factory()->startingToday()->runningFor($days)->create();
@@ -61,7 +69,10 @@ class SmeEvaluationTest extends TestCase
             'training_id' => $training->getKey(),
         ]);
         $expert = SubjectMatterExpert::factory()->create();
-        $training->subjectMatterExperts()->attach($expert, ['sort_order' => 0]);
+        $training->subjectMatterExperts()->attach($expert, [
+            'sort_order' => 0,
+            'days' => $expertDays === null ? null : json_encode($expertDays),
+        ]);
 
         return [$participant, $training->refresh(), $registration, $expert];
     }
@@ -109,7 +120,8 @@ class SmeEvaluationTest extends TestCase
     /** The day, the participant, the training and the expert are all recorded. */
     public function test_an_evaluation_is_tied_to_training_day_participant_and_expert(): void
     {
-        [$participant, $training, $registration, $expert] = $this->scenario(2);
+        // Day 1 only, so the expert finishes today and day 1 is answerable.
+        [$participant, $training, $registration, $expert] = $this->scenario(2, [1]);
 
         $this->actingAs($participant)
             ->post("/my/evaluations/{$registration->getKey()}/days/1", $this->answers($expert));
@@ -238,6 +250,79 @@ class SmeEvaluationTest extends TestCase
             ->assertSessionHasErrors('day');
     }
 
+    /**
+     * The carried-over session: one expert, two days, one evaluation.
+     *
+     * This is the rule the whole file turns on. A session that runs into the
+     * next day is one session, so the room is asked about it once, at the end —
+     * not on the evening of a day where it was still half-delivered.
+     */
+    public function test_an_expert_who_continues_tomorrow_is_evaluated_at_the_end(): void
+    {
+        [, $training, $registration] = $this->scenario(2);
+
+        $days = SmeEvaluationService::daysFor($registration->refresh());
+
+        $this->assertCount(0, $days[0]['experts']);
+        $this->assertCount(1, $days[0]['continuing']);
+        $this->assertFalse($days[0]['open']);
+        $this->assertStringContainsString('end of day 2', $days[0]['reason']);
+
+        $this->assertCount(1, $days[1]['experts']);
+        $this->assertSame([2], $training->evaluationDays());
+    }
+
+    /** And posting the day it carried over from is refused, not quietly filed. */
+    public function test_a_day_whose_session_continues_cannot_be_evaluated(): void
+    {
+        [$participant, , $registration, $expert] = $this->scenario(2);
+
+        $this->actingAs($participant)
+            ->post("/my/evaluations/{$registration->getKey()}/days/1", $this->answers($expert))
+            ->assertSessionHasErrors('day');
+
+        $this->assertSame(0, TrainingDayEvaluation::count());
+    }
+
+    /**
+     * Two stretches, two evaluations. An expert booked for days 1-2 and again
+     * for day 4 delivered two separate things, and a verdict on the second is
+     * not feedback on the first — so the gap breaks the run.
+     */
+    public function test_a_gap_in_an_experts_days_starts_a_second_evaluation(): void
+    {
+        [, $training, , $expert] = $this->scenario(4);
+
+        $training->subjectMatterExperts()->sync([
+            $expert->getKey() => ['days' => json_encode([1, 2, 4]), 'sort_order' => 0],
+        ]);
+        $training->refresh()->load('subjectMatterExperts');
+
+        $this->assertSame([2, 4], $training->evaluationDaysForExpert($training->subjectMatterExperts->first()));
+        $this->assertSame([2, 4], $training->evaluationDays());
+        $this->assertSame([1, 2], $training->expertStretchAroundDay($training->subjectMatterExperts->first(), 1));
+    }
+
+    /** The form says what the rating covers, so day 1 is not answered for alone. */
+    public function test_the_form_names_the_days_a_carried_over_rating_covers(): void
+    {
+        [$participant, $training, $registration] = $this->scenario(2);
+
+        // Bring day 2 into the past so the form opens.
+        $training->update([
+            'starts_at' => now()->subDay(),
+            'ends_at' => now(),
+        ]);
+
+        $this->actingAs($participant)
+            ->get("/my/evaluations/{$registration->getKey()}/days/2")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Evaluations/Form')
+                ->where('experts.0.days', [1, 2])
+            );
+    }
+
     public function test_a_day_with_no_expert_assigned_is_not_offered(): void
     {
         [$participant, $training, $registration] = $this->scenario();
@@ -252,7 +337,7 @@ class SmeEvaluationTest extends TestCase
 
     public function test_the_list_shows_what_is_still_owed(): void
     {
-        [$participant, , $registration, $expert] = $this->scenario(2);
+        [$participant, , $registration, $expert] = $this->scenario(2, [1]);
 
         $this->actingAs($participant)
             ->get('/my/evaluations')
@@ -396,7 +481,13 @@ class SmeEvaluationTest extends TestCase
 
     public function test_the_evaluations_index_reports_the_response_rate(): void
     {
-        [$participant, $training, $registration, $expert] = $this->scenario(2);
+        // Two experts, one finishing on each day, so both days collect a form.
+        [$participant, $training, $registration, $expert] = $this->scenario(2, [1]);
+
+        $training->subjectMatterExperts()->attach(
+            SubjectMatterExpert::factory()->create(),
+            ['sort_order' => 1, 'days' => json_encode([2])]
+        );
 
         $this->actingAs($participant)
             ->post("/my/evaluations/{$registration->getKey()}/days/1", $this->answers($expert));
@@ -418,7 +509,7 @@ class SmeEvaluationTest extends TestCase
     {
         Notification::fake();
 
-        [$participant, , , $expert] = $this->scenario(2);
+        [$participant, , , $expert] = $this->scenario(2, [1]);
 
         $this->artisan('tims:invite-evaluations')->assertSuccessful();
 
@@ -493,7 +584,7 @@ class SmeEvaluationTest extends TestCase
     /** The chase column field offices work from, scoped like every roster row. */
     public function test_the_roster_reports_who_still_owes_an_evaluation(): void
     {
-        [$participant, $training, $registration, $expert] = $this->scenario(2);
+        [$participant, $training, $registration, $expert] = $this->scenario(2, [1]);
 
         $this->actingAs($this->staff())
             ->get("/admin/trainings/{$training->getKey()}/roster")
