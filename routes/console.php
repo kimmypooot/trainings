@@ -8,8 +8,14 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Morning reminders the day before, so participants can still arrange leave.
-Schedule::command('tims:send-reminders --days=1')->dailyAt('08:00');
+/*
+ * Morning reminders the day before, so participants can still arrange leave.
+ *
+ * withoutOverlapping for the same reason as the two schedules below: a slow
+ * run (a big roster, a mail provider hiccup) must not be started again
+ * underneath itself while it is still sending.
+ */
+Schedule::command('tims:send-reminders --days=1')->dailyAt('08:00')->withoutOverlapping();
 
 /*
  * The end-of-day evaluation prompt, sent after the sessions have finished but

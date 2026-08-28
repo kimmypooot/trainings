@@ -12,6 +12,7 @@ use App\Models\PhysicalOrRequest;
 use App\Models\PhysicalOrSetting;
 use App\Models\RefundRequest;
 use App\Models\Registration;
+use App\Support\PaymentService;
 use App\Support\RefundService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -245,10 +246,7 @@ class PaymentController extends Controller
             'proof' => ['nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
         ]);
 
-        Payment::create([
-            'registration_id' => $registration->getKey(),
-            'user_id' => $registration->user_id,
-            'training_id' => $registration->training_id,
+        PaymentService::submit($registration, [
             'amount' => $validated['amount'],
             'payment_method' => $validated['payment_method'],
             'reference_number' => $validated['reference_number'] ?? null,

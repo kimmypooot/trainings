@@ -191,7 +191,13 @@ Route::get('/login', [LoginController::class, 'create'])->name('login');
 Route::post('/login', [LoginController::class, 'store'])->name('login.store');
 
 Route::get('/register', [RegisterController::class, 'create'])->name('register');
-Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
+// Throttled like every other unauthenticated state-change endpoint here —
+// without it, account creation is the one public POST in this file a script
+// could hit without limit, whether to spam mailbox verification or to probe
+// the unique:users,email rule for account enumeration.
+Route::post('/register', [RegisterController::class, 'store'])
+    ->middleware('throttle:10,1')
+    ->name('register.store');
 
 /*
  * Password reset. The route names are the broker's defaults (password.request,
