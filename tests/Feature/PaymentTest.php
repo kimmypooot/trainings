@@ -280,6 +280,69 @@ class PaymentTest extends TestCase
         $this->assertSame(PaymentMethod::Lddap, Payment::sole()->payment_method);
     }
 
+    /**
+     * A fee already paid at a counter that never made it into the system —
+     * neither the registration nor the field office's own record shows it.
+     * The OR number is the one thing that lets staff go chase it down, so
+     * unlike every other method it is required here, not merely accepted.
+     */
+    public function test_an_official_receipt_payment_requires_the_or_number(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)
+            ->from('/my/payments')
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::OfficialReceipt->value,
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHasErrors('reference_number');
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    public function test_an_official_receipt_payment_is_accepted_with_its_or_number(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::OfficialReceipt->value,
+                'reference_number' => 'OR-2026-001234',
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $payment = Payment::sole();
+        $this->assertSame(PaymentMethod::OfficialReceipt, $payment->payment_method);
+        $this->assertSame('OR-2026-001234', $payment->reference_number);
+    }
+
+    /** A photo of the receipt is expected the same way an online slip is — asked for, not demanded. */
+    public function test_an_official_receipt_without_a_photo_is_flagged_in_the_queue(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)->post("/my/registrations/{$registration->id}/payments", [
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::OfficialReceipt->value,
+            'reference_number' => 'OR-2026-005678',
+            'payment_date' => now()->subDay()->toDateString(),
+        ]);
+
+        $this->actingAs($this->officer())
+            ->get('/admin/payments')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('payments.data.0.proof_missing', true)
+            );
+    }
+
     /** Still stored when something does send one — staff entry, imports, history. */
     public function test_a_reference_number_is_kept_when_one_is_supplied(): void
     {

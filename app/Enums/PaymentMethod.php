@@ -36,6 +36,15 @@ enum PaymentMethod: string
      * second concept.
      */
     case Promissory = 'promissory';
+    /*
+     * A walk-in fee already paid at a counter, evidenced only by the physical
+     * receipt the participant was handed — not by anything CSC's own records
+     * show. Distinct from Cash: Cash is a counter payment the office's own
+     * queue can confirm, while this exists for the gap where it cannot, so
+     * the participant has a way to file the claim (with a photo of the OR)
+     * instead of being stuck with a payment that has nowhere to go.
+     */
+    case OfficialReceipt = 'official_receipt';
 
     public function label(): string
     {
@@ -46,6 +55,7 @@ enum PaymentMethod: string
             self::CreditCard => 'Credit Card',
             self::Lddap => 'LDDAP-ADA',
             self::Promissory => 'Promissory Note',
+            self::OfficialReceipt => 'Official Receipt (already paid, not yet reflected)',
         };
     }
 
@@ -80,10 +90,15 @@ enum PaymentMethod: string
      * gap is raised in the verification queue instead, where somebody can do
      * something about it. Cash and a promissory note carry their own paper and
      * are never flagged.
+     *
+     * An official receipt is the opposite case from cash: the whole point of
+     * choosing it is that CSC's own records do not show the payment, so a
+     * photo of the OR is the only thing staff have to go on while they chase
+     * down where it went missing.
      */
     public function expectsProof(): bool
     {
-        return $this === self::Online;
+        return in_array($this, [self::Online, self::OfficialReceipt], true);
     }
 
     /**

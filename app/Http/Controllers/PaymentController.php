@@ -70,7 +70,12 @@ class PaymentController extends Controller
                 'id' => $payment->id,
                 'training' => [
                     'title' => $payment->training->title,
-                    'starts_at' => $payment->training->starts_at->format('d M Y, g:i A'),
+                    // Date only, and paired with ends_at — matching the
+                    // catalogue's own convention (TrainingController@index)
+                    // so a multi-day run reads as a range everywhere it
+                    // appears, not just here.
+                    'starts_at' => $payment->training->starts_at->format('d M Y'),
+                    'ends_at' => $payment->training->ends_at->format('d M Y'),
                     'mode_label' => $payment->training->mode->label(),
                     'url' => route('trainings.show', $payment->training->slug),
                 ],
@@ -99,7 +104,8 @@ class PaymentController extends Controller
                 'registration_id' => $registration->id,
                 'training' => [
                     'title' => $registration->training->title,
-                    'starts_at' => $registration->training->starts_at->format('d M Y, g:i A'),
+                    'starts_at' => $registration->training->starts_at->format('d M Y'),
+                    'ends_at' => $registration->training->ends_at->format('d M Y'),
                     'mode_label' => $registration->training->mode->label(),
                     'url' => route('trainings.show', $registration->training->slug),
                 ],
@@ -227,17 +233,24 @@ class PaymentController extends Controller
                 ),
             ],
             /*
-             * No longer asked for at the counter form, so no longer required.
+             * No longer asked for at the counter form, so no longer required —
+             * except for an official receipt, where it is the one thing that
+             * lets staff go looking for the missing record: without the OR
+             * number, "I paid but it's not showing up" is a claim with nothing
+             * to chase.
              *
-             * It stays accepted rather than rejected: the column holds the
-             * references of every payment recorded before this, the admin
-             * screens still read it, and staff recording a payment on a
-             * participant's behalf may still have one to enter. Requiring it
-             * here after the field was removed from the form would have failed
-             * every online payment with a message pinned to an input that is
-             * not on the page.
+             * It stays accepted rather than rejected for every other method:
+             * the column holds the references of every payment recorded
+             * before this, the admin screens still read it, and staff
+             * recording a payment on a participant's behalf may still have
+             * one to enter. Requiring it here after the field was removed
+             * from the form would have failed every online payment with a
+             * message pinned to an input that is not on the page.
              */
-            'reference_number' => ['nullable', 'string', 'max:64'],
+            'reference_number' => [
+                Rule::requiredIf($request->input('payment_method') === PaymentMethod::OfficialReceipt->value),
+                'nullable', 'string', 'max:64',
+            ],
             'payment_date' => ['required', 'date', 'before_or_equal:today'],
             // Never refused for want of a document. An online transfer without
             // a slip is accepted and then flagged in the verification queue —

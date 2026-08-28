@@ -13,6 +13,7 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppFileField from '@/Components/AppFileField.vue';
 import AppModal from '@/Components/AppModal.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     payments: { type: Array, required: true },
@@ -29,10 +30,16 @@ const form = useForm({
     amount: '',
     payment_method: 'online',
     payment_date: '',
+    reference_number: '',
     proof: null,
 });
 
 const isPromissory = computed(() => form.payment_method === 'promissory');
+const isOnlineTransfer = computed(() => form.payment_method === 'online');
+// A fee already paid in person — most often at a field office — that never
+// made it into a registration here. The OR number is what lets staff go
+// looking for it, so it is asked for only in this one case.
+const isOfficialReceipt = computed(() => form.payment_method === 'official_receipt');
 
 // Whether a document is expected with this method — asked for, never demanded.
 // A payment without one still goes through and is flagged for staff instead,
@@ -42,10 +49,27 @@ const proofExpected = computed(
     () => props.methods.find((method) => method.value === form.payment_method)?.expects_proof ?? false
 );
 
-const proofHint = computed(() =>
-    proofExpected.value
+const proofLabel = computed(() => {
+    if (isPromissory.value) return 'Signed Promissory Note';
+    if (isOfficialReceipt.value) return 'Photo of the Official Receipt';
+
+    return 'Proof of Payment';
+});
+
+const proofHint = computed(() => {
+    if (isOfficialReceipt.value) {
+        return 'A clear photo of the physical receipt, front side up — the OR number, amount, and date must all be readable. PDF or image, up to 5 MB.';
+    }
+
+    return proofExpected.value
         ? 'Please attach the transfer slip if you have it — it is what CSC matches against the bank statement. You can submit without one, and staff will follow up. PDF or image, up to 5 MB. Only you and CSC finance staff can open it.'
-        : 'PDF or image, up to 5 MB. Only you and CSC finance staff can open it.'
+        : 'PDF or image, up to 5 MB. Only you and CSC finance staff can open it.';
+});
+
+const proofPreviewHint = computed(() =>
+    isOfficialReceipt.value
+        ? 'Check that the OR number, amount and date are all sharp and readable.'
+        : 'Check that the amount, date and reference number are all sharp and readable — a blurry or cropped photo will delay verification.'
 );
 
 // Offered only where the training was published as accepting one. The server
@@ -62,7 +86,7 @@ const startPaying = (item) => {
 };
 
 const submit = () =>
-    form.post(`/my/registrations/${paying.value}/payments`, {
+    form.post(`/my/registrations/${paying.value.registration_id}/payments`, {
         forceFormData: true,
         onSuccess: () => {
             paying.value = null;
@@ -198,7 +222,7 @@ const submitPhysicalOr = () =>
                                 <p class="font-semibold text-csc-ink">{{ item.training.title }}</p>
                                 <p class="mt-0.5 text-sm text-csc-ink-subtle">₱{{ money(item.amount) }}</p>
                                 <p class="text-xs text-csc-ink-subtle">
-                                    {{ item.training.starts_at }}
+                                    {{ formatDateRange(item.training.starts_at, item.training.ends_at) }}
                                     <span v-if="item.training.mode_label">· {{ item.training.mode_label }}</span>
                                 </p>
                             </div>
@@ -257,11 +281,62 @@ const submitPhysicalOr = () =>
                                 the fee is paid and verified.
                             </AppAlert>
 
+                            <!--
+                                Emphasised on purpose, not folded into the file
+                                field's hint: the two most common reasons a
+                                verification stalls are a screenshot of a
+                                transfer that never actually went through, and
+                                a photo too blurry to read the amount or
+                                reference number against. Scoped to an actual
+                                online transfer — the wording does not fit a
+                                counter receipt or an already-issued OR.
+                            -->
+                            <AppAlert v-else-if="isOnlineTransfer" tone="warning" title="Before you upload">
+                                <ul class="list-disc space-y-1.5 pl-4">
+                                    <li>
+                                        Open your screenshot or receipt and check that it clearly shows
+                                        <strong>“TRANSFER SUCCESSFUL”</strong> (or your bank/e-wallet’s own
+                                        success message). A pending, failed, or cancelled transaction cannot
+                                        be verified.
+                                    </li>
+                                    <li>
+                                        Make sure the amount, date, and reference number are sharp and
+                                        easy to read — not cropped out, covered, or blurry.
+                                    </li>
+                                </ul>
+                            </AppAlert>
+
+                            <!--
+                                Filing a fee already paid at a counter that
+                                never made it into a registration here — the
+                                gap this method exists for. Says so up front so
+                                it is not chosen by mistake for an ordinary
+                                counter payment the field office already has on
+                                record.
+                            -->
+                            <AppAlert v-else-if="isOfficialReceipt" tone="info" title="Already paid, not yet reflected">
+                                Use this only if you already paid in person — for example at your field
+                                office — and hold a physical Official Receipt, but the payment is not
+                                showing up here. Enter the OR number exactly as printed and attach a clear
+                                photo of the receipt; CSC staff will verify it directly with the field
+                                office.
+                            </AppAlert>
+
+                            <AppInput
+                                v-if="isOfficialReceipt"
+                                v-model="form.reference_number"
+                                label="Official Receipt (OR) Number"
+                                hint="Exactly as printed on the receipt."
+                                :error="form.errors.reference_number"
+                                required
+                            />
+
                             <AppFileField
                                 id="proof"
-                                :label="isPromissory ? 'Signed Promissory Note' : 'Proof of Payment'"
+                                :label="proofLabel"
                                 accept=".pdf,.jpg,.jpeg,.png"
                                 :hint="proofHint"
+                                :preview-hint="proofPreviewHint"
                                 :error="form.errors.proof"
                                 @change="form.proof = $event"
                             />
@@ -303,7 +378,7 @@ const submitPhysicalOr = () =>
                                     {{ payment.payment_date }}
                                 </p>
                                 <p v-if="payment.training.starts_at" class="text-xs text-csc-ink-subtle">
-                                    {{ payment.training.starts_at }}
+                                    {{ formatDateRange(payment.training.starts_at, payment.training.ends_at) }}
                                     <span v-if="payment.training.mode_label">· {{ payment.training.mode_label }}</span>
                                 </p>
                                 <p v-if="payment.reference_number" class="text-xs text-csc-ink-subtle">
