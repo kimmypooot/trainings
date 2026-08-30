@@ -400,13 +400,10 @@ class PaymentController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
             'payment_method' => [
                 'required',
-                // Same rule the participant's own form applies: a promissory
-                // note is only on offer where the training was published as
-                // accepting one.
-                Rule::enum(PaymentMethod::class)->when(
-                    ! $registration->training->accepts_promissory,
-                    fn ($rule) => $rule->except(PaymentMethod::Promissory)
-                ),
+                // A promissory note is only on offer where the training was
+                // published as accepting one. One rule, shared with the
+                // participant's own form — see PaymentMethod::rule().
+                PaymentMethod::rule($registration->training->accepts_promissory),
             ],
             'payment_date' => ['required', 'date', 'before_or_equal:today'],
             'reference_number' => [

@@ -226,11 +226,9 @@ class PaymentController extends Controller
                 'required',
                 // A promissory note is only an option where the training was
                 // published as accepting one — otherwise it is a way to claim a
-                // slot without paying for it.
-                Rule::enum(PaymentMethod::class)->when(
-                    ! $registration->training->accepts_promissory,
-                    fn ($rule) => $rule->except(PaymentMethod::Promissory)
-                ),
+                // slot without paying for it. One rule, shared with the counter
+                // form — see PaymentMethod::rule().
+                PaymentMethod::rule($registration->training->accepts_promissory),
             ],
             /*
              * No longer asked for at the counter form, so no longer required —

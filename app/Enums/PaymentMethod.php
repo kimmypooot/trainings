@@ -2,6 +2,9 @@
 
 namespace App\Enums;
 
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
+
 /**
  * Ported from v1's `payments.payment_method`.
  */
@@ -121,6 +124,36 @@ enum PaymentMethod: string
     public function requiresReference(): bool
     {
         return ! in_array($this, [self::Cash, self::Promissory], true);
+    }
+
+    /**
+     * The validation rule for a method being recorded against a training.
+     *
+     * Both payment doors ask the same question here — the counter form in
+     * Admin\PaymentController and the participant's own form in
+     * PaymentController — and each carried its own copy of it. Two copies of a
+     * money rule is one copy too many: a promissory note accepted where the
+     * training never offered one is a slot held without payment, and that is
+     * precisely the kind of divergence that survives unnoticed because each
+     * door is tested on its own.
+     *
+     * Takes the flag rather than a Training so the enum stays free of the
+     * model, and so a caller cannot validate against a different training than
+     * the one it resolved.
+     *
+     * The rest of each door's rules stay where they are, deliberately. They are
+     * not the same rule set and should not be forced into one: the counter
+     * collects an OR number and a collecting officer, the participant form
+     * collects a proof upload, and the two differ on reference_number for a
+     * reason covered by
+     * PaymentTest::test_a_non_cash_payment_no_longer_needs_a_reference_number.
+     */
+    public static function rule(bool $acceptsPromissory): Enum
+    {
+        return Rule::enum(self::class)->when(
+            ! $acceptsPromissory,
+            fn (Enum $rule) => $rule->except(self::Promissory)
+        );
     }
 
     /**
