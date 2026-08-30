@@ -1,0 +1,46 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    # Level 5 on purpose, not 8.
+    #
+    # Level 5 is where the checks start being about this codebase rather than
+    # about PHP: wrong argument types, calls to methods that do not exist,
+    # returns that cannot match their signature. Levels 6-8 are mostly missing
+    # generic annotations on framework internals, and starting there would mean
+    # a week of annotating before the tool caught its first real bug.
+    #
+    # Measured on this tree the day the tool landed, so the cost of moving is
+    # known rather than guessed:
+    #
+    #   level 0 →     8    level 3 →   938
+    #   level 2 →   910    level 4 → 1,111
+    #                      level 5 → 1,246
+    #
+    # Nearly all of that is one thing: Eloquent's generics. A `->get()` on a
+    # relation resolves to Collection<Model> rather than Collection<Payment>,
+    # so every property read off the result reads as undefined. It is noise,
+    # not 1,246 defects — which is exactly why the baseline below exists.
+    level: 5
+
+    paths:
+        - app
+        - database
+        - routes
+        - tests
+
+    ignoreErrors:
+        # A framework-stub false positive, verified by reading all six call
+        # sites: every one of those closures ends in an explicit `return`, and
+        # the value is used correctly. PHPStan reads Connection::transaction()
+        # as returning void and then objects to the result being assigned.
+        #
+        # Ignored rather than baselined because a baseline entry is a promise to
+        # come back and fix something, and there is nothing here to fix. If a
+        # future Larastan types this correctly, this block stops matching and
+        # PHPStan will say so.
+        -
+            message: '#Result of static method Illuminate\\Database\\Connection::transaction\(\) \(void\) is used#'
+            paths:
+                - app/Support/*Service.php

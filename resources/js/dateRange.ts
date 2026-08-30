@@ -16,11 +16,21 @@
  * Dates arrive from the server pre-formatted (see CLAUDE.md: controllers
  * format with Carbon, not the browser) — these helpers work on those
  * strings, not Date objects, so they stay this simple.
+ *
+ * The nullable `endsAt` in both signatures is not defensive noise: it is the
+ * actual shape of the data. A training row can carry no end date at all, and
+ * every caller passes the column straight through, so the type says so
+ * rather than leaving each caller to discover it.
  */
 
 /** Whether a start/end pair is actually worth showing as a range. */
-export const spansMultipleDays = (startsAt, endsAt) => Boolean(endsAt) && endsAt !== startsAt;
+export const spansMultipleDays = (
+    startsAt: string | null | undefined,
+    endsAt: string | null | undefined,
+): boolean => Boolean(endsAt) && endsAt !== startsAt;
 
 /** "12 Sep 2026" or "12 Sep 2026 – 16 Sep 2026", matching every plain-text usage. */
-export const formatDateRange = (startsAt, endsAt) =>
-    spansMultipleDays(startsAt, endsAt) ? `${startsAt} – ${endsAt}` : startsAt;
+export const formatDateRange = (
+    startsAt: string,
+    endsAt: string | null | undefined,
+): string => (spansMultipleDays(startsAt, endsAt) ? `${startsAt} – ${endsAt}` : startsAt);
