@@ -180,6 +180,7 @@ const submit = () =>
             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
             required
             :error="form.errors.supporting_document"
+            :progress="form.progress"
             @change="form.supporting_document = $event"
         />
 

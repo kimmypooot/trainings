@@ -1,12 +1,13 @@
 <script setup>
 import { ref, watch } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import { useFilters, filteringClass } from '@/useFilters';
 
 const props = defineProps({
     logs: { type: Object, required: true },
@@ -17,21 +18,20 @@ const props = defineProps({
 const search = ref(props.filters.search ?? '');
 const module = ref(props.filters.module ?? '');
 
-const apply = () =>
-    router.get(
-        '/admin/activity',
-        { search: search.value || undefined, module: module.value || undefined },
-        { preserveState: true, replace: true }
-    );
-
-// Debounced so typing does not fire a request per keystroke.
-let timer;
-watch(search, () => {
-    clearTimeout(timer);
-    timer = setTimeout(apply, 350);
+// `modules` is the dropdown's own list of every module that has ever logged
+// anything — narrowing the log must not narrow the way back out.
+const { filtering, apply } = useFilters({
+    url: '/admin/activity',
+    only: ['logs', 'filters'],
+    query: () => ({
+        search: search.value || undefined,
+        module: module.value || undefined,
+    }),
 });
 
-watch(module, apply);
+// Typing waits for a pause; picking a module is a click.
+watch(search, () => apply());
+watch(module, () => apply({ immediate: true }));
 
 // The properties blob is diagnostic detail, not something to read at a glance —
 // it stays folded until asked for.
@@ -70,57 +70,65 @@ const toggle = (id) => {
                 </div>
             </AppCard>
 
-            <AppCard :padded="logs.data.length > 0">
-                <AppEmptyState
-                    v-if="!logs.data.length"
-                    title="Nothing recorded yet"
-                    description="Decisions taken in the system will appear here as they happen."
-                    icon="clipboard"
-                />
+            <!--
+                 The results dim while a filtered visit is out. The controls above stay
+                 live — narrowing further mid-request is the normal thing to do — but
+                 these rows are already superseded, so they stop taking clicks until
+                 they have been redrawn.
+            -->
+            <div :class="filteringClass(filtering)" :aria-busy="filtering" class="space-y-5">
+                <AppCard :padded="logs.data.length > 0">
+                    <AppEmptyState
+                        v-if="!logs.data.length"
+                        title="Nothing recorded yet"
+                        description="Decisions taken in the system will appear here as they happen."
+                        icon="clipboard"
+                    />
 
-                <ul v-else class="divide-y divide-csc-line">
-                    <li v-for="log in logs.data" :key="log.id" class="py-3 first:pt-0 last:pb-0">
-                        <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                            <p class="min-w-0 text-sm text-csc-ink">
-                                {{ log.description || log.action }}
+                    <ul v-else class="divide-y divide-csc-line">
+                        <li v-for="log in logs.data" :key="log.id" class="py-3 first:pt-0 last:pb-0">
+                            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                                <p class="min-w-0 text-sm text-csc-ink">
+                                    {{ log.description || log.action }}
+                                </p>
+                                <p class="shrink-0 text-xs text-csc-ink-subtle">{{ log.at }}</p>
+                            </div>
+
+                            <p class="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-csc-ink-subtle">
+                                <span class="font-mono">{{ log.action }}</span>
+                                <span>·</span>
+                                <span>{{ log.actor }}</span>
+                                <template v-if="log.subject">
+                                    <span>·</span>
+                                    <span>{{ log.subject }}</span>
+                                </template>
+                                <template v-if="log.ip_address">
+                                    <span>·</span>
+                                    <span class="font-mono">{{ log.ip_address }}</span>
+                                </template>
+                                <template v-if="log.properties">
+                                    <span>·</span>
+                                    <button
+                                        type="button"
+                                        class="rounded font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        :aria-expanded="expanded.has(log.id)"
+                                        @click="toggle(log.id)"
+                                    >
+                                        {{ expanded.has(log.id) ? 'Hide' : 'Details' }}
+                                    </button>
+                                </template>
                             </p>
-                            <p class="shrink-0 text-xs text-csc-ink-subtle">{{ log.at }}</p>
-                        </div>
 
-                        <p class="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-csc-ink-subtle">
-                            <span class="font-mono">{{ log.action }}</span>
-                            <span>·</span>
-                            <span>{{ log.actor }}</span>
-                            <template v-if="log.subject">
-                                <span>·</span>
-                                <span>{{ log.subject }}</span>
-                            </template>
-                            <template v-if="log.ip_address">
-                                <span>·</span>
-                                <span class="font-mono">{{ log.ip_address }}</span>
-                            </template>
-                            <template v-if="log.properties">
-                                <span>·</span>
-                                <button
-                                    type="button"
-                                    class="rounded font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                    :aria-expanded="expanded.has(log.id)"
-                                    @click="toggle(log.id)"
-                                >
-                                    {{ expanded.has(log.id) ? 'Hide' : 'Details' }}
-                                </button>
-                            </template>
-                        </p>
+                            <pre
+                                v-if="expanded.has(log.id) && log.properties"
+                                class="mt-2 overflow-x-auto rounded-lg bg-csc-mist/60 p-3 text-xs text-csc-ink"
+                            >{{ JSON.stringify(log.properties, null, 2) }}</pre>
+                        </li>
+                    </ul>
+                </AppCard>
 
-                        <pre
-                            v-if="expanded.has(log.id) && log.properties"
-                            class="mt-2 overflow-x-auto rounded-lg bg-csc-mist/60 p-3 text-xs text-csc-ink"
-                        >{{ JSON.stringify(log.properties, null, 2) }}</pre>
-                    </li>
-                </ul>
-            </AppCard>
-
-            <AppPagination :pagination="logs" label="entries" class="pt-1" />
+                <AppPagination :pagination="logs" label="entries" class="pt-1" />
+            </div>
         </div>
     </AuthenticatedLayout>
 </template>

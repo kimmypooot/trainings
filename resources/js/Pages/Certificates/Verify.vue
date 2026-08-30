@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
+import AppBrandBackdrop from '@/Components/AppBrandBackdrop.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import { spansMultipleDays } from '@/dateRange';
@@ -48,7 +49,43 @@ const printResult = () => window.print();
 
     <!-- See VerifyLookup: matches no nav key, so the header marks nothing. -->
     <PublicLayout current="verify">
-        <div class="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+        <!--
+            The record sits on the site's own backdrop rather than on nothing.
+
+            This page used to be a white card on a white page, which read as an
+            unstyled document the browser had rendered by accident — the worst
+            possible impression for the one screen whose entire job is to look
+            authoritative to a stranger checking a stranger's credentials.
+
+            The facade band is short and stops behind the verdict: it identifies
+            whose records these are and then gets out of the way. The record
+            itself keeps every pixel of its white, because that is the part
+            being read. Both are dropped for print by the rules below.
+        -->
+        <div class="relative bg-csc-blue-tint print:bg-white">
+            <div class="absolute inset-x-0 top-0 h-80 print:hidden" aria-hidden="true">
+                <AppBrandBackdrop object-position="center 45%" wash="soft" />
+
+                <!--
+                    The same wave the home page and the lookup form close their
+                    hero with. Without it the band ended on a hard horizontal
+                    rule straight across the middle of the record card, which
+                    read as a rendering fault rather than as a design.
+                -->
+                <div class="absolute inset-x-0 bottom-0 h-10 overflow-hidden">
+                    <svg
+                        viewBox="0 0 1440 40"
+                        preserveAspectRatio="none"
+                        class="absolute inset-0 size-full fill-csc-blue-tint"
+                    >
+                        <path
+                            d="M0 40L60 36C120 32 240 20 360 18C480 16 600 24 720 28C840 32 960 30 1080 24C1200 20 1320 24 1380 28L1440 32V40H0Z"
+                        />
+                    </svg>
+                </div>
+            </div>
+
+            <div class="relative mx-auto max-w-3xl px-4 py-10 sm:py-14">
             <!--
                 The verdict, before anything else.
 
@@ -64,23 +101,69 @@ const printResult = () => window.print();
                 to green ink on white inside a green rule instead.
             -->
             <div
-                class="flex items-start gap-4 rounded-t-2xl bg-success px-6 py-6 text-white sm:items-center sm:px-8 print:rounded-none print:border print:border-success print:bg-white print:text-success"
+                class="verify-rise flex items-start gap-4 rounded-t-2xl bg-success px-6 py-6 text-white sm:items-center sm:px-8 print:rounded-none print:border print:border-success print:bg-white print:text-success"
             >
+                <!--
+                    The mark, drawn rather than stamped out whole.
+
+                    A check that draws itself is the difference between a page
+                    asserting a verdict and a page *reaching* one — the ring
+                    closes, then the tick is struck through it, which is the
+                    order the act actually happens in. It replaces the shield
+                    icon here (and only here) because AppIcon renders a static
+                    path: the registry is for interface furniture, and this is
+                    the single illustration the page exists to deliver.
+
+                    aria-hidden throughout: "Certificate verified" is stated in
+                    text immediately to the right, and a screen reader gains
+                    nothing from a second, wordless assertion of the same thing.
+                -->
                 <span
                     class="flex size-12 shrink-0 items-center justify-center rounded-full bg-white/15 sm:size-14 print:bg-transparent"
                 >
-                    <AppIcon name="shield" size="lg" class="text-white print:text-success" />
+                    <svg
+                        class="size-7 sm:size-8"
+                        viewBox="0 0 32 32"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <!-- 2πr at r=13, so the dash length is the ring itself. -->
+                        <circle
+                            cx="16"
+                            cy="16"
+                            r="13"
+                            class="verify-draw text-white print:text-success"
+                            style="--draw-length: 82; --delay: 0.15s"
+                        />
+                        <path
+                            d="M10 16.5l4.2 4.2L22.5 12"
+                            class="verify-draw text-white print:text-success"
+                            style="--draw-length: 18; --delay: 0.55s"
+                        />
+                    </svg>
                 </span>
                 <div class="min-w-0">
-                    <p class="text-xl font-semibold tracking-tight sm:text-2xl">Certificate verified</p>
-                    <p class="mt-1 text-sm leading-relaxed text-white/90 print:text-csc-ink-muted">
+                    <p class="verify-rise text-xl font-semibold tracking-tight sm:text-2xl" style="--delay: 0.1s">
+                        Certificate verified
+                    </p>
+                    <p
+                        class="verify-rise mt-1 text-sm leading-relaxed text-white/90 print:text-csc-ink-muted"
+                        style="--delay: 0.18s"
+                    >
                         This certificate appears in the records of the {{ office.name }}.
                     </p>
                 </div>
             </div>
 
             <!-- The record -->
-            <div class="relative overflow-hidden rounded-b-2xl border border-t-0 border-csc-line bg-white">
+            <div
+                class="verify-rise relative overflow-hidden rounded-b-2xl border border-t-0 border-csc-line bg-white"
+                style="--delay: 0.22s"
+            >
                 <!--
                     A large, very faint seal behind the record. Watermark rather
                     than ornament: it is what makes a photocopy of this page read
@@ -103,23 +186,36 @@ const printResult = () => window.print();
                 </svg>
 
                 <div class="relative px-6 py-7 sm:px-8 sm:py-9">
-                    <!-- Who, and what for: the two facts the reader came for. -->
-                    <p class="text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">Awarded to</p>
-                    <p class="mt-1.5 text-2xl leading-tight font-semibold text-balance text-csc-blue sm:text-3xl">
-                        {{ certificate.participant }}
-                    </p>
+                    <!--
+                        Who, and what for: the two facts the reader came for, and
+                        so the two that arrive first once the card is down.
+                    -->
+                    <div class="verify-rise" style="--delay: 0.34s">
+                        <p class="text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">Awarded to</p>
+                        <p class="mt-1.5 text-2xl leading-tight font-semibold text-balance text-csc-blue sm:text-3xl">
+                            {{ certificate.participant }}
+                        </p>
+                    </div>
 
-                    <p class="mt-6 text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">
-                        For completing
-                    </p>
-                    <p class="mt-1.5 text-lg leading-snug font-medium text-balance text-csc-ink">
-                        {{ certificate.training }}
-                    </p>
+                    <div class="verify-rise" style="--delay: 0.42s">
+                        <p class="mt-6 text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">
+                            For completing
+                        </p>
+                        <p class="mt-1.5 text-lg leading-snug font-medium text-balance text-csc-ink">
+                            {{ certificate.training }}
+                        </p>
+                    </div>
 
-                    <hr class="my-7 border-csc-line" />
+                    <hr class="verify-rise my-7 border-csc-line" style="--delay: 0.48s" />
 
+                    <!--
+                        The supporting facts, staged in reading order. The stagger
+                        is small and stops at four: past about half a second of
+                        total offset a stagger stops reading as sequence and
+                        starts reading as the page loading slowly.
+                    -->
                     <dl class="grid gap-6 sm:grid-cols-2">
-                        <div>
+                        <div class="verify-rise" style="--delay: 0.54s">
                             <dt class="flex items-center gap-1.5 text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">
                                 <AppIcon name="calendar" size="sm" class="text-csc-blue/50" />
                                 Conducted
@@ -137,7 +233,7 @@ const printResult = () => window.print();
                             </dd>
                         </div>
 
-                        <div>
+                        <div class="verify-rise" style="--delay: 0.6s">
                             <dt class="flex items-center gap-1.5 text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">
                                 <AppIcon name="map-pin" size="sm" class="text-csc-blue/50" />
                                 Venue
@@ -145,7 +241,7 @@ const printResult = () => window.print();
                             <dd class="mt-1.5 text-sm font-medium text-csc-ink">{{ certificate.venue }}</dd>
                         </div>
 
-                        <div>
+                        <div class="verify-rise" style="--delay: 0.66s">
                             <dt class="flex items-center gap-1.5 text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">
                                 <AppIcon name="certificate" size="sm" class="text-csc-blue/50" />
                                 Certificate number
@@ -160,7 +256,7 @@ const printResult = () => window.print();
                             <dd class="mt-0.5 text-sm text-csc-ink-muted">Issued {{ certificate.issued_at }}</dd>
                         </div>
 
-                        <div>
+                        <div class="verify-rise" style="--delay: 0.72s">
                             <dt class="flex items-center gap-1.5 text-2xs font-semibold tracking-widest text-csc-ink-subtle uppercase">
                                 <AppIcon name="qr" size="sm" class="text-csc-blue/50" />
                                 Verification code
@@ -178,10 +274,17 @@ const printResult = () => window.print();
                     the timestamp a filed printout claims only that the
                     certificate was genuine at some unstated moment, which is
                     the one thing a record in a folder must not be vague about.
+
+                    So it is the one element that lands rather than rises, and
+                    it lands last — after every fact it is vouching for is on
+                    the page. Settling from very slightly oversized is what a
+                    stamp being pressed looks like, and the sequence ends on the
+                    gesture the strip already means.
                 -->
                 <div
                     v-if="verifiedAt"
-                    class="relative flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-csc-line bg-csc-blue-tint px-6 py-4 sm:px-8"
+                    class="verify-stamp relative flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-csc-line bg-csc-blue-tint px-6 py-4 sm:px-8"
+                    style="--delay: 0.8s"
                 >
                     <AppIcon name="check-circle" size="sm" class="shrink-0 text-success" />
                     <p class="text-sm text-csc-ink-muted">
@@ -197,7 +300,8 @@ const printResult = () => window.print();
                 the limits of the answer before they ask and again when they get
                 it, rather than discovering them later.
             -->
-            <div class="mt-6 rounded-xl border border-csc-line px-6 py-5">
+            <!-- White, now that the page behind it is tinted: transparent, it stopped reading as a panel. -->
+            <div class="verify-rise mt-6 rounded-xl border border-csc-line bg-white px-6 py-5" style="--delay: 0.9s">
                 <h2 class="text-sm font-semibold text-csc-blue">What this confirms</h2>
                 <ul class="mt-3 space-y-2.5 text-sm leading-relaxed text-csc-ink-muted">
                     <li class="flex items-start gap-2.5">
@@ -222,9 +326,10 @@ const printResult = () => window.print();
                 another certificate" on a filed record reads as an instruction
                 to whoever opens the folder.
             -->
-            <div class="mt-8 flex flex-wrap items-center justify-center gap-3 print:hidden">
+            <div class="verify-rise mt-8 flex flex-wrap items-center justify-center gap-3 print:hidden" style="--delay: 0.96s">
                 <AppButton variant="ghost" icon="print" @click="printResult">Print this result</AppButton>
                 <AppButton href="/verify" variant="ghost" icon="arrow-forward">Check another certificate</AppButton>
+            </div>
             </div>
         </div>
     </PublicLayout>

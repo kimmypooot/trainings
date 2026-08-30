@@ -6,6 +6,7 @@ import AppTabs from '@/Components/AppTabs.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import RevenuePanel from '@/Pages/Admin/Analytics/RevenuePanel.vue';
 import BreakdownPanel from '@/Pages/Admin/Analytics/BreakdownPanel.vue';
+import ReportSkeleton from '@/Pages/Admin/Analytics/ReportSkeleton.vue';
 
 const props = defineProps({
     period: { type: Object, required: true },
@@ -59,7 +60,16 @@ const months = monthNames.map((label, index) => ({ value: index + 1, label }));
 
 const quarters = [1, 2, 3, 4].map((quarter) => ({ value: quarter, label: `Quarter ${quarter}` }));
 
+/*
+ * Same reasoning as TrainingReport's: a period change rebuilds every aggregate
+ * on the card, and leaving last quarter's figures on screen under this
+ * quarter's label is worse than showing nothing. See the note there.
+ */
+const loading = ref(false);
+
 function commit() {
+    loading.value = true;
+
     router.get(
         '/admin/analytics',
         {
@@ -76,7 +86,24 @@ function commit() {
             month: month.value,
             quarter: quarter.value,
         },
-        { preserveState: true, replace: true }
+        {
+            /*
+             * `period` travels with the report and is not optional: the server
+             * clamps what it was sent, and the watch above is what feeds that
+             * correction back into the selects. Drop it from `only` and a
+             * clamped year would leave the picker showing the value that was
+             * rejected above a report built from the one that was used —
+             * silently, because an omitted prop keeps its old value rather
+             * than erroring. `canSeeMoney` and `scopedTo` are the viewer, which
+             * a period cannot change.
+             */
+            only: ['periodReport', 'period'],
+            preserveState: true,
+            replace: true,
+            onFinish: () => {
+                loading.value = false;
+            },
+        }
     );
 }
 
@@ -124,6 +151,11 @@ const breakdownExportUrl = computed(
             />
         </div>
 
+        <div v-if="loading" class="mt-5">
+            <ReportSkeleton :tiles="4" label="Building report" />
+        </div>
+
+        <template v-else>
         <!--
             The scope, stated as a heading rather than a line of grey metadata.
             This strip is what a printed report is read from, so it names the
@@ -162,5 +194,6 @@ const breakdownExportUrl = computed(
                 :export-url="breakdownExportUrl"
             />
         </div>
+        </template>
     </AppCard>
 </template>

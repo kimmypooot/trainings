@@ -8,6 +8,7 @@ import AppShareBar from '@/Components/AppShareBar.vue';
 import AppStatTile from '@/Components/AppStatTile.vue';
 import AppTrendChart from '@/Components/AppTrendChart.vue';
 import { formatMoney } from '@/charts';
+import { useDownload } from '@/useDownload';
 
 /**
  * The live dashboard: what has happened so far, across every training. Kept as
@@ -22,6 +23,23 @@ import { formatMoney } from '@/charts';
 const props = defineProps({
     overview: { type: Object, required: true },
 });
+
+const { downloading, start } = useDownload();
+
+/*
+ * A list rather than four hand-written buttons, because each one now carries a
+ * pending state keyed by its own URL and repeating that binding four times is
+ * how one of them ends up bound to the wrong URL. Payments is staff-gated the
+ * same way the card's figures are.
+ */
+const exports = computed(() =>
+    [
+        { url: '/admin/exports/participants', label: 'Participants (CSV)' },
+        { url: '/admin/exports/participants?format=xlsx', label: 'Participants (Excel)' },
+        { url: '/admin/exports/registrations', label: 'Registrations (CSV)' },
+        props.overview.payments ? { url: '/admin/exports/payments', label: 'Payments (CSV)' } : null,
+    ].filter(Boolean)
+);
 
 const trend = computed(() =>
     props.overview.registrationsByMonth.map((row) => ({ label: row.month, value: row.count }))
@@ -225,17 +243,18 @@ const profileBars = computed(() => [
             subtitle="Downloads honour the same field-office scoping as these figures."
         >
             <div class="flex flex-wrap gap-3">
-                <AppButton href="/admin/exports/participants" variant="ghost" size="sm" icon="download" external>
-                    Participants (CSV)
-                </AppButton>
-                <AppButton href="/admin/exports/participants?format=xlsx" variant="ghost" size="sm" icon="download" external>
-                    Participants (Excel)
-                </AppButton>
-                <AppButton href="/admin/exports/registrations" variant="ghost" size="sm" icon="download" external>
-                    Registrations (CSV)
-                </AppButton>
-                <AppButton v-if="overview.payments" href="/admin/exports/payments" variant="ghost" size="sm" icon="download" external>
-                    Payments (CSV)
+                <AppButton
+                    v-for="item in exports"
+                    :key="item.url"
+                    :href="item.url"
+                    variant="ghost"
+                    size="sm"
+                    icon="download"
+                    external
+                    :loading="downloading === item.url"
+                    @click.prevent="start(item.url)"
+                >
+                    {{ item.label }}
                 </AppButton>
             </div>
         </AppCard>

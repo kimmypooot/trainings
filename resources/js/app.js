@@ -4,12 +4,15 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import AppProgressBar from '@/Components/AppProgressBar.vue';
 import AppAuthSplash from '@/Components/AppAuthSplash.vue';
 import { playWelcome } from '@/authSplash';
+import { warmSeal } from '@/brandSeal';
 import '@/analytics';
 
 // The seal in the middle of the splash's spinning rings is an <img>, and the
 // first paint of the overlay is exactly when a cold fetch of it would show as
-// a blank white circle. Warming it at boot costs one cached request.
-new Image().src = '/images/csc-logo.png';
+// a blank — or half-drawn — circle. Warming it at boot costs one cached
+// request, and the decode is warmed with it so the splash gets something it
+// can paint whole. See @/brandSeal.
+warmSeal();
 
 createInertiaApp({
     title: (title) => `${title} - CSC TIMS`,

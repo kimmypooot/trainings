@@ -29,6 +29,20 @@ const props = defineProps({
     accept: { type: String, default: null },
     /** Shown under the thumbnail, for a proof that must specifically be legible. */
     previewHint: { type: String, default: null },
+    /*
+     * Inertia's `form.progress` — an axios progress event with `.percentage`,
+     * or null when nothing is in flight. Pass it on any form posting with
+     * `forceFormData: true`.
+     *
+     * Every upload in this app happens inside a modal, and until this existed
+     * the only feedback a participant got for sending a 4MB photo of a receipt
+     * over mobile data was a spinner on the submit button — a control that
+     * looks identical at 5% and at 95%. The global AppProgressBar does know the
+     * real percentage, but it is a hairline at the top of the viewport, far
+     * from the dialog holding the reader's attention. This is that same number,
+     * put where the file itself is.
+     */
+    progress: { type: Object, default: null },
 });
 
 const emit = defineEmits(['change']);
@@ -65,6 +79,12 @@ const fileKindLabel = computed(() => {
 
     return selected.value.type === 'application/pdf' ? 'PDF document' : 'File';
 });
+
+// Rounded once here so the bar's width, the spoken value and the printed
+// caption can never disagree by a percent.
+const percent = computed(() =>
+    props.progress ? Math.min(100, Math.round(props.progress.percentage ?? 0)) : null
+);
 
 const onChange = (event) => {
     const file = event.target.files[0] ?? null;
@@ -103,6 +123,7 @@ onBeforeUnmount(revokePreview);
             type="file"
             :accept="accept"
             :required="required"
+            :disabled="percent !== null"
             class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 file:mr-3 file:rounded file:border-0 file:bg-csc-blue-tint file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-csc-blue"
             :class="
                 error
@@ -134,14 +155,48 @@ onBeforeUnmount(revokePreview);
                 <p class="text-xs text-csc-ink-subtle">
                     {{ readableSize(selected.size) }}<template v-if="fileKindLabel"> · {{ fileKindLabel }}</template>
                 </p>
-                <p v-if="previewHint" class="mt-1 text-xs text-csc-ink-muted">{{ previewHint }}</p>
-                <button
-                    type="button"
-                    class="mt-1.5 rounded text-xs font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    @click="clear"
-                >
-                    Remove and choose another file
-                </button>
+                <!--
+                    Mid-upload the hint and the swap-file control both go: one
+                    is advice that can no longer be acted on, the other is an
+                    offer to change a file that is already halfway to the
+                    server. The bar takes their place rather than sitting under
+                    them, so the card never grows and shoves the submit button
+                    down at the exact moment it is being pressed.
+                -->
+                <template v-if="percent === null">
+                    <p v-if="previewHint" class="mt-1 text-xs text-csc-ink-muted">{{ previewHint }}</p>
+                    <button
+                        type="button"
+                        class="mt-1.5 rounded text-xs font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        @click="clear"
+                    >
+                        Remove and choose another file
+                    </button>
+                </template>
+
+                <div v-else class="mt-2">
+                    <div
+                        class="h-1.5 overflow-hidden rounded-full bg-csc-blue-tint"
+                        role="progressbar"
+                        aria-label="Upload progress"
+                        :aria-valuenow="percent"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                    >
+                        <div
+                            class="h-full rounded-full bg-csc-blue transition-[width] duration-200 ease-out"
+                            :style="{ width: `${percent}%` }"
+                        />
+                    </div>
+                    <!--
+                        aria-hidden: the progressbar above already speaks the
+                        number, and a live region repeating it every percent
+                        would talk over everything else on the page.
+                    -->
+                    <p class="mt-1 text-xs text-csc-ink-muted" aria-hidden="true">
+                        {{ percent < 100 ? `Uploading… ${percent}%` : 'Upload complete — saving…' }}
+                    </p>
+                </div>
             </div>
         </div>
     </div>

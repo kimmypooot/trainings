@@ -5,6 +5,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppStatTile from '@/Components/AppStatTile.vue';
 import AppTrendChart from '@/Components/AppTrendChart.vue';
 import { formatMoney, formatMoneyCompact } from '@/charts';
+import { useDownload } from '@/useDownload';
 
 /**
  * The money side of a report.
@@ -29,6 +30,8 @@ const props = defineProps({
     trend: { type: Array, default: null },
 });
 
+const { downloading, start } = useDownload();
+
 const money = formatMoney;
 
 const trendRows = computed(() =>
@@ -42,7 +45,15 @@ const trendRows = computed(() =>
         subtitle="Verified payments only. A pending payment is a claim, not money."
     >
         <template #action>
-            <AppButton :href="exportUrl" variant="ghost" size="sm" icon="download" external>
+            <AppButton
+                :href="exportUrl"
+                variant="ghost"
+                size="sm"
+                icon="download"
+                external
+                :loading="downloading === exportUrl"
+                @click.prevent="start(exportUrl)"
+            >
                 Download (CSV)
             </AppButton>
         </template>

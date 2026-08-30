@@ -179,6 +179,7 @@ const confirmCancel = () => {
                     accept=".pdf,.jpg,.jpeg,.png"
                     required
                     :error="uploadForm.errors.proof"
+                    :progress="uploadForm.progress"
                     @change="uploadForm.proof = $event"
                 />
 

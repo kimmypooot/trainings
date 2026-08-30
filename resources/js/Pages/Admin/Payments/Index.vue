@@ -15,6 +15,8 @@ import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import { useFilters, filteringClass } from '@/useFilters';
+import { useDownload } from '@/useDownload';
 
 const props = defineProps({
     payments: { type: Object, required: true },
@@ -53,22 +55,50 @@ const statusFilter = ref(props.filters.status ?? 'pending');
 const methodFilter = ref(props.filters.method ?? '');
 const refundStatusFilter = ref(props.filters.refund_status ?? '');
 
-let debounce;
-watch([search, statusFilter, methodFilter, refundStatusFilter], () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => {
-        router.get(
-            '/admin/payments',
-            {
-                search: search.value || undefined,
-                status: statusFilter.value || undefined,
-                method: methodFilter.value || undefined,
-                refund_status: refundStatusFilter.value || undefined,
-            },
-            { preserveState: true, preserveScroll: true }
-        );
-    }, 300);
+/*
+ * Both queues come back, because both are filtered: `payments` by the search,
+ * status and method, `refunds` by refund_status. Everything else on this page —
+ * the chips' counts, the three money tallies, the OR settings — is deliberately
+ * whole-queue and stays put.
+ *
+ * preserveScroll here, unlike the other registers: the refund queue sits below
+ * a long payment list, so someone filtering it is already scrolled down and
+ * being thrown back to the top would lose the thing they were working on.
+ */
+const { filtering, apply } = useFilters({
+    url: '/admin/payments',
+    only: ['payments', 'refunds', 'filters'],
+    preserveScroll: true,
+    query: () => ({
+        search: search.value || undefined,
+        status: statusFilter.value || undefined,
+        method: methodFilter.value || undefined,
+        refund_status: refundStatusFilter.value || undefined,
+    }),
 });
+
+const { downloading, start } = useDownload();
+
+/*
+ * The download has to be the rows on screen, so it carries the same filters the
+ * list does. Built here rather than inline in the template because both format
+ * buttons need the identical string — and because `downloading === url` only
+ * matches if the URL the button renders and the URL it starts are byte-for-byte
+ * the same, which two hand-copied template literals will not stay.
+ */
+const exportUrl = (format) => {
+    const params = new URLSearchParams({ format });
+
+    if (statusFilter.value) params.set('status', statusFilter.value);
+    if (methodFilter.value) params.set('method', methodFilter.value);
+    if (search.value) params.set('search', search.value);
+
+    return `/admin/exports/payments?${params}`;
+};
+
+// Only the search box waits for a pause; the chips and dropdowns are clicks.
+watch(search, () => apply());
+watch([statusFilter, methodFilter, refundStatusFilter], () => apply({ immediate: true }));
 
 const filterBy = (status) => {
     statusFilter.value = status;
@@ -408,22 +438,17 @@ const rejectRefund = (refund) => {
 
                     <div class="flex flex-wrap gap-2 sm:ml-auto">
                         <AppButton
-                            :href="`/admin/exports/payments?format=csv&status=${statusFilter}${methodFilter ? '&method=' + methodFilter : ''}${search ? '&search=' + encodeURIComponent(search) : ''}`"
+                            v-for="format in ['csv', 'xlsx']"
+                            :key="format"
+                            :href="exportUrl(format)"
                             variant="ghost"
                             size="sm"
                             icon="download"
                             external
+                            :loading="downloading === exportUrl(format)"
+                            @click.prevent="start(exportUrl(format))"
                         >
-                            CSV
-                        </AppButton>
-                        <AppButton
-                            :href="`/admin/exports/payments?format=xlsx&status=${statusFilter}${methodFilter ? '&method=' + methodFilter : ''}${search ? '&search=' + encodeURIComponent(search) : ''}`"
-                            variant="ghost"
-                            size="sm"
-                            icon="download"
-                            external
-                        >
-                            Excel
+                            {{ format === 'csv' ? 'CSV' : 'Excel' }}
                         </AppButton>
                     </div>
                 </div>
@@ -451,304 +476,312 @@ const rejectRefund = (refund) => {
                     </button>
                 </div>
 
-                <AppCard title="Payment Verification" :padded="payments.data.length > 0">
-                    <AppEmptyState
-                        v-if="!payments.data.length"
-                        title="Nothing to verify"
-                        description="Payments submitted by participants appear here."
-                        icon="card"
-                    />
+                <!--
+                     The results dim while a filtered visit is out. The controls above stay
+                     live — narrowing further mid-request is the normal thing to do — but
+                     these rows are already superseded, so they stop taking clicks until
+                     they have been redrawn.
+                -->
+                <div :class="filteringClass(filtering)" :aria-busy="filtering" class="space-y-5">
+                    <AppCard title="Payment Verification" :padded="payments.data.length > 0">
+                        <AppEmptyState
+                            v-if="!payments.data.length"
+                            title="Nothing to verify"
+                            description="Payments submitted by participants appear here."
+                            icon="card"
+                        />
 
-                    <template v-else>
-                        <!--
-                            The batch bar appears only once something is
-                            selected, so the screen is unchanged for an officer
-                            working the queue one payment at a time — which is
-                            still the normal day. It is a walk-in event that
-                            leaves two hundred notes behind, not a Tuesday.
-                        -->
-                        <div
-                            v-if="selected.length"
-                            class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-info/30 bg-info-soft px-4 py-3"
-                        >
-                            <p class="text-sm font-semibold text-csc-ink">
-                                {{ selected.length }} promissory note{{ selected.length === 1 ? '' : 's' }} selected
-                            </p>
-
-                            <AppInput
-                                v-model="bulkForm.remarks"
-                                class="min-w-56 flex-1"
-                                placeholder="Remarks (optional)"
-                                aria-label="Remarks recorded on every note in this batch"
-                            />
-
-                            <AppButton :disabled="bulkForm.processing" @click="submitBulk">
-                                {{ bulkForm.processing ? 'Verifying…' : 'Verify selected' }}
-                            </AppButton>
-
-                            <AppButton variant="ghost" @click="selected = []">Cancel</AppButton>
-
+                        <template v-else>
                             <!--
-                                Said before the click, not after. Verifying a
-                                note confirms the slot and mails the
-                                participant, and unlike the roster's bulk
-                                actions there is no undo window behind it.
+                                The batch bar appears only once something is
+                                selected, so the screen is unchanged for an officer
+                                working the queue one payment at a time — which is
+                                still the normal day. It is a walk-in event that
+                                leaves two hundred notes behind, not a Tuesday.
                             -->
-                            <p class="w-full text-xs text-csc-ink-subtle">
-                                Each note is verified and its registration confirmed. The fee stays
-                                outstanding until the money is collected, and this cannot be undone.
-                            </p>
-                        </div>
+                            <div
+                                v-if="selected.length"
+                                class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-info/30 bg-info-soft px-4 py-3"
+                            >
+                                <p class="text-sm font-semibold text-csc-ink">
+                                    {{ selected.length }} promissory note{{ selected.length === 1 ? '' : 's' }} selected
+                                </p>
 
-                        <!-- Desktop table -->
-                        <div class="-mx-5 hidden overflow-x-auto sm:-mx-6 md:block">
-                            <table class="w-full min-w-200 text-left text-sm">
-                                <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
-                                    <tr>
-                                        <th scope="col" class="w-10 px-5 py-3">
-                                            <input
-                                                v-if="clearable.length"
-                                                type="checkbox"
-                                                class="size-4 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                                                :checked="allClearableSelected"
-                                                :aria-label="allClearableSelected ? 'Clear selection' : 'Select every pending promissory note'"
-                                                @change="toggleAllClearable"
-                                            />
-                                        </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="toggleSort('participant')"
-                                            >
-                                                Participant{{ sortIndicator('participant') }}
-                                            </button>
-                                        </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Training</th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="toggleSort('amount')"
-                                            >
-                                                Amount{{ sortIndicator('amount') }}
-                                            </button>
-                                        </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="toggleSort('payment_date_ts')"
-                                            >
-                                                Paid on{{ sortIndicator('payment_date_ts') }}
-                                            </button>
-                                        </th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">OR number</th>
-                                        <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
-                                            <button
-                                                type="button"
-                                                class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="toggleSort('status')"
-                                            >
-                                                Status{{ sortIndicator('status') }}
-                                            </button>
-                                        </th>
-                                        <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-csc-line">
-                                    <tr v-for="payment in sortedPayments" :key="payment.id">
-                                        <td class="px-5 py-3.5">
-                                            <input
-                                                v-if="payment.status === 'pending' && payment.is_promissory"
-                                                v-model="selected"
-                                                type="checkbox"
-                                                :value="payment.id"
-                                                class="size-4 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
-                                                :aria-label="`Select the promissory note for ${payment.participant}`"
-                                            />
-                                        </td>
-                                        <td class="px-5 py-3.5">
-                                            <p class="font-medium text-csc-ink">{{ payment.participant }}</p>
-                                            <p v-if="payment.reference_number" class="mt-0.5 text-xs text-csc-ink-subtle">
-                                                Ref {{ payment.reference_number }}
+                                <AppInput
+                                    v-model="bulkForm.remarks"
+                                    class="min-w-56 flex-1"
+                                    placeholder="Remarks (optional)"
+                                    aria-label="Remarks recorded on every note in this batch"
+                                />
+
+                                <AppButton :disabled="bulkForm.processing" @click="submitBulk">
+                                    {{ bulkForm.processing ? 'Verifying…' : 'Verify selected' }}
+                                </AppButton>
+
+                                <AppButton variant="ghost" @click="selected = []">Cancel</AppButton>
+
+                                <!--
+                                    Said before the click, not after. Verifying a
+                                    note confirms the slot and mails the
+                                    participant, and unlike the roster's bulk
+                                    actions there is no undo window behind it.
+                                -->
+                                <p class="w-full text-xs text-csc-ink-subtle">
+                                    Each note is verified and its registration confirmed. The fee stays
+                                    outstanding until the money is collected, and this cannot be undone.
+                                </p>
+                            </div>
+
+                            <!-- Desktop table -->
+                            <div class="-mx-5 hidden overflow-x-auto sm:-mx-6 md:block">
+                                <table class="w-full min-w-200 text-left text-sm">
+                                    <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
+                                        <tr>
+                                            <th scope="col" class="w-10 px-5 py-3">
+                                                <input
+                                                    v-if="clearable.length"
+                                                    type="checkbox"
+                                                    class="size-4 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                                                    :checked="allClearableSelected"
+                                                    :aria-label="allClearableSelected ? 'Clear selection' : 'Select every pending promissory note'"
+                                                    @change="toggleAllClearable"
+                                                />
+                                            </th>
+                                            <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                                    @click="toggleSort('participant')"
+                                                >
+                                                    Participant{{ sortIndicator('participant') }}
+                                                </button>
+                                            </th>
+                                            <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">Training</th>
+                                            <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                                    @click="toggleSort('amount')"
+                                                >
+                                                    Amount{{ sortIndicator('amount') }}
+                                                </button>
+                                            </th>
+                                            <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                                    @click="toggleSort('payment_date_ts')"
+                                                >
+                                                    Paid on{{ sortIndicator('payment_date_ts') }}
+                                                </button>
+                                            </th>
+                                            <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">OR number</th>
+                                            <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                                    @click="toggleSort('status')"
+                                                >
+                                                    Status{{ sortIndicator('status') }}
+                                                </button>
+                                            </th>
+                                            <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-csc-line">
+                                        <tr v-for="payment in sortedPayments" :key="payment.id">
+                                            <td class="px-5 py-3.5">
+                                                <input
+                                                    v-if="payment.status === 'pending' && payment.is_promissory"
+                                                    v-model="selected"
+                                                    type="checkbox"
+                                                    :value="payment.id"
+                                                    class="size-4 rounded border-csc-line text-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
+                                                    :aria-label="`Select the promissory note for ${payment.participant}`"
+                                                />
+                                            </td>
+                                            <td class="px-5 py-3.5">
+                                                <p class="font-medium text-csc-ink">{{ payment.participant }}</p>
+                                                <p v-if="payment.reference_number" class="mt-0.5 text-xs text-csc-ink-subtle">
+                                                    Ref {{ payment.reference_number }}
+                                                </p>
+                                            </td>
+                                            <td class="px-5 py-3.5 text-csc-ink-muted">
+                                                {{ payment.training }}
+                                                <p v-if="payment.charge_to" class="mt-0.5 text-xs text-csc-ink-subtle">
+                                                    {{ payment.charge_to }}
+                                                </p>
+                                            </td>
+                                            <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink">
+                                                ₱{{ money(payment.amount) }}
+                                                <p class="text-xs text-csc-ink-subtle">{{ payment.method }}</p>
+                                                <!--
+                                                    Both figures, because the gross
+                                                    is what the report reconciles on
+                                                    and the net is what arrived.
+                                                -->
+                                                <p
+                                                    v-if="payment.prime_hrm_discount"
+                                                    class="mt-0.5 text-2xs font-medium text-warning"
+                                                    :title="`Full fee ₱${money(payment.gross_amount)}, PRIME-HRM discount ₱${money(payment.discount_amount)}`"
+                                                >
+                                                    PRIME-HRM −₱{{ money(payment.discount_amount) }}
+                                                </p>
+                                            </td>
+                                            <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink-muted">{{ payment.payment_date }}</td>
+                                            <td class="px-5 py-3.5">
+                                                <template v-if="payment.or_number">
+                                                    <p class="font-mono text-xs text-csc-ink">{{ payment.or_number }}</p>
+                                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">
+                                                        {{ payment.or_date }}
+                                                        <template v-if="payment.collecting_officer">
+                                                            · {{ payment.collecting_officer }}
+                                                        </template>
+                                                    </p>
+                                                </template>
+                                                <span v-else class="text-xs text-csc-ink-subtle">—</span>
+                                            </td>
+                                            <td class="px-5 py-3.5">
+                                                <AppBadge :status="payment.status" />
+                                                <p v-if="payment.rejection_reason" class="mt-1 max-w-48 text-xs text-csc-red-ink">
+                                                    {{ payment.rejection_reason }}
+                                                </p>
+                                                <p v-if="payment.remarks" class="mt-1 max-w-48 text-xs text-csc-ink-subtle">
+                                                    {{ payment.remarks }}
+                                                </p>
+                                            </td>
+                                            <td class="px-5 py-3.5 text-right whitespace-nowrap">
+                                                <a
+                                                    v-if="payment.proof_url"
+                                                    :href="payment.proof_url"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="inline-flex items-center gap-1.5 rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                                >
+                                                    <AppIcon name="eye" size="sm" />
+                                                    Proof
+                                                </a>
+                                                <!--
+                                                    An online transfer recorded with
+                                                    no slip. Accepted from the
+                                                    participant, raised here — icon
+                                                    and label, never colour alone.
+                                                -->
+                                                <span
+                                                    v-else-if="payment.proof_missing"
+                                                    class="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning"
+                                                >
+                                                    <AppIcon name="warning" size="sm" />
+                                                    No proof
+                                                </span>
+                                                <template v-if="payment.status === 'pending'">
+                                                    <span
+                                                        v-if="payment.proof_url || payment.proof_missing"
+                                                        class="px-2 text-csc-line"
+                                                    >|</span>
+                                                    <AppButton size="sm" icon="check" @click="startVerifying(payment)">
+                                                        Verify
+                                                    </AppButton>
+                                                    <AppButton size="sm" variant="ghost" icon="close" @click="rejectPayment(payment)">
+                                                        Reject
+                                                    </AppButton>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Mobile cards -->
+                            <ul class="space-y-3 md:hidden">
+                                <li
+                                    v-for="payment in sortedPayments"
+                                    :key="payment.id"
+                                    class="rounded-lg border border-csc-line p-4"
+                                >
+                                    <div class="flex flex-wrap items-start justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <p class="font-semibold text-csc-ink">{{ payment.participant }}</p>
+                                            <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ payment.training }}</p>
+                                            <p class="mt-1 text-sm text-csc-ink">
+                                                ₱{{ money(payment.amount) }} · {{ payment.method }} ·
+                                                {{ payment.payment_date }}
                                             </p>
-                                        </td>
-                                        <td class="px-5 py-3.5 text-csc-ink-muted">
-                                            {{ payment.training }}
-                                            <p v-if="payment.charge_to" class="mt-0.5 text-xs text-csc-ink-subtle">
-                                                {{ payment.charge_to }}
-                                            </p>
-                                        </td>
-                                        <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink">
-                                            ₱{{ money(payment.amount) }}
-                                            <p class="text-xs text-csc-ink-subtle">{{ payment.method }}</p>
-                                            <!--
-                                                Both figures, because the gross
-                                                is what the report reconciles on
-                                                and the net is what arrived.
-                                            -->
                                             <p
                                                 v-if="payment.prime_hrm_discount"
-                                                class="mt-0.5 text-2xs font-medium text-warning"
-                                                :title="`Full fee ₱${money(payment.gross_amount)}, PRIME-HRM discount ₱${money(payment.discount_amount)}`"
+                                                class="text-xs font-medium text-warning"
                                             >
-                                                PRIME-HRM −₱{{ money(payment.discount_amount) }}
+                                                PRIME-HRM 20% — ₱{{ money(payment.gross_amount) }} less
+                                                ₱{{ money(payment.discount_amount) }}
                                             </p>
-                                        </td>
-                                        <td class="px-5 py-3.5 whitespace-nowrap text-csc-ink-muted">{{ payment.payment_date }}</td>
-                                        <td class="px-5 py-3.5">
-                                            <template v-if="payment.or_number">
-                                                <p class="font-mono text-xs text-csc-ink">{{ payment.or_number }}</p>
-                                                <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                                                    {{ payment.or_date }}
-                                                    <template v-if="payment.collecting_officer">
-                                                        · {{ payment.collecting_officer }}
-                                                    </template>
-                                                </p>
-                                            </template>
-                                            <span v-else class="text-xs text-csc-ink-subtle">—</span>
-                                        </td>
-                                        <td class="px-5 py-3.5">
-                                            <AppBadge :status="payment.status" />
-                                            <p v-if="payment.rejection_reason" class="mt-1 max-w-48 text-xs text-csc-red-ink">
-                                                {{ payment.rejection_reason }}
+                                            <p v-if="payment.reference_number" class="text-xs text-csc-ink-subtle">
+                                                Ref {{ payment.reference_number }}
                                             </p>
-                                            <p v-if="payment.remarks" class="mt-1 max-w-48 text-xs text-csc-ink-subtle">
-                                                {{ payment.remarks }}
+                                            <p v-if="payment.charge_to" class="text-xs text-csc-ink-subtle">
+                                                Charged to: {{ payment.charge_to }}
                                             </p>
-                                        </td>
-                                        <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                            <a
-                                                v-if="payment.proof_url"
-                                                :href="payment.proof_url"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="inline-flex items-center gap-1.5 rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            >
-                                                <AppIcon name="eye" size="sm" />
-                                                Proof
-                                            </a>
-                                            <!--
-                                                An online transfer recorded with
-                                                no slip. Accepted from the
-                                                participant, raised here — icon
-                                                and label, never colour alone.
-                                            -->
-                                            <span
-                                                v-else-if="payment.proof_missing"
-                                                class="inline-flex items-center gap-1.5 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning"
-                                            >
-                                                <AppIcon name="warning" size="sm" />
-                                                No proof
-                                            </span>
-                                            <template v-if="payment.status === 'pending'">
-                                                <span
-                                                    v-if="payment.proof_url || payment.proof_missing"
-                                                    class="px-2 text-csc-line"
-                                                >|</span>
-                                                <AppButton size="sm" icon="check" @click="startVerifying(payment)">
-                                                    Verify
-                                                </AppButton>
-                                                <AppButton size="sm" variant="ghost" icon="close" @click="rejectPayment(payment)">
-                                                    Reject
-                                                </AppButton>
-                                            </template>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Mobile cards -->
-                        <ul class="space-y-3 md:hidden">
-                            <li
-                                v-for="payment in sortedPayments"
-                                :key="payment.id"
-                                class="rounded-lg border border-csc-line p-4"
-                            >
-                                <div class="flex flex-wrap items-start justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <p class="font-semibold text-csc-ink">{{ payment.participant }}</p>
-                                        <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ payment.training }}</p>
-                                        <p class="mt-1 text-sm text-csc-ink">
-                                            ₱{{ money(payment.amount) }} · {{ payment.method }} ·
-                                            {{ payment.payment_date }}
-                                        </p>
-                                        <p
-                                            v-if="payment.prime_hrm_discount"
-                                            class="text-xs font-medium text-warning"
-                                        >
-                                            PRIME-HRM 20% — ₱{{ money(payment.gross_amount) }} less
-                                            ₱{{ money(payment.discount_amount) }}
-                                        </p>
-                                        <p v-if="payment.reference_number" class="text-xs text-csc-ink-subtle">
-                                            Ref {{ payment.reference_number }}
-                                        </p>
-                                        <p v-if="payment.charge_to" class="text-xs text-csc-ink-subtle">
-                                            Charged to: {{ payment.charge_to }}
-                                        </p>
+                                        </div>
+                                        <AppBadge :status="payment.status" />
                                     </div>
-                                    <AppBadge :status="payment.status" />
-                                </div>
 
-                                <p v-if="payment.rejection_reason" class="mt-3 text-sm text-csc-red-ink">
-                                    {{ payment.rejection_reason }}
-                                </p>
+                                    <p v-if="payment.rejection_reason" class="mt-3 text-sm text-csc-red-ink">
+                                        {{ payment.rejection_reason }}
+                                    </p>
 
-                                <p v-if="payment.remarks" class="mt-1.5 text-xs text-csc-ink-subtle">
-                                    {{ payment.remarks }}
-                                </p>
+                                    <p v-if="payment.remarks" class="mt-1.5 text-xs text-csc-ink-subtle">
+                                        {{ payment.remarks }}
+                                    </p>
 
-                                <p v-if="payment.or_number" class="mt-2 text-sm text-csc-ink">
-                                    <span class="text-csc-ink-subtle">OR</span>
-                                    <span class="font-mono">{{ payment.or_number }}</span>
-                                    <span v-if="payment.or_date" class="text-csc-ink-subtle"> · {{ payment.or_date }}</span>
-                                    <span v-if="payment.collecting_officer" class="text-csc-ink-subtle">
-                                        · issued by {{ payment.collecting_officer }}
-                                    </span>
-                                </p>
+                                    <p v-if="payment.or_number" class="mt-2 text-sm text-csc-ink">
+                                        <span class="text-csc-ink-subtle">OR</span>
+                                        <span class="font-mono">{{ payment.or_number }}</span>
+                                        <span v-if="payment.or_date" class="text-csc-ink-subtle"> · {{ payment.or_date }}</span>
+                                        <span v-if="payment.collecting_officer" class="text-csc-ink-subtle">
+                                            · issued by {{ payment.collecting_officer }}
+                                        </span>
+                                    </p>
 
-                                <p v-if="payment.verified_by" class="mt-1.5 text-xs text-csc-ink-subtle">
-                                    Reviewed by {{ payment.verified_by }}
-                                </p>
+                                    <p v-if="payment.verified_by" class="mt-1.5 text-xs text-csc-ink-subtle">
+                                        Reviewed by {{ payment.verified_by }}
+                                    </p>
 
-                                <div class="mt-4 flex flex-wrap items-center gap-3">
-                                    <a
-                                        v-if="payment.proof_url"
-                                        :href="payment.proof_url"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="inline-flex items-center gap-2 rounded-lg border border-csc-blue/30 px-4 py-2 text-sm font-semibold text-csc-blue transition-colors duration-150 hover:border-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                    >
-                                        <AppIcon name="eye" size="sm" class="shrink-0" />
-                                        View proof
-                                    </a>
+                                    <div class="mt-4 flex flex-wrap items-center gap-3">
+                                        <a
+                                            v-if="payment.proof_url"
+                                            :href="payment.proof_url"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="inline-flex items-center gap-2 rounded-lg border border-csc-blue/30 px-4 py-2 text-sm font-semibold text-csc-blue transition-colors duration-150 hover:border-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        >
+                                            <AppIcon name="eye" size="sm" class="shrink-0" />
+                                            View proof
+                                        </a>
 
-                                    <!-- See the table above: expected, absent. -->
-                                    <span
-                                        v-else-if="payment.proof_missing"
-                                        class="inline-flex items-center gap-2 rounded-lg bg-warning-soft px-4 py-2 text-sm font-semibold text-warning"
-                                    >
-                                        <AppIcon name="warning" size="sm" class="shrink-0" />
-                                        No proof uploaded
-                                    </span>
+                                        <!-- See the table above: expected, absent. -->
+                                        <span
+                                            v-else-if="payment.proof_missing"
+                                            class="inline-flex items-center gap-2 rounded-lg bg-warning-soft px-4 py-2 text-sm font-semibold text-warning"
+                                        >
+                                            <AppIcon name="warning" size="sm" class="shrink-0" />
+                                            No proof uploaded
+                                        </span>
 
-                                    <template v-if="payment.status === 'pending'">
-                                        <AppButton size="sm" icon="check" @click="startVerifying(payment)">
-                                            Verify
-                                        </AppButton>
-                                        <AppButton size="sm" variant="ghost" icon="close" @click="rejectPayment(payment)">
-                                            Reject
-                                        </AppButton>
-                                    </template>
-                                </div>
-                            </li>
-                        </ul>
-                    </template>
-                </AppCard>
+                                        <template v-if="payment.status === 'pending'">
+                                            <AppButton size="sm" icon="check" @click="startVerifying(payment)">
+                                                Verify
+                                            </AppButton>
+                                            <AppButton size="sm" variant="ghost" icon="close" @click="rejectPayment(payment)">
+                                                Reject
+                                            </AppButton>
+                                        </template>
+                                    </div>
+                                </li>
+                            </ul>
+                        </template>
+                    </AppCard>
 
-                <AppPagination :pagination="payments" label="payments" class="pt-1" />
+                    <AppPagination :pagination="payments" label="payments" class="pt-1" />
+                </div>
             </template>
 
             <template v-else>
@@ -794,133 +827,141 @@ const rejectRefund = (refund) => {
                     </button>
                 </div>
 
-                <AppCard title="Refund Requests" :padded="refunds.data.length > 0">
-                    <AppEmptyState
-                        v-if="!refunds.data.length"
-                        title="No refund requests"
-                        description="Claims against verified payments appear here."
-                        icon="arrow-left"
-                    />
+                <!--
+                     The results dim while a filtered visit is out. The controls above stay
+                     live — narrowing further mid-request is the normal thing to do — but
+                     these rows are already superseded, so they stop taking clicks until
+                     they have been redrawn.
+                -->
+                <div :class="filteringClass(filtering)" :aria-busy="filtering" class="space-y-5">
+                    <AppCard title="Refund Requests" :padded="refunds.data.length > 0">
+                        <AppEmptyState
+                            v-if="!refunds.data.length"
+                            title="No refund requests"
+                            description="Claims against verified payments appear here."
+                            icon="arrow-left"
+                        />
 
-                    <ul v-else class="space-y-3">
-                        <li v-for="refund in refunds.data" :key="refund.id" class="rounded-lg border border-csc-line p-4">
-                            <div class="flex flex-wrap items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <p class="font-semibold text-csc-ink">
-                                        {{ refund.participant }}
-                                        <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
-                                            {{ refund.request_code }}
-                                        </span>
-                                    </p>
-                                    <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ refund.training }}</p>
-                                    <p class="mt-1 text-sm text-csc-ink">₱{{ money(refund.amount) }}</p>
+                        <ul v-else class="space-y-3">
+                            <li v-for="refund in refunds.data" :key="refund.id" class="rounded-lg border border-csc-line p-4">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="font-semibold text-csc-ink">
+                                            {{ refund.participant }}
+                                            <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
+                                                {{ refund.request_code }}
+                                            </span>
+                                        </p>
+                                        <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ refund.training }}</p>
+                                        <p class="mt-1 text-sm text-csc-ink">₱{{ money(refund.amount) }}</p>
+                                    </div>
+                                    <AppBadge :status="refund.status" />
                                 </div>
-                                <AppBadge :status="refund.status" />
-                            </div>
 
-                            <p class="mt-3 text-sm text-csc-ink-muted">{{ refund.reason }}</p>
+                                <p class="mt-3 text-sm text-csc-ink-muted">{{ refund.reason }}</p>
 
-                            <!-- Where it is along the pipeline, drawn from the
-                                 same ordered stages the server uses. -->
-                            <ol v-if="refund.status !== 'rejected'" class="mt-4 flex items-center gap-1.5" aria-label="Refund pipeline">
-                                <li
-                                    v-for="(stage, index) in refundPipeline"
-                                    :key="stage.value"
-                                    class="flex items-center gap-1.5"
-                                >
-                                    <span
-                                        class="size-2.5 rounded-full"
-                                        :class="{
-                                            'bg-success': stageState(refund, index) === 'done',
-                                            'bg-csc-blue': stageState(refund, index) === 'current',
-                                            'bg-csc-line': stageState(refund, index) === 'upcoming',
-                                        }"
-                                    ></span>
-                                    <span
-                                        class="text-xs"
-                                        :class="stageState(refund, index) === 'upcoming' ? 'text-csc-ink-subtle' : 'font-medium text-csc-ink'"
+                                <!-- Where it is along the pipeline, drawn from the
+                                     same ordered stages the server uses. -->
+                                <ol v-if="refund.status !== 'rejected'" class="mt-4 flex items-center gap-1.5" aria-label="Refund pipeline">
+                                    <li
+                                        v-for="(stage, index) in refundPipeline"
+                                        :key="stage.value"
+                                        class="flex items-center gap-1.5"
                                     >
-                                        {{ stage.label }}
-                                    </span>
-                                    <span v-if="index < refundPipeline.length - 1" class="h-px w-4 bg-csc-line"></span>
-                                </li>
-                            </ol>
-                            <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-csc-red-ink">
-                                Declined
-                            </p>
-
-                            <!-- What MSD needs to actually release the money. -->
-                            <dl class="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-                                <div class="flex gap-2">
-                                    <dt class="text-csc-ink-subtle">Account name</dt>
-                                    <dd class="text-csc-ink">{{ refund.account_name || '—' }}</dd>
-                                </div>
-                                <div class="flex gap-2">
-                                    <dt class="text-csc-ink-subtle">Bank</dt>
-                                    <dd class="text-csc-ink">{{ refund.bank_name || '—' }}</dd>
-                                </div>
-                                <div class="flex gap-2">
-                                    <dt class="text-csc-ink-subtle">Account no.</dt>
-                                    <dd class="font-mono text-csc-ink">{{ refund.account_number || '—' }}</dd>
-                                </div>
-                                <div v-if="refund.proof_url" class="flex gap-2">
-                                    <dt class="text-csc-ink-subtle">Proof</dt>
-                                    <dd>
-                                        <a
-                                            :href="refund.proof_url"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="inline-flex items-center gap-1.5 rounded text-sm font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        <span
+                                            class="size-2.5 rounded-full"
+                                            :class="{
+                                                'bg-success': stageState(refund, index) === 'done',
+                                                'bg-csc-blue': stageState(refund, index) === 'current',
+                                                'bg-csc-line': stageState(refund, index) === 'upcoming',
+                                            }"
+                                        ></span>
+                                        <span
+                                            class="text-xs"
+                                            :class="stageState(refund, index) === 'upcoming' ? 'text-csc-ink-subtle' : 'font-medium text-csc-ink'"
                                         >
-                                            View attachment
-                                            <AppIcon name="eye" size="sm" />
-                                        </a>
-                                    </dd>
-                                </div>
-                            </dl>
-
-                            <p v-if="refund.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
-                                Declined: {{ refund.rejection_reason }}
-                            </p>
-
-                            <!--
-                                The trail, not just the latest remark. On a claim
-                                that has crossed two units, "who moved this and
-                                when" is the question that actually gets asked.
-                            -->
-                            <details v-if="refund.trail.length > 1" class="mt-3">
-                                <summary
-                                    class="cursor-pointer rounded text-xs font-medium text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                >
-                                    History ({{ refund.trail.length }})
-                                </summary>
-                                <ol class="mt-2 space-y-1.5 border-l-2 border-csc-line pl-3">
-                                    <li v-for="(entry, index) in refund.trail" :key="index" class="text-xs">
-                                        <span class="font-medium text-csc-ink">{{ entry.to }}</span>
-                                        <span class="text-csc-ink-subtle"> · {{ entry.actor }} · {{ entry.at }}</span>
-                                        <p v-if="entry.notes" class="text-csc-ink-muted">{{ entry.notes }}</p>
+                                            {{ stage.label }}
+                                        </span>
+                                        <span v-if="index < refundPipeline.length - 1" class="h-px w-4 bg-csc-line"></span>
                                     </li>
                                 </ol>
-                            </details>
+                                <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-csc-red-ink">
+                                    Declined
+                                </p>
 
-                            <div v-if="refund.can_act" class="mt-4 flex flex-wrap gap-2">
-                                <AppButton
-                                    v-if="refund.next_stage"
-                                    size="sm"
-                                    icon="check"
-                                    @click="advanceRefund(refund)"
-                                >
-                                    Move to {{ refund.next_stage.label }}
-                                </AppButton>
-                                <AppButton size="sm" variant="ghost" icon="close" @click="rejectRefund(refund)">
-                                    Decline
-                                </AppButton>
-                            </div>
-                        </li>
-                    </ul>
-                </AppCard>
+                                <!-- What MSD needs to actually release the money. -->
+                                <dl class="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                                    <div class="flex gap-2">
+                                        <dt class="text-csc-ink-subtle">Account name</dt>
+                                        <dd class="text-csc-ink">{{ refund.account_name || '—' }}</dd>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <dt class="text-csc-ink-subtle">Bank</dt>
+                                        <dd class="text-csc-ink">{{ refund.bank_name || '—' }}</dd>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <dt class="text-csc-ink-subtle">Account no.</dt>
+                                        <dd class="font-mono text-csc-ink">{{ refund.account_number || '—' }}</dd>
+                                    </div>
+                                    <div v-if="refund.proof_url" class="flex gap-2">
+                                        <dt class="text-csc-ink-subtle">Proof</dt>
+                                        <dd>
+                                            <a
+                                                :href="refund.proof_url"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="inline-flex items-center gap-1.5 rounded text-sm font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            >
+                                                View attachment
+                                                <AppIcon name="eye" size="sm" />
+                                            </a>
+                                        </dd>
+                                    </div>
+                                </dl>
 
-                <AppPagination :pagination="refunds" label="refunds" class="pt-1" />
+                                <p v-if="refund.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                                    Declined: {{ refund.rejection_reason }}
+                                </p>
+
+                                <!--
+                                    The trail, not just the latest remark. On a claim
+                                    that has crossed two units, "who moved this and
+                                    when" is the question that actually gets asked.
+                                -->
+                                <details v-if="refund.trail.length > 1" class="mt-3">
+                                    <summary
+                                        class="cursor-pointer rounded text-xs font-medium text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    >
+                                        History ({{ refund.trail.length }})
+                                    </summary>
+                                    <ol class="mt-2 space-y-1.5 border-l-2 border-csc-line pl-3">
+                                        <li v-for="(entry, index) in refund.trail" :key="index" class="text-xs">
+                                            <span class="font-medium text-csc-ink">{{ entry.to }}</span>
+                                            <span class="text-csc-ink-subtle"> · {{ entry.actor }} · {{ entry.at }}</span>
+                                            <p v-if="entry.notes" class="text-csc-ink-muted">{{ entry.notes }}</p>
+                                        </li>
+                                    </ol>
+                                </details>
+
+                                <div v-if="refund.can_act" class="mt-4 flex flex-wrap gap-2">
+                                    <AppButton
+                                        v-if="refund.next_stage"
+                                        size="sm"
+                                        icon="check"
+                                        @click="advanceRefund(refund)"
+                                    >
+                                        Move to {{ refund.next_stage.label }}
+                                    </AppButton>
+                                    <AppButton size="sm" variant="ghost" icon="close" @click="rejectRefund(refund)">
+                                        Decline
+                                    </AppButton>
+                                </div>
+                            </li>
+                        </ul>
+                    </AppCard>
+
+                    <AppPagination :pagination="refunds" label="refunds" class="pt-1" />
+                </div>
             </template>
         </div>
 

@@ -14,6 +14,7 @@ import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import { useFilters, filteringClass } from '@/useFilters';
 
 const props = defineProps({
     requests: { type: Object, required: true },
@@ -33,20 +34,20 @@ const money = (value) =>
 const search = ref(props.filters.search ?? '');
 const statusFilter = ref(props.filters.status ?? 'payment_verification_pending');
 
-let debounce;
-watch([search, statusFilter], () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(() => {
-        router.get(
-            '/admin/physical-or',
-            {
-                search: search.value || undefined,
-                status: statusFilter.value || undefined,
-            },
-            { preserveState: true, preserveScroll: true }
-        );
-    }, 300);
+// `counts` drives the stage chips and counts the whole queue, so it is not
+// reloaded; `settings` and `pipeline` are reference data.
+const { filtering, apply } = useFilters({
+    url: '/admin/physical-or',
+    only: ['requests', 'filters'],
+    preserveScroll: true,
+    query: () => ({
+        search: search.value || undefined,
+        status: statusFilter.value || undefined,
+    }),
 });
+
+watch(search, () => apply());
+watch(statusFilter, () => apply({ immediate: true }));
 
 const filterBy = (status) => {
     statusFilter.value = status;
@@ -249,117 +250,125 @@ const submitSettings = () =>
                 </button>
             </div>
 
-            <AppCard title="Physical OR Requests" :padded="requests.data.length > 0">
-                <AppEmptyState
-                    v-if="!requests.data.length"
-                    title="Nothing here"
-                    description="Requests filed by participants appear here, awaiting their next move."
-                    icon="document"
-                />
+            <!--
+                 The results dim while a filtered visit is out. The controls above stay
+                 live — narrowing further mid-request is the normal thing to do — but
+                 these rows are already superseded, so they stop taking clicks until
+                 they have been redrawn.
+            -->
+            <div :class="filteringClass(filtering)" :aria-busy="filtering" class="space-y-5">
+                <AppCard title="Physical OR Requests" :padded="requests.data.length > 0">
+                    <AppEmptyState
+                        v-if="!requests.data.length"
+                        title="Nothing here"
+                        description="Requests filed by participants appear here, awaiting their next move."
+                        icon="document"
+                    />
 
-                <ul v-else class="space-y-3">
-                    <li v-for="request in requests.data" :key="request.id" class="rounded-lg border border-csc-line p-4">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="min-w-0">
-                                <p class="font-semibold text-csc-ink">
-                                    {{ request.participant }}
-                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
-                                        {{ request.request_code }}
-                                    </span>
-                                </p>
-                                <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ request.training }}</p>
-                                <p class="mt-1 text-sm text-csc-ink">
-                                    OR <span class="font-mono">{{ request.or_number }}</span> ·
-                                    Courier fee ₱{{ money(request.courier_fee) }}
-                                </p>
+                    <ul v-else class="space-y-3">
+                        <li v-for="request in requests.data" :key="request.id" class="rounded-lg border border-csc-line p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="font-semibold text-csc-ink">
+                                        {{ request.participant }}
+                                        <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
+                                            {{ request.request_code }}
+                                        </span>
+                                    </p>
+                                    <p class="mt-0.5 text-sm text-csc-ink-subtle">{{ request.training }}</p>
+                                    <p class="mt-1 text-sm text-csc-ink">
+                                        OR <span class="font-mono">{{ request.or_number }}</span> ·
+                                        Courier fee ₱{{ money(request.courier_fee) }}
+                                    </p>
+                                </div>
+                                <AppBadge :status="request.status" />
                             </div>
-                            <AppBadge :status="request.status" />
-                        </div>
 
-                        <p v-if="request.notes" class="mt-2 text-sm text-csc-ink-muted">{{ request.notes }}</p>
-                        <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
-                            Declined: {{ request.rejection_reason }}
-                        </p>
-
-                        <ol v-if="request.status !== 'rejected'" class="mt-4 flex flex-wrap items-center gap-1.5" aria-label="Physical OR pipeline">
-                            <li v-for="(stage, index) in pipeline" :key="stage.value" class="flex items-center gap-1.5">
-                                <span
-                                    class="size-2.5 rounded-full"
-                                    :class="{
-                                        'bg-success': stageState(request, index) === 'done',
-                                        'bg-csc-blue': stageState(request, index) === 'current',
-                                        'bg-csc-line': stageState(request, index) === 'upcoming',
-                                    }"
-                                ></span>
-                                <span
-                                    class="text-xs"
-                                    :class="stageState(request, index) === 'upcoming' ? 'text-csc-ink-subtle' : 'font-medium text-csc-ink'"
-                                >
-                                    {{ stage.label }}
-                                </span>
-                                <span v-if="index < pipeline.length - 1" class="h-px w-4 bg-csc-line"></span>
-                            </li>
-                        </ol>
-                        <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-csc-red-ink">Declined</p>
-
-                        <div v-if="request.courier_name" class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                            <p class="flex gap-2">
-                                <span class="text-csc-ink-subtle">Courier</span>
-                                <span class="text-csc-ink">{{ request.courier_name }}</span>
+                            <p v-if="request.notes" class="mt-2 text-sm text-csc-ink-muted">{{ request.notes }}</p>
+                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                                Declined: {{ request.rejection_reason }}
                             </p>
-                            <p class="flex gap-2">
-                                <span class="text-csc-ink-subtle">Tracking</span>
-                                <span class="font-mono text-csc-ink">{{ request.tracking_number || '—' }}</span>
-                            </p>
-                            <p v-if="request.verified_by" class="flex gap-2">
-                                <span class="text-csc-ink-subtle">Fee verified by</span>
-                                <span class="text-csc-ink">{{ request.verified_by }}</span>
-                            </p>
-                        </div>
 
-                        <details v-if="request.trail.length > 1" class="mt-3">
-                            <summary
-                                class="cursor-pointer rounded text-xs font-medium text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            >
-                                History ({{ request.trail.length }})
-                            </summary>
-                            <ol class="mt-2 space-y-1.5 border-l-2 border-csc-line pl-3">
-                                <li v-for="(entry, index) in request.trail" :key="index" class="text-xs">
-                                    <span class="font-medium text-csc-ink">{{ entry.to }}</span>
-                                    <span class="text-csc-ink-subtle"> · {{ entry.actor }} · {{ entry.at }}</span>
-                                    <p v-if="entry.notes" class="text-csc-ink-muted">{{ entry.notes }}</p>
+                            <ol v-if="request.status !== 'rejected'" class="mt-4 flex flex-wrap items-center gap-1.5" aria-label="Physical OR pipeline">
+                                <li v-for="(stage, index) in pipeline" :key="stage.value" class="flex items-center gap-1.5">
+                                    <span
+                                        class="size-2.5 rounded-full"
+                                        :class="{
+                                            'bg-success': stageState(request, index) === 'done',
+                                            'bg-csc-blue': stageState(request, index) === 'current',
+                                            'bg-csc-line': stageState(request, index) === 'upcoming',
+                                        }"
+                                    ></span>
+                                    <span
+                                        class="text-xs"
+                                        :class="stageState(request, index) === 'upcoming' ? 'text-csc-ink-subtle' : 'font-medium text-csc-ink'"
+                                    >
+                                        {{ stage.label }}
+                                    </span>
+                                    <span v-if="index < pipeline.length - 1" class="h-px w-4 bg-csc-line"></span>
                                 </li>
                             </ol>
-                        </details>
+                            <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-csc-red-ink">Declined</p>
 
-                        <div v-if="request.can_act" class="mt-4 flex flex-wrap gap-2">
-                            <a
-                                v-if="request.proof_url"
-                                :href="request.proof_url"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="inline-flex items-center gap-1.5 rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            >
-                                <AppIcon name="eye" size="sm" />
-                                Fee proof
-                            </a>
-                            <AppButton
-                                v-if="request.next_stage"
-                                size="sm"
-                                icon="check"
-                                @click="advanceRequest(request)"
-                            >
-                                {{ request.next_stage.value === 'shipped' ? 'Ship' : `Move to ${request.next_stage.label}` }}
-                            </AppButton>
-                            <AppButton size="sm" variant="ghost" icon="close" @click="rejectRequest(request)">
-                                Decline
-                            </AppButton>
-                        </div>
-                    </li>
-                </ul>
-            </AppCard>
+                            <div v-if="request.courier_name" class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                                <p class="flex gap-2">
+                                    <span class="text-csc-ink-subtle">Courier</span>
+                                    <span class="text-csc-ink">{{ request.courier_name }}</span>
+                                </p>
+                                <p class="flex gap-2">
+                                    <span class="text-csc-ink-subtle">Tracking</span>
+                                    <span class="font-mono text-csc-ink">{{ request.tracking_number || '—' }}</span>
+                                </p>
+                                <p v-if="request.verified_by" class="flex gap-2">
+                                    <span class="text-csc-ink-subtle">Fee verified by</span>
+                                    <span class="text-csc-ink">{{ request.verified_by }}</span>
+                                </p>
+                            </div>
 
-            <AppPagination :pagination="requests" label="physical OR requests" class="pt-1" />
+                            <details v-if="request.trail.length > 1" class="mt-3">
+                                <summary
+                                    class="cursor-pointer rounded text-xs font-medium text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                >
+                                    History ({{ request.trail.length }})
+                                </summary>
+                                <ol class="mt-2 space-y-1.5 border-l-2 border-csc-line pl-3">
+                                    <li v-for="(entry, index) in request.trail" :key="index" class="text-xs">
+                                        <span class="font-medium text-csc-ink">{{ entry.to }}</span>
+                                        <span class="text-csc-ink-subtle"> · {{ entry.actor }} · {{ entry.at }}</span>
+                                        <p v-if="entry.notes" class="text-csc-ink-muted">{{ entry.notes }}</p>
+                                    </li>
+                                </ol>
+                            </details>
+
+                            <div v-if="request.can_act" class="mt-4 flex flex-wrap gap-2">
+                                <a
+                                    v-if="request.proof_url"
+                                    :href="request.proof_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="inline-flex items-center gap-1.5 rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                >
+                                    <AppIcon name="eye" size="sm" />
+                                    Fee proof
+                                </a>
+                                <AppButton
+                                    v-if="request.next_stage"
+                                    size="sm"
+                                    icon="check"
+                                    @click="advanceRequest(request)"
+                                >
+                                    {{ request.next_stage.value === 'shipped' ? 'Ship' : `Move to ${request.next_stage.label}` }}
+                                </AppButton>
+                                <AppButton size="sm" variant="ghost" icon="close" @click="rejectRequest(request)">
+                                    Decline
+                                </AppButton>
+                            </div>
+                        </li>
+                    </ul>
+                </AppCard>
+
+                <AppPagination :pagination="requests" label="physical OR requests" class="pt-1" />
+            </div>
         </div>
 
         <AppPromptModal

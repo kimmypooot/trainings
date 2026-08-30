@@ -67,7 +67,10 @@
 </head>
 <body>
     <div class="card">
-        <img class="logo" src="/images/csc-logo.png" alt="Civil Service Commission">
+        {{-- The 256px rendition, as everywhere else: this renders small, and
+             the 4499×4269 master would be a quarter-megabyte download on a
+             page whose whole point is to load when something is broken. --}}
+        <img class="logo" src="/images/csc-logo-256.png" alt="Civil Service Commission">
         <div class="code">{{ $code }}</div>
         <h1>{{ $heading }}</h1>
         <p>{{ $message }}</p>

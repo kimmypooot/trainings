@@ -22,6 +22,7 @@ import AppModal from '@/Components/AppModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import { formatDateRange } from '@/dateRange';
+import { useDownload } from '@/useDownload';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -31,6 +32,8 @@ const props = defineProps({
     scopedTo: { type: String, default: null },
     transferTargets: { type: Array, default: () => [] },
 });
+
+const { downloading, start } = useDownload();
 
 const peso = (value) =>
     new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value ?? 0);
@@ -200,6 +203,8 @@ const exportUrl = computed(() => {
                         icon="download"
                         :href="exportUrl"
                         external
+                        :loading="downloading === exportUrl"
+                        @click.prevent="start(exportUrl)"
                     >
                         Export
                     </AppButton>

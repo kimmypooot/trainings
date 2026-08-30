@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { categorical, foldTail, formatCount, ordinal, percent, sumRows } from '@/charts';
+import { useChartMount } from '@/useChartMount';
 
 /**
  * A labelled horizontal bar list — the workhorse chart of the reports page.
@@ -79,6 +80,9 @@ function widthFor(count) {
 
     return Math.max(1.5, (value / peak.value) * 100);
 }
+
+// Bars grow from the baseline on first paint rather than appearing at length.
+const mounted = useChartMount();
 </script>
 
 <template>
@@ -110,7 +114,10 @@ function widthFor(count) {
             <span class="h-2.5 rounded-[4px] bg-csc-blue-tint" aria-hidden="true">
                 <span
                     class="block h-full rounded-r-[4px] transition-[width,opacity] duration-300 ease-out"
-                    :style="{ width: `${widthFor(row.count)}%`, backgroundColor: colorFor(index) }"
+                    :style="{
+                        width: mounted ? `${widthFor(row.count)}%` : '0%',
+                        backgroundColor: colorFor(index),
+                    }"
                     :class="active !== null && active !== index ? 'opacity-60' : ''"
                 />
             </span>

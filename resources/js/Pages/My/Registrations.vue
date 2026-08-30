@@ -563,6 +563,7 @@ const submitResubmit = () => {
                     hint="PDF, Word, Excel, PowerPoint or an image. Up to 10 MB."
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png"
                     :error="outputForm.errors.file"
+                    :progress="outputForm.progress"
                     required
                     @change="outputForm.file = $event"
                 />
@@ -591,6 +592,7 @@ const submitResubmit = () => {
                     hint="PDF, Word or an image. Up to 5 MB."
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                     :error="resubmitForm.errors.supporting_document"
+                    :progress="resubmitForm.progress"
                     required
                     @change="resubmitForm.supporting_document = $event"
                 />

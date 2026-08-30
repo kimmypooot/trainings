@@ -4,6 +4,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppBarList from '@/Components/AppBarList.vue';
 import AppShareBar from '@/Components/AppShareBar.vue';
 import { formatCount } from '@/charts';
+import { useDownload } from '@/useDownload';
 
 /**
  * The demographic side of a report: the cuts CSC reports upward, each on its
@@ -26,6 +27,8 @@ defineProps({
     exportUrl: { type: String, required: true },
 });
 
+const { downloading, start } = useDownload();
+
 const shares = [
     { key: 'sex', label: 'Gender' },
     { key: 'pwd', label: 'PWD' },
@@ -45,7 +48,15 @@ const bars = [
         subtitle="Counted per registration. Gender uses the profile's sex field; PWD is the declared disability status."
     >
         <template #action>
-            <AppButton :href="exportUrl" variant="ghost" size="sm" icon="download" external>
+            <AppButton
+                :href="exportUrl"
+                variant="ghost"
+                size="sm"
+                icon="download"
+                external
+                :loading="downloading === exportUrl"
+                @click.prevent="start(exportUrl)"
+            >
                 Download (CSV)
             </AppButton>
         </template>

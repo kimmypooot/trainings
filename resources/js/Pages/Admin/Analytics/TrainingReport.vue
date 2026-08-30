@@ -8,6 +8,7 @@ import AppSelect from '@/Components/AppSelect.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import RevenuePanel from '@/Pages/Admin/Analytics/RevenuePanel.vue';
 import BreakdownPanel from '@/Pages/Admin/Analytics/BreakdownPanel.vue';
+import ReportSkeleton from '@/Pages/Admin/Analytics/ReportSkeleton.vue';
 
 const props = defineProps({
     trainingOptions: { type: Array, required: true },
@@ -55,11 +56,37 @@ const breakdownExportUrl = computed(() => {
     return `/admin/exports/reports/breakdown?view=training&training_id=${props.selectedTrainingId}`;
 });
 
+/*
+ * Building a training's report is the expensive part of this screen, and until
+ * now the only sign it was happening was the navigation hairline: the picker
+ * kept showing the training you had just chosen above a report for the previous
+ * one, which is the worst of both — stale figures under a fresh label.
+ *
+ * The flag goes true on the change rather than when the request leaves, the
+ * same rule useFilters keeps, and the report region swaps to a skeleton instead
+ * of dimming: unlike a filtered list, the arriving report is not a narrowing of
+ * the one on screen, it is a different training entirely, and there is nothing
+ * to be gained by leaving the old one legible underneath.
+ */
+const loading = ref(false);
+
 function pickTraining(id) {
+    loading.value = true;
+
     router.get(
         '/admin/analytics',
         { view: 'training', training_id: id || undefined },
-        { preserveState: true, replace: true }
+        {
+            // Only the report and the scope it was built from. `trainingOptions`
+            // is the picker's own catalogue — re-querying the whole training
+            // list on every pick is exactly the waste `only` exists to stop.
+            only: ['trainingReport', 'selectedTrainingId'],
+            preserveState: true,
+            replace: true,
+            onFinish: () => {
+                loading.value = false;
+            },
+        }
     );
 }
 </script>
@@ -74,8 +101,12 @@ function pickTraining(id) {
             @update:model-value="pickTraining($event)"
         />
 
+        <div v-if="loading" class="mt-5">
+            <ReportSkeleton :tiles="4" label="Building report" />
+        </div>
+
         <AppEmptyState
-            v-if="!trainingReport"
+            v-else-if="!trainingReport"
             icon="analytics"
             title="No training selected"
             description="Pick a training above to see its revenue and participant breakdown."

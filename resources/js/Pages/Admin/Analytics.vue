@@ -1,9 +1,10 @@
 <script setup>
-import { Head, router } from '@inertiajs/vue3';
+import { Deferred, Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppTabs from '@/Components/AppTabs.vue';
 import Overview from '@/Pages/Admin/Analytics/Overview.vue';
+import ReportSkeleton from '@/Pages/Admin/Analytics/ReportSkeleton.vue';
 import TrainingReport from '@/Pages/Admin/Analytics/TrainingReport.vue';
 import PeriodReport from '@/Pages/Admin/Analytics/PeriodReport.vue';
 
@@ -14,7 +15,11 @@ const props = defineProps({
     trainingOptions: { type: Array, required: true },
     selectedTrainingId: { type: Number, default: null },
     period: { type: Object, required: true },
-    overview: { type: Object, required: true },
+    // Only sent for its own tab — the other two views never render it, and
+    // computing it for them was a dozen aggregate queries thrown away. On its
+    // own tab it arrives deferred, so it is absent for the first paint and the
+    // <Deferred> wrapper below covers the gap.
+    overview: { type: Object, default: null },
     trainingReport: { type: Object, default: null },
     periodReport: { type: Object, default: null },
 });
@@ -30,7 +35,19 @@ const tabs = [
 function switchTab(key) {
     if (key === props.view) return;
 
-    router.get('/admin/analytics', { view: key }, { preserveState: true, replace: true });
+    router.get(
+        '/admin/analytics',
+        { view: key },
+        {
+            // The reports and the scope they were built from; `trainingOptions`
+            // is the picker's own catalogue and is the same list on every tab,
+            // so switching does not re-query it. `canSeeMoney` and `scopedTo`
+            // are the viewer, which a tab cannot change.
+            only: ['view', 'overview', 'trainingReport', 'periodReport', 'period', 'selectedTrainingId'],
+            preserveState: true,
+            replace: true,
+        }
+    );
 }
 </script>
 
@@ -50,7 +67,14 @@ function switchTab(key) {
                 @update:model-value="switchTab"
             />
 
-            <Overview v-if="view === 'overview'" :overview="overview" />
+            <Deferred v-if="view === 'overview'" data="overview">
+                <template #fallback>
+                    <ReportSkeleton label="Loading overview" />
+                </template>
+
+                <Overview :overview="overview" />
+            </Deferred>
+
             <TrainingReport
                 v-else-if="view === 'training'"
                 :training-options="trainingOptions"

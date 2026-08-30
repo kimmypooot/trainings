@@ -41,6 +41,28 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         /*
+         * The export download handshake.
+         *
+         * An export is a plain <a href> to a streamed file, so there is no
+         * Inertia visit and no XHR — the page gets no event at all, and the
+         * button that started a thirty-second register export looked exactly
+         * like a button nobody had pressed. People pressed it again, and each
+         * press ran the whole query.
+         *
+         * SpreadsheetExport echoes the caller's `?_dl=` token back in this
+         * cookie, which is the only signal a page can see: it lands with the
+         * response headers, so the button can stop pretending once the browser
+         * has actually taken the download over. useDownload.js reads it and
+         * deletes it, which is why it cannot be encrypted — the value has to
+         * survive document.cookie unchanged to be matched against the token
+         * that was sent. It carries no secret: it is a random string the client
+         * itself just generated, being handed straight back.
+         */
+        $middleware->encryptCookies(except: [
+            'dl_token',
+        ]);
+
+        /*
          * VS Code port forwarding (and ngrok/Cloudflare Tunnel) terminate TLS at
          * their edge and reach PHP over plain http on loopback, describing the
          * real request in X-Forwarded-*. Without trusting those headers Laravel

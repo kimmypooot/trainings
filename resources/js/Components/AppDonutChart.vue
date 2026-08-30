@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { categorical, foldTail, formatCount, percent, sumRows } from '@/charts';
+import { useChartMount } from '@/useChartMount';
 
 /**
  * Part-to-whole, with the headline number in the hole.
@@ -59,6 +60,14 @@ const segments = computed(() => {
     });
 });
 
+/*
+ * Each arc traces out from its own start point rather than the whole ring
+ * sweeping from twelve o'clock: the offsets stay fixed and only the drawn
+ * length grows, so a segment ends where it always was and never crosses over a
+ * neighbour on its way there.
+ */
+const mounted = useChartMount();
+
 const heroValue = computed(() => props.centerValue ?? formatCount(total.value));
 
 const summary = computed(
@@ -104,10 +113,10 @@ const summary = computed(
                     fill="none"
                     :stroke="segment.color"
                     :stroke-width="active === null || active === segment.index ? THICKNESS : THICKNESS - 4"
-                    :stroke-dasharray="segment.dash"
+                    :stroke-dasharray="mounted ? segment.dash : `0 ${CIRCUMFERENCE}`"
                     :stroke-dashoffset="segment.offset"
                     :opacity="active === null || active === segment.index ? 1 : 0.45"
-                    class="transition-all duration-150"
+                    class="donut-segment"
                 />
             </svg>
 

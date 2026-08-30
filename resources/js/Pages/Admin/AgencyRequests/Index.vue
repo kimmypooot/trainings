@@ -11,8 +11,9 @@ import AppTextarea from '@/Components/AppTextarea.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import { useFilters, filteringClass } from '@/useFilters';
 
-defineProps({
+const props = defineProps({
     requests: { type: Object, required: true },
     filters: { type: Object, default: () => ({}) },
     counts: { type: Object, default: () => ({}) },
@@ -30,8 +31,25 @@ const tabs = [
     { value: 'all', label: 'Everything' },
 ];
 
-const setFilter = (filter) =>
-    router.get('/admin/agency-requests', { filter, page: 1 }, { preserveState: true, preserveScroll: true });
+/*
+ * `counts` is what the tabs are numbered with, across the whole queue — it is
+ * the thing that tells HRD there is work behind the tab they are not on, so it
+ * must not be narrowed to the tab they are.
+ */
+const activeFilter = ref(props.filters.filter ?? 'ours');
+
+const { filtering, apply } = useFilters({
+    url: '/admin/agency-requests',
+    only: ['requests', 'filters'],
+    preserveScroll: true,
+    query: () => ({ filter: activeFilter.value ?? undefined }),
+});
+
+// A tab is a click, so it goes at once rather than through the debounce.
+const setFilter = (filter) => {
+    activeFilter.value = filter;
+    apply({ immediate: true });
+};
 
 // Assign and notify-ord carry no payload; the server decides everything.
 const simplePost = (url) => router.post(url, {}, { preserveScroll: true });
@@ -141,159 +159,167 @@ const submitReject = () =>
                 </button>
             </div>
 
-            <AppCard :padded="requests.data.length > 0">
-                <AppEmptyState
-                    v-if="!requests.data.length"
-                    title="Nothing here"
-                    description="Agency requests appear here as they are filed."
-                    icon="document"
-                />
+            <!--
+                 The results dim while a filtered visit is out. The controls above stay
+                 live — narrowing further mid-request is the normal thing to do — but
+                 these rows are already superseded, so they stop taking clicks until
+                 they have been redrawn.
+            -->
+            <div :class="filteringClass(filtering)" :aria-busy="filtering" class="space-y-5">
+                <AppCard :padded="requests.data.length > 0">
+                    <AppEmptyState
+                        v-if="!requests.data.length"
+                        title="Nothing here"
+                        description="Agency requests appear here as they are filed."
+                        icon="document"
+                    />
 
-                <ul v-else class="space-y-4">
-                    <li
-                        v-for="request in requests.data"
-                        :key="request.id"
-                        class="rounded-lg border border-csc-line p-4"
-                    >
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="min-w-0">
-                                <p class="font-semibold text-csc-ink">
-                                    {{ request.training_title }}
-                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
-                                        {{ request.request_code }}
-                                    </span>
-                                </p>
-                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
-                                    {{ request.agency_name }} · {{ request.requester }}
-                                    <span class="text-csc-ink-subtle">&lt;{{ request.requester_email }}&gt;</span>
-                                </p>
-                                <p class="mt-1 text-sm text-csc-ink-muted">
-                                    {{ request.confirmed_start ?? request.proposed_start }} –
-                                    {{ request.confirmed_end ?? request.proposed_end }}
-                                    · {{ request.confirmed_venue ?? request.proposed_venue }}
-                                    <span v-if="request.confirmed_start" class="text-csc-ink-subtle">(confirmed)</span>
-                                    <span v-if="request.expected_participants" class="text-csc-ink-subtle">
-                                        · ~{{ request.expected_participants }} participants
-                                    </span>
+                    <ul v-else class="space-y-4">
+                        <li
+                            v-for="request in requests.data"
+                            :key="request.id"
+                            class="rounded-lg border border-csc-line p-4"
+                        >
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <p class="font-semibold text-csc-ink">
+                                        {{ request.training_title }}
+                                        <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
+                                            {{ request.request_code }}
+                                        </span>
+                                    </p>
+                                    <p class="mt-0.5 text-sm text-csc-ink-subtle">
+                                        {{ request.agency_name }} · {{ request.requester }}
+                                        <span class="text-csc-ink-subtle">&lt;{{ request.requester_email }}&gt;</span>
+                                    </p>
+                                    <p class="mt-1 text-sm text-csc-ink-muted">
+                                        {{ request.confirmed_start ?? request.proposed_start }} –
+                                        {{ request.confirmed_end ?? request.proposed_end }}
+                                        · {{ request.confirmed_venue ?? request.proposed_venue }}
+                                        <span v-if="request.confirmed_start" class="text-csc-ink-subtle">(confirmed)</span>
+                                        <span v-if="request.expected_participants" class="text-csc-ink-subtle">
+                                            · ~{{ request.expected_participants }} participants
+                                        </span>
+                                    </p>
+                                </div>
+                                <AppBadge :status="request.status" :label="request.status_label" />
+                            </div>
+
+                            <p class="mt-2 text-xs text-csc-ink-subtle">
+                                Filed {{ request.submitted_at }}
+                                <template v-if="request.assigned_to"> · handled by {{ request.assigned_to }}</template>
+                                <template v-else> · unassigned</template>
+                                <template v-if="request.ord_notified"> · ORD notified</template>
+                            </p>
+
+                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                                Declined: {{ request.rejection_reason }}
+                            </p>
+                            <p v-if="request.cancellation_reason" class="mt-2 text-sm text-csc-ink-muted">
+                                Withdrawn: {{ request.cancellation_reason }}
+                            </p>
+
+                            <div
+                                v-if="request.requirements_text"
+                                class="mt-3 rounded-lg border border-csc-line bg-csc-mist/40 p-3"
+                            >
+                                <h3 class="mb-1 text-xs font-semibold tracking-wide text-csc-ink-muted uppercase">
+                                    Requirements sent
+                                </h3>
+                                <p class="text-sm whitespace-pre-line text-csc-ink-muted">
+                                    {{ request.requirements_text }}
                                 </p>
                             </div>
-                            <AppBadge :status="request.status" :label="request.status_label" />
-                        </div>
 
-                        <p class="mt-2 text-xs text-csc-ink-subtle">
-                            Filed {{ request.submitted_at }}
-                            <template v-if="request.assigned_to"> · handled by {{ request.assigned_to }}</template>
-                            <template v-else> · unassigned</template>
-                            <template v-if="request.ord_notified"> · ORD notified</template>
-                        </p>
-
-                        <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
-                            Declined: {{ request.rejection_reason }}
-                        </p>
-                        <p v-if="request.cancellation_reason" class="mt-2 text-sm text-csc-ink-muted">
-                            Withdrawn: {{ request.cancellation_reason }}
-                        </p>
-
-                        <div
-                            v-if="request.requirements_text"
-                            class="mt-3 rounded-lg border border-csc-line bg-csc-mist/40 p-3"
-                        >
-                            <h3 class="mb-1 text-xs font-semibold tracking-wide text-csc-ink-muted uppercase">
-                                Requirements sent
-                            </h3>
-                            <p class="text-sm whitespace-pre-line text-csc-ink-muted">
-                                {{ request.requirements_text }}
+                            <!-- Post-training state, which is what the payment turns on. -->
+                            <p v-if="request.completion_submitted" class="mt-2 text-sm text-csc-ink">
+                                Documents submitted
+                                <span v-if="request.payment_amount" class="text-csc-ink-subtle">
+                                    · ₱{{ request.payment_amount }} declared
+                                </span>
+                                <span v-if="request.payment_verified_at" class="text-csc-ink-subtle">
+                                    · verified {{ request.payment_verified_at }}
+                                </span>
                             </p>
-                        </div>
+                            <p v-if="request.missing_documents.length" class="mt-1 text-xs text-warning">
+                                Missing: {{ request.missing_documents.join(', ') }}
+                            </p>
 
-                        <!-- Post-training state, which is what the payment turns on. -->
-                        <p v-if="request.completion_submitted" class="mt-2 text-sm text-csc-ink">
-                            Documents submitted
-                            <span v-if="request.payment_amount" class="text-csc-ink-subtle">
-                                · ₱{{ request.payment_amount }} declared
-                            </span>
-                            <span v-if="request.payment_verified_at" class="text-csc-ink-subtle">
-                                · verified {{ request.payment_verified_at }}
-                            </span>
-                        </p>
-                        <p v-if="request.missing_documents.length" class="mt-1 text-xs text-warning">
-                            Missing: {{ request.missing_documents.join(', ') }}
-                        </p>
-
-                        <details v-if="request.documents.length" class="mt-3">
-                            <summary
-                                class="cursor-pointer rounded text-xs font-medium text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            >
-                                Documents ({{ request.documents.length }})
-                            </summary>
-                            <ul class="mt-2 space-y-1.5">
-                                <li
-                                    v-for="document in request.documents"
-                                    :key="document.id"
-                                    class="text-xs text-csc-ink-muted"
+                            <details v-if="request.documents.length" class="mt-3">
+                                <summary
+                                    class="cursor-pointer rounded text-xs font-medium text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                 >
-                                    <a
-                                        :href="document.url"
-                                        class="rounded font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    Documents ({{ request.documents.length }})
+                                </summary>
+                                <ul class="mt-2 space-y-1.5">
+                                    <li
+                                        v-for="document in request.documents"
+                                        :key="document.id"
+                                        class="text-xs text-csc-ink-muted"
                                     >
-                                        {{ document.kind_label }}
-                                    </a>
-                                    — {{ document.filename }} ({{ document.size }}),
-                                    {{ document.uploaded_by ?? 'unknown' }}, {{ document.uploaded_at }}
-                                </li>
-                            </ul>
-                        </details>
+                                        <a
+                                            :href="document.url"
+                                            class="rounded font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        >
+                                            {{ document.kind_label }}
+                                        </a>
+                                        — {{ document.filename }} ({{ document.size }}),
+                                        {{ document.uploaded_by ?? 'unknown' }}, {{ document.uploaded_at }}
+                                    </li>
+                                </ul>
+                            </details>
 
-                        <div class="mt-4 flex flex-wrap gap-2">
-                            <AppButton
-                                v-if="request.can_assign"
-                                size="sm"
-                                variant="ghost"
-                                icon="user"
-                                @click="simplePost(`/admin/agency-requests/${request.id}/assign`)"
-                            >
-                                Assign to Me
-                            </AppButton>
-                            <AppButton
-                                v-if="request.can_notify_ord"
-                                size="sm"
-                                variant="ghost"
-                                icon="envelope"
-                                @click="simplePost(`/admin/agency-requests/${request.id}/notify-ord`)"
-                            >
-                                Mark ORD Notified
-                            </AppButton>
-                            <AppButton
-                                v-if="request.can_send_requirements"
-                                size="sm"
-                                icon="upload"
-                                @click="startSending(request)"
-                            >
-                                Send Requirements
-                            </AppButton>
-                            <AppButton
-                                v-if="request.can_verify_payment"
-                                size="sm"
-                                icon="check"
-                                @click="startVerifying(request)"
-                            >
-                                Verify Payment &amp; Complete
-                            </AppButton>
-                            <AppButton
-                                v-if="request.can_reject"
-                                size="sm"
-                                variant="ghost"
-                                icon="close"
-                                @click="startRejecting(request)"
-                            >
-                                Decline
-                            </AppButton>
-                        </div>
-                    </li>
-                </ul>
-            </AppCard>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <AppButton
+                                    v-if="request.can_assign"
+                                    size="sm"
+                                    variant="ghost"
+                                    icon="user"
+                                    @click="simplePost(`/admin/agency-requests/${request.id}/assign`)"
+                                >
+                                    Assign to Me
+                                </AppButton>
+                                <AppButton
+                                    v-if="request.can_notify_ord"
+                                    size="sm"
+                                    variant="ghost"
+                                    icon="envelope"
+                                    @click="simplePost(`/admin/agency-requests/${request.id}/notify-ord`)"
+                                >
+                                    Mark ORD Notified
+                                </AppButton>
+                                <AppButton
+                                    v-if="request.can_send_requirements"
+                                    size="sm"
+                                    icon="upload"
+                                    @click="startSending(request)"
+                                >
+                                    Send Requirements
+                                </AppButton>
+                                <AppButton
+                                    v-if="request.can_verify_payment"
+                                    size="sm"
+                                    icon="check"
+                                    @click="startVerifying(request)"
+                                >
+                                    Verify Payment &amp; Complete
+                                </AppButton>
+                                <AppButton
+                                    v-if="request.can_reject"
+                                    size="sm"
+                                    variant="ghost"
+                                    icon="close"
+                                    @click="startRejecting(request)"
+                                >
+                                    Decline
+                                </AppButton>
+                            </div>
+                        </li>
+                    </ul>
+                </AppCard>
 
-            <AppPagination :pagination="requests" label="requests" class="pt-1" />
+                <AppPagination :pagination="requests" label="requests" class="pt-1" />
+            </div>
         </div>
 
         <!-- Requirements -->
@@ -321,6 +347,7 @@ const submitReject = () =>
                     accept=".pdf,.doc,.docx"
                     required
                     :error="requirementsForm.errors.response_letter"
+                    :progress="requirementsForm.progress"
                     @change="requirementsForm.response_letter = $event"
                 />
 
@@ -330,6 +357,7 @@ const submitReject = () =>
                     hint="Optional — some requests need only the letter."
                     accept=".pdf,.doc,.docx"
                     :error="requirementsForm.errors.blank_confirmation_form"
+                    :progress="requirementsForm.progress"
                     @change="requirementsForm.blank_confirmation_form = $event"
                 />
 
@@ -391,6 +419,7 @@ const submitReject = () =>
                     hint="Optional — attach the formal letter if one was issued."
                     accept=".pdf,.doc,.docx"
                     :error="rejectForm.errors.rejection_letter"
+                    :progress="rejectForm.progress"
                     @change="rejectForm.rejection_letter = $event"
                 />
 

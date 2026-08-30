@@ -61,7 +61,29 @@ class AnalyticsController extends Controller
                 'month' => $scope->month,
                 'quarter' => $scope->quarter,
             ],
-            'overview' => $this->overview($request, $officeId),
+            /*
+             * Guarded on the view, like the other two reports below. The
+             * overview fans out into a dozen aggregates — the headline tallies,
+             * twelve months of registrations, category and field-office splits,
+             * attendance, the whole demographics block, charge-to and the top
+             * agencies — and none of it is rendered on the other two tabs,
+             * which only ever showed it to throw it away.
+             *
+             * Deferred on the tab that *does* render it, because those dozen
+             * aggregates all had to finish before the browser received a single
+             * byte: the tab bar, the scope notice and the page shell — none of
+             * which depend on any of it — were held hostage by the slowest
+             * query in the set. Now the shell paints immediately against a
+             * skeleton and the figures land in a follow-up request.
+             *
+             * Deferred rather than lazy because nothing has to ask for it: this
+             * is the tab's whole content, always wanted, just not wanted
+             * *before* the page can be drawn. Inertia requests it on its own
+             * once the page mounts.
+             */
+            'overview' => $view === 'overview'
+                ? Inertia::defer(fn () => $this->overview($request, $officeId))
+                : null,
             'trainingReport' => $view === 'training'
                 ? $this->trainingReport($scope, $officeId, $canSeeMoney)
                 : null,

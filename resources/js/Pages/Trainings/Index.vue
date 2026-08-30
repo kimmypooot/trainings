@@ -16,6 +16,7 @@ import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
 import TrainingRegistrationForm from '@/Components/TrainingRegistrationForm.vue';
 import { formatDateRange, spansMultipleDays } from '@/dateRange';
 import { registrationCardToneFor } from '@/statusTone';
+import { useFilters, filteringClass } from '@/useFilters';
 
 const props = defineProps({
     trainings: { type: Object, required: true },
@@ -42,33 +43,30 @@ const categoryOptions = computed(() =>
 );
 const sortOptions = [{ value: 'closing', label: 'Closing soon' }];
 
-// A filter change always starts from the first page; staying on, say, page 4 of
-// a narrowed search reads as "nothing found". preserveState keeps the page from
-// flashing while the new filter set loads.
-const applyFilters = () => {
-    router.get(
-        '/trainings',
-        {
-            search: search.value.trim() || undefined,
-            mode: mode.value || undefined,
-            category: category.value || undefined,
-            open: openOnly.value ? 1 : undefined,
-            sort: sort.value || undefined,
-            page: 1,
-        },
-        { preserveState: true, replace: true }
-    );
-};
+/*
+ * `filterOptions` and `chargeOptions` are static enum lists and `registeredCount`
+ * is the visitor's own total, so only the catalogue itself comes back.
+ *
+ * `details` is left out on purpose. It is loaded on demand by the card's View
+ * Details, which does its own partial reload with a ?details= id; including it
+ * here would send a null back on every keystroke and close an open modal.
+ */
+const { filtering, apply } = useFilters({
+    url: '/trainings',
+    only: ['trainings', 'filters'],
+    query: () => ({
+        search: search.value.trim() || undefined,
+        mode: mode.value || undefined,
+        category: category.value || undefined,
+        open: openOnly.value ? 1 : undefined,
+        sort: sort.value || undefined,
+    }),
+});
 
 // Only the text box is debounced — a keystroke pauses while the dropdowns and
 // toggle act on click, where a 300ms lag reads as a missed tap.
-let searchDebounce;
-watch(search, () => {
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(applyFilters, 300);
-});
-
-watch([mode, category, openOnly, sort], applyFilters);
+watch(search, () => apply());
+watch([mode, category, openOnly, sort], () => apply({ immediate: true }));
 
 const hasActiveFilters = computed(
     () => search.value.trim() !== '' || Boolean(mode.value || category.value || openOnly.value || sort.value)
@@ -263,105 +261,113 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                 </div>
             </div>
 
-            <div v-if="trainings.data.length" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <article
-                    v-for="training in trainings.data"
-                    :key="training.id"
-                    class="relative flex cursor-pointer flex-col overflow-hidden rounded-xl border transition-shadow duration-150 hover:shadow-md"
-                    :class="cardTone(training)"
-                    @mouseenter="preloadDetails(training)"
-                    @mouseleave="cancelPreload"
-                    @focusin="preloadDetails(training)"
-                >
-                    <div class="flex items-start gap-4 p-5">
-                        <!-- Date block reads faster than a formatted string in a grid -->
-                        <div class="flex size-14 shrink-0 flex-col items-center justify-center rounded-lg bg-csc-blue text-white">
-                            <span class="text-lg leading-none font-bold">{{ training.day }}</span>
-                            <span class="mt-0.5 text-2xs font-medium uppercase">{{ training.month }}</span>
-                        </div>
+            <!--
+                 The results dim while a filtered visit is out. The controls above stay
+                 live — narrowing further mid-request is the normal thing to do — but
+                 these rows are already superseded, so they stop taking clicks until
+                 they have been redrawn.
+            -->
+            <div :class="filteringClass(filtering)" :aria-busy="filtering" class="space-y-5">
+                <div v-if="trainings.data.length" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <article
+                        v-for="training in trainings.data"
+                        :key="training.id"
+                        class="relative flex cursor-pointer flex-col overflow-hidden rounded-xl border transition-shadow duration-150 hover:shadow-md"
+                        :class="cardTone(training)"
+                        @mouseenter="preloadDetails(training)"
+                        @mouseleave="cancelPreload"
+                        @focusin="preloadDetails(training)"
+                    >
+                        <div class="flex items-start gap-4 p-5">
+                            <!-- Date block reads faster than a formatted string in a grid -->
+                            <div class="flex size-14 shrink-0 flex-col items-center justify-center rounded-lg bg-csc-blue text-white">
+                                <span class="text-lg leading-none font-bold">{{ training.day }}</span>
+                                <span class="mt-0.5 text-2xs font-medium uppercase">{{ training.month }}</span>
+                            </div>
 
-                        <div class="min-w-0 flex-1">
-                            <!-- The stretched-link overlay makes the whole card a
-                                 target; both it and View Details open the modal. -->
-                            <button
-                                type="button"
-                                class="after:absolute after:inset-0 text-left text-sm leading-snug font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                @click="openDetails(training)"
-                            >
-                                {{ training.title }}
-                            </button>
-                            <p class="mt-1 text-xs text-csc-ink-subtle">{{ training.venue }}</p>
-                            <!-- The run's range stays on a single row: a dash
-                                 joins start and end when the run spans days. -->
-                            <p class="mt-0.5 text-xs text-csc-ink-subtle">
-                                {{ formatDateRange(training.starts_at, training.ends_at) }}
-                            </p>
+                            <div class="min-w-0 flex-1">
+                                <!-- The stretched-link overlay makes the whole card a
+                                     target; both it and View Details open the modal. -->
+                                <button
+                                    type="button"
+                                    class="after:absolute after:inset-0 text-left text-sm leading-snug font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                    @click="openDetails(training)"
+                                >
+                                    {{ training.title }}
+                                </button>
+                                <p class="mt-1 text-xs text-csc-ink-subtle">{{ training.venue }}</p>
+                                <!-- The run's range stays on a single row: a dash
+                                     joins start and end when the run spans days. -->
+                                <p class="mt-0.5 text-xs text-csc-ink-subtle">
+                                    {{ formatDateRange(training.starts_at, training.ends_at) }}
+                                </p>
 
-                            <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                                <span class="rounded-full bg-csc-blue-tint px-2 py-0.5 font-medium text-csc-blue">
-                                    {{ training.mode_label }}
-                                </span>
-                                <AppBadge v-if="training.is_supervisory" status="supervisory" />
-                                <span v-if="training.duration_days" class="text-csc-ink-subtle">
-                                    {{ training.duration_days }} {{ training.duration_days === 1 ? 'day' : 'days' }}
-                                </span>
-                                <span class="font-medium text-csc-ink-subtle">
-                                    {{ training.payment_amount ? formatFee(training.payment_amount) : 'Free' }}
-                                </span>
+                                <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                    <span class="rounded-full bg-csc-blue-tint px-2 py-0.5 font-medium text-csc-blue">
+                                        {{ training.mode_label }}
+                                    </span>
+                                    <AppBadge v-if="training.is_supervisory" status="supervisory" />
+                                    <span v-if="training.duration_days" class="text-csc-ink-subtle">
+                                        {{ training.duration_days }} {{ training.duration_days === 1 ? 'day' : 'days' }}
+                                    </span>
+                                    <span class="font-medium text-csc-ink-subtle">
+                                        {{ training.payment_amount ? formatFee(training.payment_amount) : 'Free' }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!--
-                        flex-wrap: the button grew a visible border and padding
-                        when it stopped being a bare text link, and "Opens
-                        {date}" is long enough that the two together can outrun
-                        a narrow phone's card width. Wrapping to a second line
-                        beats the alternative of either one clipping.
-                    -->
-                    <div class="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-csc-line px-5 py-3">
-                        <AppBadge v-if="training.is_registered" :status="training.registration_status" />
-                        <span v-else-if="training.is_full" class="text-xs font-semibold text-danger">Full</span>
-                        <span v-else-if="training.registration_closed" class="text-xs font-semibold text-csc-ink-subtle">
-                            Registration closed
-                        </span>
-                        <span v-else-if="training.registration_not_yet_open" class="text-xs font-semibold text-csc-ink-subtle">
-                            Opens {{ training.registration_opens_at }}
-                        </span>
-                        <span v-else-if="training.slots_remaining !== null" class="text-xs font-medium text-csc-ink-subtle">
-                            {{ training.slots_remaining }} slot{{ training.slots_remaining === 1 ? '' : 's' }} left
-                        </span>
-                        <span v-else class="text-xs font-medium text-csc-ink-subtle">Open</span>
+                        <!--
+                            flex-wrap: the button grew a visible border and padding
+                            when it stopped being a bare text link, and "Opens
+                            {date}" is long enough that the two together can outrun
+                            a narrow phone's card width. Wrapping to a second line
+                            beats the alternative of either one clipping.
+                        -->
+                        <div class="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-csc-line px-5 py-3">
+                            <AppBadge v-if="training.is_registered" :status="training.registration_status" />
+                            <span v-else-if="training.is_full" class="text-xs font-semibold text-danger">Full</span>
+                            <span v-else-if="training.registration_closed" class="text-xs font-semibold text-csc-ink-subtle">
+                                Registration closed
+                            </span>
+                            <span v-else-if="training.registration_not_yet_open" class="text-xs font-semibold text-csc-ink-subtle">
+                                Opens {{ training.registration_opens_at }}
+                            </span>
+                            <span v-else-if="training.slots_remaining !== null" class="text-xs font-medium text-csc-ink-subtle">
+                                {{ training.slots_remaining }} slot{{ training.slots_remaining === 1 ? '' : 's' }} left
+                            </span>
+                            <span v-else class="text-xs font-medium text-csc-ink-subtle">Open</span>
 
-                        <AppButton variant="ghost" size="sm" @click="openDetails(training)">
-                            View Details
-                        </AppButton>
-                    </div>
-                </article>
+                            <AppButton variant="ghost" size="sm" @click="openDetails(training)">
+                                View Details
+                            </AppButton>
+                        </div>
+                    </article>
+                </div>
+
+                <AppPagination v-if="trainings.data.length" :pagination="trainings" label="trainings" class="pt-1" />
+
+                <!-- Filtered search that came up empty deserves its own message -->
+                <AppCard v-else-if="hasActiveFilters" :padded="false">
+                    <AppEmptyState
+                        title="No trainings match your search"
+                        description="Try a different keyword, or clear the filters to see everything coming up."
+                        icon="calendar"
+                    >
+                        <template #action>
+                            <AppButton variant="ghost" size="sm" @click="clearFilters">Clear filters</AppButton>
+                        </template>
+                    </AppEmptyState>
+                </AppCard>
+
+                <AppCard v-else :padded="false">
+                    <AppEmptyState
+                        title="No trainings available right now"
+                        description="When the Commission publishes a new program, it will appear here."
+                        icon="calendar"
+                    />
+                </AppCard>
             </div>
-
-            <AppPagination v-if="trainings.data.length" :pagination="trainings" label="trainings" class="pt-1" />
-
-            <!-- Filtered search that came up empty deserves its own message -->
-            <AppCard v-else-if="hasActiveFilters" :padded="false">
-                <AppEmptyState
-                    title="No trainings match your search"
-                    description="Try a different keyword, or clear the filters to see everything coming up."
-                    icon="calendar"
-                >
-                    <template #action>
-                        <AppButton variant="ghost" size="sm" @click="clearFilters">Clear filters</AppButton>
-                    </template>
-                </AppEmptyState>
-            </AppCard>
-
-            <AppCard v-else :padded="false">
-                <AppEmptyState
-                    title="No trainings available right now"
-                    description="When the Commission publishes a new program, it will appear here."
-                    icon="calendar"
-                />
-            </AppCard>
 
             <!-- Training detail modal: View Details opens this instead of a page. -->
             <AppModal

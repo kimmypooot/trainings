@@ -113,7 +113,14 @@ const stillAvailable = [
         <main class="relative flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
             <div class="w-full max-w-5xl overflow-hidden rounded-xl border border-white/10 bg-white shadow-xl">
                 <header class="flex items-center gap-3 border-b border-csc-line bg-csc-blue-tint/60 px-8 py-3 sm:px-10">
-                    <img src="/images/csc-logo.png" alt="Civil Service Commission" class="h-9 w-auto shrink-0" />
+                    <!--
+                        The 256px rendition, like every other logo in the app —
+                        not the 4499×4269 master. This masthead is 36px tall,
+                        and the master is a quarter of a megabyte that paints
+                        itself in visibly on the one page a visitor reaches
+                        precisely when things are already slow.
+                    -->
+                    <img src="/images/csc-logo-256.png" alt="Civil Service Commission" class="h-9 w-auto shrink-0" />
                     <div class="min-w-0">
                         <p class="text-xs font-semibold tracking-wide text-csc-blue uppercase">
                             Civil Service Commission — Regional Office VIII

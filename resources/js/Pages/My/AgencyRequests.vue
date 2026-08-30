@@ -191,6 +191,7 @@ const submitCancel = () =>
                         accept=".pdf,.doc,.docx"
                         required
                         :error="form.errors.request_letter"
+                        :progress="form.progress"
                         @change="form.request_letter = $event"
                     />
 
@@ -376,6 +377,7 @@ const submitCancel = () =>
                     accept=".pdf,.jpg,.jpeg,.png"
                     required
                     :error="confirmForm.errors.signed_confirmation_form"
+                    :progress="confirmForm.progress"
                     @change="confirmForm.signed_confirmation_form = $event"
                 />
 
@@ -409,6 +411,7 @@ const submitCancel = () =>
                     :hint="kind.required ? undefined : 'Optional.'"
                     accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
                     :error="completionForm.errors[kind.value]"
+                    :progress="completionForm.progress"
                     @change="completionForm[kind.value] = $event"
                 />
 

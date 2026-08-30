@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal.vue';
+import AppBrandBackdrop from '@/Components/AppBrandBackdrop.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
@@ -272,34 +273,12 @@ const pages = computed(() => {
         <!-- Hero -->
         <section class="relative flex min-h-svh flex-col overflow-hidden text-white">
             <!--
-                The hero photo is this page's LCP element, so it is a real <img>
-                with an explicit high fetch priority — a CSS background would
-                only be discovered after the stylesheet parses. WebP first, JPEG
-                fallback; the preload in app.blade.php already warms the WebP.
+                The facade and its gradient wash, shared with the verification
+                screens. `priority` marks it as this page's LCP element — it is
+                the largest paint on the site, and the preload in
+                app.blade.php is aimed at it.
             -->
-            <picture class="absolute inset-0" aria-hidden="true">
-                <source srcset="/images/cscbg_facade.webp" type="image/webp" />
-                <img
-                    src="/images/cscbg_facade.jpeg"
-                    alt=""
-                    fetchpriority="high"
-                    decoding="async"
-                    class="absolute inset-0 size-full object-cover"
-                />
-            </picture>
-            <!-- Brand gradient overlay keeps the facade readable behind white text -->
-            <div
-                class="absolute inset-0"
-                style="
-                    background: linear-gradient(
-                        160deg,
-                        color-mix(in srgb, var(--color-csc-blue-deep) 93%, transparent) 0%,
-                        color-mix(in srgb, var(--color-csc-blue) 87%, transparent) 55%,
-                        color-mix(in srgb, var(--color-csc-blue-deep) 95%, transparent) 100%
-                    );
-                "
-                aria-hidden="true"
-            />
+            <AppBrandBackdrop priority />
 
             <!--
                 flex-1 pushes the wave to the very bottom so the hero reads as

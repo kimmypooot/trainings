@@ -338,6 +338,7 @@ const submitPhysicalOr = () =>
                                 :hint="proofHint"
                                 :preview-hint="proofPreviewHint"
                                 :error="form.errors.proof"
+                                :progress="form.progress"
                                 @change="form.proof = $event"
                             />
 
@@ -578,6 +579,7 @@ const submitPhysicalOr = () =>
                     accept=".pdf,.jpg,.jpeg,.png"
                     required
                     :error="refundForm.errors.proof"
+                    :progress="refundForm.progress"
                     @change="refundForm.proof = $event"
                 />
 
@@ -661,6 +663,7 @@ const submitPhysicalOr = () =>
                     hint="Proof of the courier fee payment. PDF, JPG or PNG, up to 5 MB."
                     accept=".pdf,.jpg,.jpeg,.png"
                     :error="orForm.errors.proof"
+                    :progress="orForm.progress"
                     @change="orForm.proof = $event"
                 />
 
