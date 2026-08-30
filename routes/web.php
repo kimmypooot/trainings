@@ -14,7 +14,10 @@ use App\Http\Controllers\Admin\MaintenanceController as AdminMaintenanceControll
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PhysicalOrRequestController as AdminPhysicalOrRequestController;
+use App\Http\Controllers\Admin\RegistrationTransferController;
 use App\Http\Controllers\Admin\RequestQueueController as AdminRequestQueueController;
+use App\Http\Controllers\Admin\RosterBulkController;
+use App\Http\Controllers\Admin\RosterController;
 use App\Http\Controllers\Admin\ScanLinkController as AdminScanLinkController;
 use App\Http\Controllers\Admin\ScannerController;
 use App\Http\Controllers\Admin\SearchController;
@@ -324,25 +327,25 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
              */
             Route::get('/trainings/{training}/affected', [AdminTrainingController::class, 'affected'])
                 ->name('trainings.affected');
-            Route::post('/registrations/{registration}/review', [AdminTrainingController::class, 'review'])
+            Route::post('/registrations/{registration}/review', [RosterController::class, 'review'])
                 ->name('registrations.review');
-            Route::post('/registrations/{registration}/complete', [AdminTrainingController::class, 'complete'])
+            Route::post('/registrations/{registration}/complete', [RosterController::class, 'complete'])
                 ->name('registrations.complete');
 
             // Cancelling on a participant's behalf — a phoned-in withdrawal, a
             // duplicate, a confirmed no-show. Reviewing a cancellation the
             // participant *filed* is a different thing and lives in the request
             // queue; this one starts the decision, so it is HRD's alone.
-            Route::post('/registrations/{registration}/cancel', [AdminTrainingController::class, 'cancelRegistration'])
+            Route::post('/registrations/{registration}/cancel', [RosterController::class, 'cancelRegistration'])
                 ->name('registrations.cancel');
 
             // One decision applied to a roster selection.
             // Moving a roster selection to another run — rescheduling and
             // splitting are HRD's calls, so it sits with the same roles that
             // create trainings rather than with everyone who can read a roster.
-            Route::post('/trainings/{training}/registrations/transfer', [AdminTrainingController::class, 'transfer'])
+            Route::post('/trainings/{training}/registrations/transfer', RegistrationTransferController::class)
                 ->name('trainings.registrations.transfer');
-            Route::post('/trainings/{training}/registrations/bulk', [AdminTrainingController::class, 'bulk'])
+            Route::post('/trainings/{training}/registrations/bulk', RosterBulkController::class)
                 ->name('registrations.bulk');
 
             // Takes back the decision just made, within its window.
@@ -356,7 +359,7 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         });
 
         Route::get('/trainings', [AdminTrainingController::class, 'index'])->name('trainings.index');
-        Route::get('/trainings/{training}/roster', [AdminTrainingController::class, 'roster'])
+        Route::get('/trainings/{training}/roster', [RosterController::class, 'show'])
             ->name('trainings.roster');
 
         /*
@@ -387,7 +390,7 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                  * The controller re-resolves the registration against the
                  * field-office scope, exactly as the roster does.
                  */
-                Route::post('/registrations/{registration}/supervisory-document', [AdminTrainingController::class, 'reviewSupervisoryDocument'])
+                Route::post('/registrations/{registration}/supervisory-document', [RosterController::class, 'reviewSupervisoryDocument'])
                     ->name('registrations.supervisory-document');
 
                 /*
