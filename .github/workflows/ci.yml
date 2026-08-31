@@ -1,0 +1,125 @@
+# Runs the guards this repo already carries, on every push and pull request.
+#
+# The suite has always existed — 48 feature test files, ~855 test methods, and
+# the named invariant guards (ExportScopingTest, FieldOfficeScopingTest,
+# ScanLinkTest, TrustProxiesTest) that CLAUDE.md points at as the enforcement
+# for field-office scoping, the public scan door and proxy trust. Until this
+# file it all only ran when somebody remembered to type `composer test`, which
+# means the guards protected the branch exactly as often as a person recalled
+# them. Now they protect it on every change.
+#
+# `npm run build` is in here for a reason beyond packaging: with no type
+# checking across the Inertia boundary, the Vue compiler is the only thing in
+# CI that reads a template at all. Be clear about its limit, though — it
+# catches syntax, not semantics. A `defineProps` whose result is never bound to
+# `props` compiles clean, ships, and renders a blank page; that happened in this
+# repo on 2026-08-29 and only the browser console caught it. A green build here
+# means "it compiled", never "it works". Closing that gap is what type checking
+# across the Inertia boundary would buy, and this workflow is where a
+# `vue-tsc --noEmit` step would go.
+
+name: CI
+
+on:
+  push:
+    branches: [main, v1-parity-port]
+  pull_request:
+
+# A second push to the same branch makes the first run's answer irrelevant, so
+# cancel it rather than queueing behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP — Pint + PHPStan + PHPUnit
+    runs-on: ubuntu-latest
+
+    services:
+      # tests/TestCase.php creates csc_tims_test itself on first boot, so this
+      # only has to be a reachable server with the credentials phpunit.xml
+      # pins (root, empty password).
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          # gd downscales profile photos and avatars, zip builds tims:backup,
+          # dom/mbstring are dompdf's, pdo_mysql is the suite's.
+          extensions: gd, zip, dom, mbstring, pdo_mysql, bcmath, fileinfo
+          # The oversized-upload fixture in ProfilePhotoTest needs more than a
+          # stock 128M; phpunit.xml pins the same value for the child process.
+          ini-values: memory_limit=512M
+          coverage: none
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare the application environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Check formatting
+        run: vendor/bin/pint --test
+
+      # The generated enum vocabulary must match the PHP it mirrors. Without
+      # this a renamed case is a green build and a filter that silently stops
+      # matching in the browser.
+      - name: Check generated TypeScript is current
+        run: php artisan tims:types --check
+
+      # Level 5 against phpstan-baseline.neon, so this reports only what is
+      # newly broken rather than the 1,239 pre-existing Eloquent-generics
+      # findings the baseline records.
+      - name: Static analysis
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+      - name: Run the test suite
+        run: php artisan test
+
+  js:
+    name: JS — types + Vitest + build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # Type checking across the Inertia boundary. Currently this only reads
+      # files that opt in (.ts, or <script setup lang="ts">), which is what makes
+      # the adoption gradual — but it is already enough to reject a status
+      # literal the server would never send.
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run Vitest
+        run: npm run test
+
+      # The build is a correctness check here, not a packaging step: a Vue
+      # template error is a build failure and nothing else in CI would see it.
+      - name: Build assets
+        run: npm run build

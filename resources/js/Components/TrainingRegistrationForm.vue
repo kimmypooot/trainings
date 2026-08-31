@@ -163,7 +163,7 @@ const submit = () =>
                     />
                     <span class="min-w-0">
                         <span class="block text-sm font-medium text-csc-ink">{{ option.label }}</span>
-                        <span class="block text-xs text-csc-ink/60">{{ option.description }}</span>
+                        <span class="block text-xs text-csc-ink-subtle">{{ option.description }}</span>
                     </span>
                 </label>
             </div>
@@ -180,6 +180,7 @@ const submit = () =>
             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
             required
             :error="form.errors.supporting_document"
+            :progress="form.progress"
             @change="form.supporting_document = $event"
         />
 
@@ -216,30 +217,30 @@ const submit = () =>
 
             <dl class="mt-3 space-y-2 text-sm">
                 <div class="flex justify-between gap-4">
-                    <dt class="text-csc-ink/60">Training</dt>
+                    <dt class="text-csc-ink-subtle">Training</dt>
                     <dd class="text-right font-medium text-csc-ink">{{ training.title }}</dd>
                 </div>
 
                 <div v-if="training.payment_required" class="flex justify-between gap-4">
-                    <dt class="text-csc-ink/60">Fee</dt>
+                    <dt class="text-csc-ink-subtle">Fee</dt>
                     <dd class="text-right font-medium text-csc-ink">₱{{ money(training.payment_amount) }}</dd>
                 </div>
 
                 <div v-if="training.payment_required && chargedTo" class="flex justify-between gap-4">
-                    <dt class="text-csc-ink/60">Charged to</dt>
+                    <dt class="text-csc-ink-subtle">Charged to</dt>
                     <dd class="text-right font-medium text-csc-ink">{{ chargedTo.label }}</dd>
                 </div>
 
             </dl>
 
-            <p v-if="training.payment_required && chargedTo" class="mt-2 text-xs text-csc-ink/60">
+            <p v-if="training.payment_required && chargedTo" class="mt-2 text-xs text-csc-ink-subtle">
                 {{ chargedTo.description }}
             </p>
         </div>
 
         <p
             v-if="training.payment_required"
-            class="flex items-start gap-2.5 rounded-lg bg-warning-soft px-3 py-2.5 text-sm text-csc-ink/75"
+            class="flex items-start gap-2.5 rounded-lg bg-warning-soft px-3 py-2.5 text-sm text-csc-ink-muted"
         >
             <AppIcon name="info" size="sm" class="mt-0.5 shrink-0 text-warning" />
             <span>
@@ -248,7 +249,7 @@ const submit = () =>
             </span>
         </p>
 
-        <p v-else class="flex items-start gap-2.5 rounded-lg bg-info-soft px-3 py-2.5 text-sm text-csc-ink/75">
+        <p v-else class="flex items-start gap-2.5 rounded-lg bg-info-soft px-3 py-2.5 text-sm text-csc-ink-muted">
             <AppIcon name="info" size="sm" class="mt-0.5 shrink-0 text-info" />
             <span>This training has no fee, so your registration is approved straight away.</span>
         </p>

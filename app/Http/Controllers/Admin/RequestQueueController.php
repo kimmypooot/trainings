@@ -8,6 +8,7 @@ use App\Models\CancellationRequest;
 use App\Models\RegistrationOutput;
 use App\Models\TrainingRequest;
 use App\Support\CancellationRequestService;
+use App\Support\RegistrationOutputService;
 use App\Support\TrainingRequestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -144,12 +145,12 @@ class RequestQueueController extends Controller
     {
         $validated = $this->decision($request);
 
-        $output->forceFill([
-            'status' => RequestStatus::from($validated['decision']),
-            'reviewed_by' => $request->user()->getKey(),
-            'reviewed_at' => now(),
-            'review_remarks' => $validated['remarks'] ?? null,
-        ])->save();
+        RegistrationOutputService::review(
+            $output,
+            RequestStatus::from($validated['decision']),
+            $request->user(),
+            $validated['remarks'] ?? null
+        );
 
         return back()->with('success', 'Output reviewed.');
     }

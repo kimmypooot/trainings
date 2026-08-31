@@ -57,6 +57,21 @@ enum Role: string
     }
 
     /**
+     * Who holds the pen on the trainings themselves — creating them, editing
+     * them, rescheduling them, and moving participants between runs.
+     *
+     * The same pair the trainings route group names. It exists as a predicate
+     * because screens open to every staff role now have to decide whether to
+     * offer those actions: the roster is read by field offices and management,
+     * who may see it but not reschedule from it, and a button that 403s is
+     * worse than no button.
+     */
+    public function managesTrainings(): bool
+    {
+        return $this === self::Admin || $this === self::SuperAdmin;
+    }
+
+    /**
      * Who manages the physical-OR request queue and its GCash/delivery
      * settings. Delivery of receipts is HRD admin work — it is not a payment
      * the collecting officer touches, so it deliberately shares the trainings

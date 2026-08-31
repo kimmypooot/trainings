@@ -33,6 +33,31 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            // Who this deployment is, for the public footer. Static config
+            // rather than a lazy closure: it never changes within a request and
+            // is wanted on the very first paint of every public page.
+            /*
+             * The site's own absolute base URL.
+             *
+             * Home.vue used to read window.location.origin at module scope to
+             * build its og:* and canonical tags. That is correct in a browser
+             * and fatal anywhere else: the moment Inertia SSR is switched on,
+             * module scope runs in Node, where `window` does not exist, and the
+             * landing page throws before it renders. The server already knows
+             * this value with more authority than the browser does — APP_URL is
+             * what every mailed link and the sitemap are built from, so a
+             * canonical derived from it cannot disagree with them.
+             */
+            'appUrl' => rtrim(config('app.url'), '/'),
+            'appVersion' => config('app.version'),
+            'office' => [
+                'name' => config('office.name'),
+                'short_name' => config('office.short_name'),
+                'region' => config('office.region'),
+                'address' => config('office.address'),
+                'phone' => config('office.phone'),
+                'email' => config('office.email'),
+            ],
             'auth' => [
                 'user' => $request->user() ? [
                     'name' => $request->user()->name,

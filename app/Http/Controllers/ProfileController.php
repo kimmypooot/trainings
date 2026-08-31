@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FieldOffice;
+use App\Support\EmailChangeService;
 use App\Support\PhilippineGeography;
 use App\Support\ProfileOptions;
 use App\Support\ProfileService;
@@ -50,6 +51,17 @@ class ProfileController extends Controller
                 'email' => $user->email,
                 'role_label' => $user->role->label(),
                 'is_verified' => $user->email_verified_at !== null,
+                // A change that is waiting on its link. Null once it is
+                // confirmed, cancelled, or has outlived the link — the card
+                // must not go on saying "check your inbox" about a message
+                // whose link has already died.
+                'pending_email' => EmailChangeService::isPending($user, (string) $user->pending_email)
+                    ? $user->pending_email
+                    : null,
+                // Google-only accounts have no password to re-enter, so the
+                // form asks for one only when there is one. Same rule the
+                // controller enforces, read from the same place.
+                'confirms_with_password' => $user->hasPassword(),
                 'avatar' => $user->avatarUrl(),
                 'has_google' => $user->hasGoogleAccount(),
                 // Named in the card rather than a bare "Connected": the Google

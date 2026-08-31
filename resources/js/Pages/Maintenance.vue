@@ -12,6 +12,16 @@ defineProps({
     // The optional message the superadmin wrote on the maintenance switch.
     // Absent on a direct visit to /maintenance, and the page has its own copy.
     message: { type: String, default: null },
+    /**
+     * Office contact details, passed explicitly for the same reason as
+     * `authenticated`: no shared props exist this early in the pipeline. The
+     * default keeps a direct visit to /maintenance from rendering "undefined"
+     * where an email address should be.
+     */
+    office: {
+        type: Object,
+        default: () => ({ name: 'Civil Service Commission', email: null, phone: null }),
+    },
 });
 
 /**
@@ -103,12 +113,19 @@ const stillAvailable = [
         <main class="relative flex flex-1 items-center justify-center px-4 py-12 sm:px-6">
             <div class="w-full max-w-5xl overflow-hidden rounded-xl border border-white/10 bg-white shadow-xl">
                 <header class="flex items-center gap-3 border-b border-csc-line bg-csc-blue-tint/60 px-8 py-3 sm:px-10">
-                    <img src="/images/csc-logo.png" alt="Civil Service Commission" class="h-9 w-auto shrink-0" />
+                    <!--
+                        The 256px rendition, like every other logo in the app —
+                        not the 4499×4269 master. This masthead is 36px tall,
+                        and the master is a quarter of a megabyte that paints
+                        itself in visibly on the one page a visitor reaches
+                        precisely when things are already slow.
+                    -->
+                    <img src="/images/csc-logo-256.png" alt="Civil Service Commission" class="h-9 w-auto shrink-0" />
                     <div class="min-w-0">
                         <p class="text-xs font-semibold tracking-wide text-csc-blue uppercase">
                             Civil Service Commission — Regional Office VIII
                         </p>
-                        <p class="mt-0.5 text-xs text-csc-ink/60">Training Information Management System</p>
+                        <p class="mt-0.5 text-xs text-csc-ink-subtle">Training Information Management System</p>
                     </div>
                 </header>
 
@@ -126,7 +143,7 @@ const stillAvailable = [
                             </span>
                             <div class="min-w-0">
                                 <h1 class="text-2xl font-bold tracking-tight text-csc-ink">We'll be back shortly</h1>
-                                <p class="mt-2 text-base leading-relaxed text-csc-ink/70">
+                                <p class="mt-2 text-base leading-relaxed text-csc-ink-muted">
                                     {{
                                         message
                                             || 'The CSC TIMS portal is temporarily unavailable while we carry out scheduled maintenance. Your records, registrations and certificates are safe.'
@@ -136,21 +153,36 @@ const stillAvailable = [
                         </div>
 
                         <div class="mt-auto pt-8">
-                            <p class="text-xs font-semibold tracking-wide text-csc-ink/60 uppercase">Urgent concerns</p>
+                            <p class="text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">Urgent concerns</p>
                             <div class="mt-3 flex flex-col gap-2 text-base">
+                                <!--
+                                    From config/office.php, passed explicitly by
+                                    EnsureSiteIsAvailable — this page renders
+                                    before Inertia's shared props exist, so it
+                                    cannot reach `office` the way every other
+                                    page does.
+
+                                    Both of these were hard-coded, and both were
+                                    wrong: a generic mailbox and the Central
+                                    Office trunkline in Quezon City, on the one
+                                    page a stuck participant in Eastern Visayas
+                                    actually reads.
+                                -->
                                 <a
-                                    href="mailto:tims@csc.gov.ph"
+                                    :href="`mailto:${office.email}`"
                                     class="inline-flex items-center gap-2 font-medium text-csc-blue hover:underline"
                                 >
                                     <AppIcon name="envelope" class="shrink-0" />
-                                    tims@csc.gov.ph
+                                    {{ office.email }}
                                 </a>
+                                <!-- Omitted rather than guessed when unset; see config/office.php. -->
                                 <a
-                                    href="tel:+63289318092"
+                                    v-if="office.phone"
+                                    :href="`tel:${office.phone.replace(/[^+\d]/g, '')}`"
                                     class="inline-flex items-center gap-2 font-medium text-csc-blue hover:underline"
                                 >
                                     <AppIcon name="phone" class="shrink-0" />
-                                    (02) 8931-8092
+                                    {{ office.phone }}
                                 </a>
                             </div>
                         </div>
@@ -163,7 +195,7 @@ const stillAvailable = [
                         -->
                         <div class="mt-6 border-t border-csc-line pt-5">
                             <template v-if="authenticated">
-                                <p class="text-sm text-csc-ink/60">
+                                <p class="text-sm text-csc-ink-subtle">
                                     You're signed in, but the portal is closed to participants during maintenance.
                                 </p>
                                 <Link
@@ -177,7 +209,7 @@ const stillAvailable = [
                                     Sign out
                                 </Link>
                             </template>
-                            <p v-else class="text-sm text-csc-ink/50">
+                            <p v-else class="text-sm text-csc-ink-subtle">
                                 CSC staff can
                                 <Link href="/login" class="font-semibold text-csc-blue hover:underline">sign in here</Link>.
                             </p>
@@ -187,7 +219,7 @@ const stillAvailable = [
                     <aside
                         class="flex flex-col border-t border-csc-line bg-csc-blue-tint/50 px-8 py-8 sm:border-t-0 sm:border-l sm:px-10"
                     >
-                        <p class="text-xs font-semibold tracking-wide text-csc-ink/60 uppercase">Still available</p>
+                        <p class="text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">Still available</p>
                         <ul class="mt-5 space-y-5">
                             <li v-for="item in stillAvailable" :key="item.label" class="flex gap-3">
                                 <span
@@ -197,11 +229,11 @@ const stillAvailable = [
                                 </span>
                                 <div class="min-w-0">
                                     <p class="text-base font-medium text-csc-ink">{{ item.label }}</p>
-                                    <p class="text-sm leading-relaxed text-csc-ink/60">{{ item.description }}</p>
+                                    <p class="text-sm leading-relaxed text-csc-ink-subtle">{{ item.description }}</p>
                                 </div>
                             </li>
                         </ul>
-                        <p class="mt-auto pt-6 text-sm leading-relaxed text-csc-ink/50">
+                        <p class="mt-auto pt-6 text-sm leading-relaxed text-csc-ink-subtle">
                             These stay open so a session in progress is never interrupted mid-training.
                         </p>
                     </aside>

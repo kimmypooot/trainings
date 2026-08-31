@@ -135,12 +135,12 @@ onBeforeUnmount(release);
                             <h2 :id="titleId" class="text-base font-semibold tracking-tight text-csc-blue sm:text-lg">
                                 {{ title }}
                             </h2>
-                            <p v-if="subtitle" class="mt-1 text-sm text-csc-ink/60">{{ subtitle }}</p>
+                            <p v-if="subtitle" class="mt-1 text-sm text-csc-ink-subtle">{{ subtitle }}</p>
                         </div>
 
                         <button
                             type="button"
-                            class="-m-1.5 shrink-0 rounded-lg p-1.5 text-csc-ink/50 transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            class="-m-1.5 shrink-0 rounded-lg p-1.5 text-csc-ink-subtle transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                             aria-label="Close dialog"
                             @click="close"
                         >

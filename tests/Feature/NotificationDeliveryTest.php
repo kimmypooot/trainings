@@ -12,9 +12,12 @@ use App\Models\User;
 use App\Notifications\RegistrationReviewed;
 use App\Notifications\StaffAnnouncement;
 use App\Notifications\TrainingReminder;
+use App\Support\MailBranding;
 use App\Support\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
+use Symfony\Component\Mime\Email;
 use Tests\TestCase;
 
 /**
@@ -122,6 +125,42 @@ class NotificationDeliveryTest extends TestCase
         $this->assertSame($participant->id, $log->user_id);
         $this->assertStringContainsString("You're confirmed", $log->subject);
         $this->assertNotNull($log->sent_at);
+    }
+
+    /**
+     * The message as it actually leaves, straight off the array transport.
+     */
+    private function lastSentEmail(): Email
+    {
+        $participant = $this->participant();
+        $registration = RegistrationService::register($participant, Training::factory()->create());
+
+        RegistrationService::review($registration, RegistrationStatus::Approved, $this->staff());
+
+        return Mail::mailer()->getSymfonyTransport()->messages()->last()->getOriginalMessage();
+    }
+
+    public function test_the_masthead_seal_travels_with_the_message(): void
+    {
+        $email = $this->lastSentEmail();
+
+        // Not an https:// src. A linked logo is fetched by the recipient's
+        // client, which on any host the public internet cannot reach — every
+        // local install — arrives as a broken image.
+        $this->assertStringContainsString('cid:'.MailBranding::LOGO_CID, $email->getHtmlBody());
+        $this->assertCount(1, $email->getAttachments());
+        $this->assertStringContainsString('Content-Disposition: inline', $email->toString());
+    }
+
+    public function test_a_configured_logo_url_is_linked_instead_of_attached(): void
+    {
+        config(['office.logo_url' => 'https://cdn.example.gov.ph/csc-seal.png']);
+
+        $email = $this->lastSentEmail();
+
+        $this->assertStringContainsString('https://cdn.example.gov.ph/csc-seal.png', $email->getHtmlBody());
+        $this->assertStringNotContainsString('cid:'.MailBranding::LOGO_CID, $email->getHtmlBody());
+        $this->assertCount(0, $email->getAttachments());
     }
 
     public function test_hrd_can_queue_an_announcement_to_confirmed_participants(): void

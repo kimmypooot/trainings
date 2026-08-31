@@ -87,19 +87,19 @@ const cancel = () => {
 
                 <dl class="mt-6 grid gap-5 border-t border-csc-line pt-5 text-sm sm:grid-cols-2">
                     <div>
-                        <dt class="text-csc-ink/60">Starts</dt>
+                        <dt class="text-csc-ink-subtle">Starts</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ training.starts_at }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Ends</dt>
+                        <dt class="text-csc-ink-subtle">Ends</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ training.ends_at }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Venue</dt>
+                        <dt class="text-csc-ink-subtle">Venue</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ training.venue }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Slots</dt>
+                        <dt class="text-csc-ink-subtle">Slots</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">
                             <template v-if="training.capacity === null">No limit</template>
                             <template v-else>
@@ -108,16 +108,16 @@ const cancel = () => {
                         </dd>
                     </div>
                     <div v-if="training.level_label">
-                        <dt class="text-csc-ink/60">Level</dt>
+                        <dt class="text-csc-ink-subtle">Level</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ training.level_label }}</dd>
                     </div>
                     <div v-if="training.registration_closes_at">
-                        <dt class="text-csc-ink/60">Registration closes</dt>
+                        <dt class="text-csc-ink-subtle">Registration closes</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ training.registration_closes_at }}</dd>
                     </div>
                     <div v-if="training.venue_details" class="sm:col-span-2">
-                        <dt class="text-csc-ink/60">Venue details</dt>
-                        <dd class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink/75">
+                        <dt class="text-csc-ink-subtle">Venue details</dt>
+                        <dd class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink-muted">
                             {{ training.venue_details }}
                         </dd>
                     </div>
@@ -137,12 +137,12 @@ const cancel = () => {
                     >
                         {{ training.meeting_link }}
                     </a>
-                    <p class="mt-1.5 text-xs text-csc-ink/60">
+                    <p class="mt-1.5 text-xs text-csc-ink-subtle">
                         Please keep this link to yourself — it is issued to you alone.
                     </p>
                 </div>
 
-                <p v-else-if="joinLockedReason" class="mt-5 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70">
+                <p v-else-if="joinLockedReason" class="mt-5 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink-muted">
                     <AppIcon name="lock" size="sm" class="mt-0.5 shrink-0" />
                     {{ joinLockedReason }}
                 </p>
@@ -154,7 +154,7 @@ const cancel = () => {
 
                 <div v-if="training.description" class="mt-6 border-t border-csc-line pt-5">
                     <h3 class="text-sm font-semibold text-csc-blue">About this training</h3>
-                    <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
+                    <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink-muted">
                         {{ training.description }}
                     </p>
                 </div>
@@ -212,7 +212,7 @@ const cancel = () => {
                         You completed this training.
                     </p>
 
-                    <p v-else-if="training.registration_closed" class="text-sm font-medium text-csc-ink/60">
+                    <p v-else-if="training.registration_closed" class="text-sm font-medium text-csc-ink-subtle">
                         Registration for this training has closed.
                     </p>
 

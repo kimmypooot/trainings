@@ -1,8 +1,9 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal.vue';
+import AppBrandBackdrop from '@/Components/AppBrandBackdrop.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
@@ -18,9 +19,20 @@ const props = defineProps({
     meta: { type: Object, default: () => ({ current_page: 1, last_page: 1, total: 0, showing: 0 }) },
 });
 
-// Absolute URLs for og:* and canonical; only meaningful client-side, which is
-// all Inertia renders here.
-const origin = window.location.origin;
+// Every server-shared prop this page reads comes through here.
+const page = usePage();
+
+/*
+ * Absolute base for the og:* and canonical tags.
+ *
+ * Shared from the server (HandleInertiaRequests) rather than read off
+ * window.location. The old form ran at module scope, so it was one `npm i
+ * @inertiajs/server` away from throwing in Node before the page rendered — and
+ * a canonical built from the browser's address bar can disagree with the one
+ * the sitemap and every mailed link use, which is the whole thing a canonical
+ * exists to prevent.
+ */
+const origin = computed(() => page.props.appUrl ?? '');
 
 // Arrangement follows the RO VIII portal: a single centred row of official
 // seals above the headline, with the CSC logo in the middle. The transparency
@@ -31,46 +43,76 @@ const seals = [
     { src: '/images/lingkod_bayani.png', alt: 'Lingkod Bayani' },
 ];
 
-// Each feature is a whole-card link. The certificates/QR/profile destinations
-// need an account, so they land on sign-in; the register card is the one
-// anonymous action the page is really selling.
+/*
+ * Each feature is a whole-card link.
+ *
+ * Three of the four need an account and so land on sign-in, and the card now
+ * says which those are. It used to be silent about it: a visitor tapping "Your
+ * Certificates" from a page whose whole pitch is "everything in one account"
+ * got a login form, with no way to have known that was coming and nothing to
+ * distinguish it from a dead end.
+ */
 const features = [
     {
         title: 'Register for Trainings',
         description: 'Browse the programs offered by the CSC and sign up online while slots last.',
         path: 'M4 6h16M4 12h16M4 18h10',
         href: '/register',
+        requiresAccount: false,
     },
     {
         title: 'Your Certificates',
         description: 'View and download the certificate for every training you complete.',
         path: 'M5 12.5l4.5 4.5L19 7.5',
         href: '/login',
+        requiresAccount: true,
     },
     {
         title: 'Event QR Code',
         description: 'Get a personal QR code for fast check-in at large CSC events.',
         path: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2z',
         href: '/login',
+        requiresAccount: true,
     },
     {
         title: 'Your Profile',
         description: 'Keep your details and training history current in one account.',
         path: 'M4.5 20a7.5 7.5 0 0 1 15 0M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7',
         href: '/login',
+        requiresAccount: true,
     },
 ];
 
-// Failsafe copy when the controller passes nothing (e.g. the page is rendered
-// outside the Laravel app). The served figures normally come from HomeController.
-const fallbackStats = [
-    { figure: '12,400+', label: 'Personnel enrolled' },
-    { figure: '320', label: 'Programs delivered' },
-    { figure: '96%', label: 'Completion rate' },
-    { figure: '17', label: 'Regional offices' },
-];
+/*
+ * The headline figures band renders only when the controller has something
+ * true to say.
+ *
+ * There used to be a fallbackStats array here — "12,400+", "96%" and so on —
+ * standing by for the case where the controller passed nothing. It was
+ * unreachable (stats() always returned four rows) but it was also the wrong
+ * shape of answer: invented figures sitting in the source of a government
+ * portal, one refactor away from being rendered as fact. HomeController now
+ * withholds any figure it cannot stand behind and may return nothing at all,
+ * and an empty band is simply not drawn.
+ */
+const hasStats = computed(() => props.stats.length > 0);
 
-const stats = computed(() => (props.stats.length ? props.stats : fallbackStats));
+// The figures band sizes its grid to what actually survived the controller,
+// so a withheld figure leaves no gap.
+const statsColumns = computed(
+    () =>
+        ({
+            1: 'grid-cols-1',
+            2: 'grid-cols-2',
+            3: 'grid-cols-2 lg:grid-cols-3',
+            4: 'grid-cols-2 lg:grid-cols-4',
+        })[props.stats.length] ?? 'grid-cols-2 lg:grid-cols-4'
+);
+
+// Office identity, shared from HandleInertiaRequests; the About copy names the
+// operating office rather than asserting a generic "CSC" that could be any of
+// seventeen.
+const office = computed(() => page.props.office ?? {});
 
 // The program whose detail modal is open, or null when closed. The card opens
 // the modal instead of sending anonymous visitors straight to sign-in; the
@@ -150,7 +192,42 @@ const pageLink = (target) => ({
     page: target,
 });
 
-const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i) => i + 1));
+/*
+ * A window of page numbers, not all of them.
+ *
+ * This used to render every page in the set. At twelve cards a page a busy
+ * quarter puts thirty numbered buttons on the landing page, which wraps into a
+ * block of digits taller than the pagination row it belongs to and gives a
+ * keyboard user thirty tab stops to cross on the way out of the section.
+ *
+ * The window always keeps the first and last page reachable — those are the
+ * two a visitor actually aims for — plus the immediate neighbours of where
+ * they are. A null in the returned list is a gap, rendered as an ellipsis
+ * rather than as a button, so nothing focusable stands for "some pages".
+ */
+const pages = computed(() => {
+    const last = props.meta.last_page;
+    const current = props.meta.current_page;
+
+    // Below the window size there is nothing to elide; showing 1…7 in full is
+    // both shorter and easier to scan than any abbreviation of it.
+    if (last <= 7) {
+        return Array.from({ length: last }, (_, i) => i + 1);
+    }
+
+    // Not named `window`: that shadows the global inside this function, which
+    // is fine today and a trap the first time someone reaches for window.* here.
+    const keep = new Set([1, last, current, current - 1, current + 1]);
+
+    // Keep the row a stable width as the visitor moves through the set:
+    // at either end the window would otherwise collapse to four entries.
+    if (current <= 3) [2, 3, 4].forEach((n) => keep.add(n));
+    if (current >= last - 2) [last - 3, last - 2, last - 1].forEach((n) => keep.add(n));
+
+    const shown = [...keep].filter((n) => n >= 1 && n <= last).sort((a, b) => a - b);
+
+    return shown.flatMap((n, i) => (i > 0 && n - shown[i - 1] > 1 ? [null, n] : [n]));
+});
 </script>
 
 <template>
@@ -167,8 +244,26 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
             content="Browse and register for training programs offered by the Civil Service Commission, keep your certificates in one place, and check in to events with your own QR code."
         />
         <meta property="og:url" :content="origin + '/'" />
-        <meta property="og:image" :content="origin + '/images/csc-logo-512.png'" />
-        <meta name="twitter:card" content="summary" />
+        <!--
+            The facade photograph, not the logo. og:image was the 512px square
+            seal, which every platform renders as a small thumbnail beside the
+            text — the least prominent card a link can get, on the channel where
+            a regional office actually reaches people. The building is a real
+            landscape image and reads as a place, which is what a preview is
+            for. Dimensions are declared so a crawler can lay the card out
+            before it has finished downloading it.
+
+            It is 4:3, so it will be cropped to fit the 1.91:1 card. A
+            purpose-made 1200x630 image is still the better answer here.
+        -->
+        <meta property="og:image" :content="origin + '/images/cscbg_facade.jpeg'" />
+        <meta property="og:image:width" content="1920" />
+        <meta property="og:image:height" content="1440" />
+        <meta
+            property="og:image:alt"
+            content="The Civil Service Commission Regional Office VIII building"
+        />
+        <meta name="twitter:card" content="summary_large_image" />
         <link rel="canonical" :href="origin + '/'" />
     </Head>
 
@@ -178,34 +273,12 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
         <!-- Hero -->
         <section class="relative flex min-h-svh flex-col overflow-hidden text-white">
             <!--
-                The hero photo is this page's LCP element, so it is a real <img>
-                with an explicit high fetch priority — a CSS background would
-                only be discovered after the stylesheet parses. WebP first, JPEG
-                fallback; the preload in app.blade.php already warms the WebP.
+                The facade and its gradient wash, shared with the verification
+                screens. `priority` marks it as this page's LCP element — it is
+                the largest paint on the site, and the preload in
+                app.blade.php is aimed at it.
             -->
-            <picture class="absolute inset-0" aria-hidden="true">
-                <source srcset="/images/cscbg_facade.webp" type="image/webp" />
-                <img
-                    src="/images/cscbg_facade.jpeg"
-                    alt=""
-                    fetchpriority="high"
-                    decoding="async"
-                    class="absolute inset-0 size-full object-cover"
-                />
-            </picture>
-            <!-- Brand gradient overlay keeps the facade readable behind white text -->
-            <div
-                class="absolute inset-0"
-                style="
-                    background: linear-gradient(
-                        160deg,
-                        color-mix(in srgb, var(--color-csc-blue-deep) 93%, transparent) 0%,
-                        color-mix(in srgb, var(--color-csc-blue) 87%, transparent) 55%,
-                        color-mix(in srgb, var(--color-csc-blue-deep) 95%, transparent) 100%
-                    );
-                "
-                aria-hidden="true"
-            />
+            <AppBrandBackdrop priority />
 
             <!--
                 flex-1 pushes the wave to the very bottom so the hero reads as
@@ -287,7 +360,7 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
                     <h2 class="mt-4 text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
                         Programs we are offering
                     </h2>
-                    <p class="mt-4 text-base leading-relaxed text-pretty text-csc-ink/70">
+                    <p class="mt-4 text-base leading-relaxed text-pretty text-csc-ink-muted">
                         Every program currently on the Regional Office calendar — including those whose
                         registration has not opened yet, and those already full. Each card shows where it
                         stands.
@@ -329,7 +402,7 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
                             the status filter runs after pagination, so the two
                             can differ and only the former is checkable by eye.
                         -->
-                        <p class="text-sm text-csc-ink/70" role="status" aria-live="polite">
+                        <p class="text-sm text-csc-ink-muted" role="status" aria-live="polite">
                             Showing <span class="font-semibold text-csc-ink">{{ meta.showing }}</span>
                             {{ meta.showing === 1 ? 'program' : 'programs' }}
                             <template v-if="meta.last_page > 1">
@@ -378,7 +451,7 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
 
                     <template v-if="hasActiveFilters">
                         <h3 class="mt-5 text-lg font-semibold text-csc-blue">No programs match those filters</h3>
-                        <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-csc-ink/70">
+                        <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-csc-ink-muted">
                             Try widening your search, or clear the filters to see the whole calendar.
                         </p>
                         <div class="mt-6">
@@ -408,7 +481,7 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
                     -->
                     <template v-else>
                         <h3 class="mt-5 text-lg font-semibold text-csc-blue">No programs scheduled right now</h3>
-                        <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-csc-ink/70">
+                        <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-csc-ink-muted">
                             The next batch has not been published yet — new programs appear on this page as
                             soon as the Regional Office schedules them. Creating an account now gets your
                             profile ready, so you can reserve a slot the moment registration opens.
@@ -429,31 +502,38 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
                         v-if="meta.current_page > 1"
                         href="/"
                         :data="pageLink(meta.current_page - 1)"
+                        :only="['programs', 'filters', 'meta']"
                         preserve-scroll
                         class="rounded-lg border border-csc-line px-4 py-2 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                     >
                         Previous
                     </Link>
-                    <Link
-                        v-for="n in pages"
-                        :key="n"
-                        href="/"
-                        :data="pageLink(n)"
-                        preserve-scroll
-                        class="rounded-lg border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                        :class="
-                            n === meta.current_page
-                                ? 'border-csc-blue bg-csc-blue text-white'
-                                : 'border-csc-line text-csc-blue hover:bg-csc-blue-tint'
-                        "
-                        :aria-current="n === meta.current_page ? 'page' : undefined"
-                    >
-                        {{ n }}
-                    </Link>
+                    <template v-for="(n, i) in pages" :key="n ?? `gap-${i}`">
+                        <!-- A gap in the window. Not focusable, not a control. -->
+                        <span v-if="n === null" class="px-2 text-sm text-csc-ink-subtle" aria-hidden="true">…</span>
+                        <Link
+                            v-else
+                            href="/"
+                            :data="pageLink(n)"
+                            :only="['programs', 'filters', 'meta']"
+                            preserve-scroll
+                            class="rounded-lg border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                n === meta.current_page
+                                    ? 'border-csc-blue bg-csc-blue text-white'
+                                    : 'border-csc-line text-csc-blue hover:bg-csc-blue-tint'
+                            "
+                            :aria-current="n === meta.current_page ? 'page' : undefined"
+                            :aria-label="`Page ${n}`"
+                        >
+                            {{ n }}
+                        </Link>
+                    </template>
                     <Link
                         v-if="meta.current_page < meta.last_page"
                         href="/"
                         :data="pageLink(meta.current_page + 1)"
+                        :only="['programs', 'filters', 'meta']"
                         preserve-scroll
                         class="rounded-lg border border-csc-line px-4 py-2 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                     >
@@ -466,14 +546,23 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
         <!-- The full catalogue view for anonymous visitors. -->
         <ProgramDetailModal :program="selected" @close="selected = null" />
 
-        <!-- Features -->
-        <section id="programs" class="bg-csc-blue-tint py-20 lg:py-24">
+        <!--
+            Features.
+
+            The id was "programs", which no longer described anything on this
+            section and was actively misdirecting: the header nav, the footer
+            quick links and the hero button all point at #upcoming (the actual
+            catalogue), so /#programs was the one address that still resolved
+            here — to a grid of feature tiles — for anyone holding an old
+            bookmark. Renamed to what it is.
+        -->
+        <section id="features" class="bg-csc-blue-tint py-20 lg:py-24">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="mx-auto max-w-2xl text-center">
                     <h2 class="text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
                         Everything you need in one account
                     </h2>
-                    <p class="mt-4 text-base leading-relaxed text-pretty text-csc-ink/70">
+                    <p class="mt-4 text-base leading-relaxed text-pretty text-csc-ink-muted">
                         From signing up for a program to downloading the certificate that proves you finished it.
                     </p>
                 </div>
@@ -497,7 +586,26 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
                         </span>
 
                         <h3 class="mt-5 text-lg font-semibold text-csc-blue">{{ feature.title }}</h3>
-                        <p class="mt-2 text-sm leading-relaxed text-csc-ink/75">{{ feature.description }}</p>
+                        <p class="mt-2 text-sm leading-relaxed text-csc-ink-muted">{{ feature.description }}</p>
+
+                        <!--
+                            Visible at rest, not on hover: it is a precondition,
+                            and a precondition a visitor only discovers after
+                            clicking has not been disclosed. It also joins the
+                            card's accessible name, so the link announces as
+                            "Your Certificates … Sign in required" rather than
+                            promising a page it will not open.
+                        -->
+                        <span
+                            v-if="feature.requiresAccount"
+                            class="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-csc-blue-tint px-2.5 py-1 text-2xs font-semibold tracking-wide text-csc-blue uppercase"
+                        >
+                            <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+                                <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" stroke-linecap="round" />
+                            </svg>
+                            Sign in required
+                        </span>
 
                         <span
                             class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-semibold text-csc-blue opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
@@ -511,12 +619,76 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
             </div>
         </section>
 
-        <!-- Stats -->
-        <section id="about" class="bg-csc-blue py-14">
-            <div class="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-4 sm:px-6 lg:grid-cols-4 lg:px-8">
+        <!--
+            About.
+
+            The header's "About" link used to land on the figures band alone —
+            four numbers, no sentence, nothing that answers what TIMS is, who
+            runs it, or who may register. That is the question an About link is
+            asked, and it is a question a government service is expected to
+            answer in plain words on the page rather than in a policy PDF.
+
+            The section also has to exist unconditionally, for the same reason
+            #upcoming does: the figures below it are now withheld when there is
+            nothing true to report, and if the anchor lived on them, /#about
+            would go dead on exactly the deployments that have the least other
+            context to offer.
+        -->
+        <section id="about" class="bg-white py-20 lg:py-24">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div class="mx-auto max-w-3xl">
+                    <p class="inline-flex items-center gap-3 text-xs font-semibold tracking-widest text-csc-red-ink uppercase">
+                        <span class="h-px w-8 bg-csc-red-ink" aria-hidden="true"></span>
+                        About TIMS
+                    </p>
+                    <h2 class="mt-4 text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
+                        The Commission’s training records, in one place
+                    </h2>
+                    <div class="mt-6 space-y-4 text-base leading-relaxed text-pretty text-csc-ink-muted">
+                        <p>
+                            The Training Information Management System is operated by the
+                            <span class="font-semibold text-csc-ink">{{ office.name }}</span>
+                            to publish its training calendar, take registrations, record attendance, and issue
+                            the certificates that follow. It replaces the paper nomination forms and spreadsheets
+                            that used to carry the same work.
+                        </p>
+                        <p>
+                            Registration is open to personnel of national government agencies, local government
+                            units, state universities and colleges, and government-owned corporations within
+                            {{ office.region }}, as well as to CSC personnel. Some programs carry a fee and some
+                            are limited to supervisory levels — each program page states which.
+                        </p>
+                        <p>
+                            Every certificate issued here carries a verification code. Anyone can
+                            <Link href="/verify" class="font-semibold text-csc-blue underline underline-offset-4 hover:text-csc-blue-deep">
+                                check a code</Link>
+                            against our records — so an employer or an auditor can confirm a certificate without
+                            going through this office.
+                        </p>
+                    </div>
+
+                    <div class="mt-8 flex flex-wrap gap-3">
+                        <AppButton href="/#upcoming" variant="ghost">See the training calendar</AppButton>
+                        <AppButton href="/#contact" variant="ghost">Contact the office</AppButton>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!--
+            Headline figures. Withheld entirely when HomeController has nothing
+            it can stand behind — see hasStats. The column count follows the
+            number of figures that survived, so three figures do not sit in a
+            four-column grid with a hole where the fourth would be.
+        -->
+        <section v-if="hasStats" class="bg-csc-blue py-14">
+            <div
+                class="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:px-8"
+                :class="statsColumns"
+            >
                 <div v-for="stat in stats" :key="stat.label" class="text-center">
                     <p class="text-3xl font-semibold tracking-tight text-white sm:text-4xl">{{ stat.figure }}</p>
-                    <p class="mt-2 text-sm text-white/70">{{ stat.label }}</p>
+                    <p class="mt-2 text-sm text-white/75">{{ stat.label }}</p>
                 </div>
             </div>
         </section>
@@ -527,7 +699,7 @@ const pages = computed(() => Array.from({ length: props.meta.last_page }, (_, i)
                 <h2 class="text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
                     Ready to sign up for your next training?
                 </h2>
-                <p class="mx-auto mt-4 max-w-xl text-base leading-relaxed text-pretty text-csc-ink/70">
+                <p class="mx-auto mt-4 max-w-xl text-base leading-relaxed text-pretty text-csc-ink-muted">
                     Register an account to browse programs offered by the CSC, reserve your slot, and keep every
                     certificate you earn.
                 </p>

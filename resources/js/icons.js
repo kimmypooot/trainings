@@ -76,6 +76,7 @@ export const icons = {
     upload: 'M12 16V4m0 0L8 8m4-4 4 4M4 20h16',
     // Board plus clip, drawn as one path so it keeps the 1.8 stroke of the set.
     clipboard: 'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6.5A1.5 1.5 0 0 0 5 7.5v12A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 6H16',
+    search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM20 20l-4.05-4.05',
 };
 
 /** Names, for prop validators. */

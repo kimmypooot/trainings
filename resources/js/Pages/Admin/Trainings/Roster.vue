@@ -7,12 +7,23 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
-import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
+// The roster renders every participant twice — a table on a wide screen,
+// stacked cards on a narrow one. These three hold everything the two layouts
+// must agree on, because for a while they did not: Record Payment, Cancel, the
+// OR number and the evaluation count all existed only in the table.
+import RosterActions from '@/Components/RosterActions.vue';
+import RosterDocument from '@/Components/RosterDocument.vue';
+import RosterEvaluation from '@/Components/RosterEvaluation.vue';
+// Issuing a door owns its own world — a form, a clipboard, and a code that
+// exists for exactly one render — none of which is roster state.
+import RosterScanStations from '@/Components/RosterScanStations.vue';
+import { formatDateRange } from '@/dateRange';
+import { useDownload } from '@/useDownload';
 
 const props = defineProps({
     training: { type: Object, required: true },
@@ -26,6 +37,7 @@ const props = defineProps({
     officeBreakdown: { type: Array, default: () => [] },
     revenue: { type: Object, default: () => ({}) },
     can: { type: Object, default: () => ({}) },
+    rescheduledTo: { type: Object, default: null },
     paymentMethods: { type: Array, default: () => [] },
     collectingOfficers: { type: Array, default: () => [] },
 });
@@ -33,86 +45,20 @@ const props = defineProps({
 const page = usePage();
 const errors = computed(() => Object.values(page.props.errors ?? {}));
 
-/* -------------------------------------------------------------------------- */
-/* Scanning stations                                                           */
-/* -------------------------------------------------------------------------- */
+const { downloading, start } = useDownload();
 
-const stationLabel = ref('');
-const issuing = ref(false);
+// Built once each rather than inline, so the URL a button renders and the URL
+// it starts are the same string — `downloading === url` is what shows the
+// spinner, and it matches on identity, not on intent.
+const rosterExportUrl = (format) =>
+    `/admin/exports/trainings/${props.training.id}/roster${format === 'xlsx' ? '?format=xlsx' : ''}`;
 
-/**
- * Issue this station as a rehearsal.
- *
- * Super administrators only — the server refuses it from anyone else — and
- * always reset after issuing, so the next station created is a real one unless
- * somebody deliberately says otherwise.
- */
-const stationIsTest = ref(false);
-const canIssueTest = computed(() => page.props.auth?.user?.role === 'superadmin');
+const revenueExportUrl = computed(() => `/admin/exports/trainings/${props.training.id}/revenue`);
 
-/**
- * The freshly issued link, code and all.
- *
- * Read from the flash bag because the plaintext code exists exactly once, in
- * the response to the request that created it — see Admin\ScanLinkController.
- * Reloading this page will not bring it back, which is why the card says so.
- */
-const newStation = computed(() => page.props.flash?.scan_link ?? null);
-
-/**
- * Which field was copied last, so only that button acknowledges.
- *
- * Tracked as a name rather than a boolean because the link and the code are
- * copied separately and usually one after the other — a shared flag would light
- * up both and leave the operator unsure which one is actually on the clipboard.
- */
-const copiedField = ref(null);
-let copiedTimer = null;
-
-function issueStation() {
-    issuing.value = true;
-
-    router.post(
-        `/admin/trainings/${props.training.id}/scan-links`,
-        { label: stationLabel.value || null, is_test: stationIsTest.value },
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                stationLabel.value = '';
-                stationIsTest.value = false;
-            },
-            onFinish: () => (issuing.value = false),
-        }
-    );
-}
-
-function revokeStation(link) {
-    router.delete(`/admin/scan-links/${link.id}`, { preserveScroll: true });
-}
-
-/**
- * Copy one field.
- *
- * Separately rather than as one block: the link and the code travel by
- * different routes in practice — the link into a chat message or a QR, the code
- * read aloud or sent after it — and pasting them together is what puts a
- * working credential and its password in the same place.
- */
-async function copyField(field, value) {
-    try {
-        await navigator.clipboard.writeText(value);
-    } catch {
-        // Clipboard access needs a secure context; on plain http over a LAN
-        // address it simply is not there. Say nothing rather than claim a copy
-        // that did not happen — the value is on screen and selectable.
-        return;
-    }
-
-    copiedField.value = field;
-
-    clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => (copiedField.value = null), 2000);
-}
+// The run's date, as a range where it spans more than one day — read by both
+// the on-screen header and the printed attendance sheet, so a sheet printed
+// for day 2 or 3 of a run still shows the whole span it belongs to.
+const trainingDateRange = computed(() => formatDateRange(props.training.starts_at, props.training.ends_at));
 
 /*
  * Anything that has to be justified opens the same dialog.
@@ -210,7 +156,7 @@ const attendanceChoices = computed(() =>
             late: 'text-warning hover:bg-warning-soft',
             absent: 'text-danger hover:bg-danger-soft',
             excused: 'text-info hover:bg-info-soft',
-        }[option.value] ?? 'text-csc-ink/60 hover:bg-csc-blue-tint',
+        }[option.value] ?? 'text-csc-ink-subtle hover:bg-csc-blue-tint',
     }))
 );
 
@@ -696,20 +642,55 @@ const printedAt = new Date().toLocaleString();
             </Link>
 
             <div class="flex flex-wrap gap-3 print:hidden">
-                <AppButton :href="`/admin/exports/trainings/${training.id}/roster`" variant="ghost" size="sm" icon="download" external>
-                    Export Roster (CSV)
-                </AppButton>
                 <AppButton
-                    :href="`/admin/exports/trainings/${training.id}/roster?format=xlsx`"
+                    :href="rosterExportUrl('csv')"
                     variant="ghost"
                     size="sm"
                     icon="download"
                     external
+                    :loading="downloading === rosterExportUrl('csv')"
+                    @click.prevent="start(rosterExportUrl('csv'))"
+                >
+                    Export Roster (CSV)
+                </AppButton>
+                <AppButton
+                    :href="rosterExportUrl('xlsx')"
+                    variant="ghost"
+                    size="sm"
+                    icon="download"
+                    external
+                    :loading="downloading === rosterExportUrl('xlsx')"
+                    @click.prevent="start(rosterExportUrl('xlsx'))"
                 >
                     Export Roster (Excel)
                 </AppButton>
                 <AppButton variant="ghost" size="sm" icon="print" @click="printAttendanceSheet">
                     Print Attendance Sheet
+                </AppButton>
+                <!--
+                    Two doors to the same workflow, and which one is offered
+                    depends on whether the replacement run exists yet. Once it
+                    does, the useful screen is the list of people stranded by
+                    it — offering "Reschedule" again would invite a second
+                    replacement nobody meant to create.
+                -->
+                <AppButton
+                    v-if="can.reschedule && rescheduledTo"
+                    variant="ghost"
+                    size="sm"
+                    icon="users"
+                    :href="`/admin/trainings/${training.id}/affected`"
+                >
+                    Affected Participants
+                </AppButton>
+                <AppButton
+                    v-else-if="can.reschedule"
+                    variant="ghost"
+                    size="sm"
+                    icon="calendar"
+                    :href="`/admin/trainings/${training.id}/reschedule`"
+                >
+                    Reschedule This Run
                 </AppButton>
             </div>
 
@@ -719,168 +700,52 @@ const printedAt = new Date().toLocaleString();
                 Showing participants from <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
 
-            <AppCard :title="training.title" :subtitle="`${training.starts_at} · ${training.venue}`" class="print:hidden">
-                <div class="grid grid-cols-2 gap-4 sm:grid-cols-7">
+            <AppCard :title="training.title" :subtitle="`${trainingDateRange} · ${training.venue}`" class="print:hidden">
+                <!--
+                    Six tiles always, plus one each for a supervisory course and
+                    a run that collects evaluations — so the track has to hold
+                    eight without the last one wrapping alone onto its own row.
+                -->
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
                     <div>
                         <p class="text-2xl font-bold text-warning">{{ pendingCount }}</p>
-                        <p class="text-xs text-csc-ink/60">Pending</p>
+                        <p class="text-xs text-csc-ink-subtle">Pending</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-csc-blue">{{ summary.checked_in_today }}</p>
-                        <p class="text-xs text-csc-ink/60">Checked in today</p>
+                        <p class="text-xs text-csc-ink-subtle">Checked in today</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-csc-blue">{{ summary.active }}</p>
-                        <p class="text-xs text-csc-ink/60">Holding a slot</p>
+                        <p class="text-xs text-csc-ink-subtle">Holding a slot</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-success">{{ summary.completed }}</p>
-                        <p class="text-xs text-csc-ink/60">Completed</p>
+                        <p class="text-xs text-csc-ink-subtle">Completed</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-danger">{{ summary.cancelled }}</p>
-                        <p class="text-xs text-csc-ink/60">Cancelled</p>
+                        <p class="text-xs text-csc-ink-subtle">Cancelled</p>
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-warning">{{ summary.with_food_restrictions }}</p>
-                        <p class="text-xs text-csc-ink/60">Food restrictions</p>
+                        <p class="text-xs text-csc-ink-subtle">Food restrictions</p>
                     </div>
                     <!-- Only meaningful on a supervisory course. -->
                     <div v-if="training.is_supervisory">
                         <p class="text-2xl font-bold text-warning">{{ summary.documents_to_review }}</p>
-                        <p class="text-xs text-csc-ink/60">Docs to verify</p>
+                        <p class="text-xs text-csc-ink-subtle">Docs to verify</p>
                     </div>
-                </div>
-            </AppCard>
-
-            <!--
-                Scanning stations. Sits with the roster rather than on its own
-                screen because issuing one is part of preparing a session: the
-                person doing it is already looking at who is expected at the door.
-            -->
-            <AppCard
-                title="Scanning stations"
-                subtitle="Hand a door to someone without an account — a phone, a link and a code."
-                class="print:hidden"
-            >
-                <!-- The one and only sighting of the code. -->
-                <div v-if="newStation" class="rounded-xl border border-success/40 bg-success-soft p-4">
-                    <p class="text-sm font-semibold text-csc-ink">
-                        {{ newStation.is_test ? 'Practice station ready' : 'Station ready' }}<span v-if="newStation.label"> · {{ newStation.label }}</span>
-                    </p>
-                    <p v-if="newStation.is_test" class="mt-1 text-xs font-semibold text-csc-ink">
-                        This station records nothing. Scans are answered as they would be live, but no
-                        attendance is saved.
-                    </p>
-                    <p class="mt-1 text-xs leading-relaxed text-csc-ink/70">
-                        Copy each to whoever is working the door. Sending the code by a different
-                        route than the link is safer, since either one alone is useless. The code
-                        is shown once and cannot be recovered — if it is lost, issue a new station.
-                    </p>
-
                     <!--
-                        Each value owns its copy control. The button sits inside
-                        the field rather than under the pair, so there is never a
-                        question of which one it acts on.
+                        Participants still owing an evaluation. Scoped to this
+                        office's own people, like every other figure here — it is
+                        a chase list, not a measure of the training.
                     -->
-                    <div class="mt-3 space-y-2">
-                        <div class="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
-                            <p class="min-w-0 flex-1 font-mono text-xs break-all text-csc-ink">
-                                {{ newStation.url }}
-                            </p>
-                            <button
-                                type="button"
-                                class="shrink-0 rounded-md p-1.5 text-csc-ink/50 transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
-                                :title="copiedField === 'url' ? 'Link copied' : 'Copy link'"
-                                @click="copyField('url', newStation.url)"
-                            >
-                                <AppIcon
-                                    :name="copiedField === 'url' ? 'check' : 'clipboard'"
-                                    :label="copiedField === 'url' ? 'Link copied' : 'Copy link'"
-                                />
-                            </button>
-                        </div>
-
-                        <div class="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
-                            <p class="min-w-0 flex-1 font-mono text-lg font-bold tracking-[0.3em] text-csc-ink">
-                                {{ newStation.code }}
-                            </p>
-                            <button
-                                type="button"
-                                class="shrink-0 rounded-md p-1.5 text-csc-ink/50 transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-csc-blue"
-                                :title="copiedField === 'code' ? 'Code copied' : 'Copy code'"
-                                @click="copyField('code', newStation.code)"
-                            >
-                                <AppIcon
-                                    :name="copiedField === 'code' ? 'check' : 'clipboard'"
-                                    :label="copiedField === 'code' ? 'Code copied' : 'Copy code'"
-                                />
-                            </button>
-                        </div>
+                    <div v-if="training.collects_evaluations">
+                        <p class="text-2xl font-bold text-warning">{{ summary.evaluations_outstanding }}</p>
+                        <p class="text-xs text-csc-ink-subtle">Evaluations owed</p>
                     </div>
-
-                    <p class="mt-3 text-xs text-csc-ink/60">Expires {{ newStation.expires_at }}</p>
                 </div>
-
-                <!-- Issue -->
-                <div class="mt-4 flex flex-wrap items-end gap-3">
-                    <label class="min-w-48 flex-1">
-                        <span class="text-xs font-medium text-csc-ink/70">Label (optional)</span>
-                        <input
-                            v-model="stationLabel"
-                            type="text"
-                            maxlength="60"
-                            placeholder="Front door, Hall B…"
-                            class="mt-1 w-full rounded-lg border border-csc-ink/20 px-3 py-2 text-sm focus:border-csc-blue focus:outline-none"
-                        />
-                    </label>
-
-                    <AppButton size="sm" icon="qr" :disabled="issuing" @click="issueStation">
-                        {{ issuing ? 'Creating…' : stationIsTest ? 'Create practice station' : 'Create scanning station' }}
-                    </AppButton>
-                </div>
-
-                <!-- Rehearsal stations, for super administrators only. -->
-                <label v-if="canIssueTest" class="mt-3 flex items-start gap-2">
-                    <input
-                        v-model="stationIsTest"
-                        type="checkbox"
-                        class="mt-0.5 size-4 rounded border-csc-ink/30 text-csc-blue focus:ring-csc-blue"
-                    />
-                    <span class="text-xs leading-relaxed text-csc-ink/70">
-                        <strong class="font-semibold text-csc-ink">Practice station</strong> — scans are
-                        checked against the real roster and answered exactly as they would be, but no
-                        attendance is ever recorded. Use this to prove phones, cameras and signal at the
-                        venue before the session starts.
-                    </span>
-                </label>
-
-                <!-- Live stations -->
-                <ul v-if="scanLinks.length" class="mt-4 space-y-2 border-t border-csc-ink/10 pt-4">
-                    <li
-                        v-for="link in scanLinks"
-                        :key="link.id"
-                        class="flex flex-wrap items-center gap-3 rounded-lg bg-csc-blue-tint/40 px-3 py-2.5"
-                    >
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-medium text-csc-ink">
-                                {{ link.label ?? 'Unlabelled station' }}
-                                <AppBadge v-if="link.is_test" tone="warning" class="ml-1">Practice</AppBadge>
-                            </p>
-                            <p class="truncate text-xs text-csc-ink/60">
-                                Expires {{ link.expires_at }} ·
-                                <template v-if="link.last_used_at">last used {{ link.last_used_at }}</template>
-                                <template v-else>never used</template>
-                            </p>
-                        </div>
-
-                        <AppButton size="sm" variant="ghost" icon="close" @click="revokeStation(link)">Revoke</AppButton>
-                    </li>
-                </ul>
-
-                <p v-else class="mt-4 border-t border-csc-ink/10 pt-4 text-xs text-csc-ink/60">
-                    No station is currently active for this training.
-                </p>
             </AppCard>
 
             <AppAlert v-if="awaitingCertificates" tone="info" title="Certificates ready to issue" class="print:hidden">
@@ -889,148 +754,6 @@ const printedAt = new Date().toLocaleString();
                 </p>
                 <AppButton class="mt-3" size="sm" icon="certificate" @click="releaseAll">Issue All Certificates</AppButton>
             </AppAlert>
-
-            <!--
-                What this run earned. Every figure is summed from the payment
-                rows, each of which froze its own gross and discount when it was
-                taken — so repricing the course later cannot restate what was
-                collected.
-            -->
-            <AppCard
-                v-if="training.payment_required && can.record_payment"
-                title="Revenue"
-                subtitle="Verified payments only. A pending upload is a claim, not money."
-                class="print:hidden"
-            >
-                <template #action>
-                    <AppButton
-                        :href="`/admin/exports/trainings/${training.id}/revenue`"
-                        external
-                        size="sm"
-                        variant="ghost"
-                        icon="download"
-                    >
-                        Export
-                    </AppButton>
-                </template>
-
-                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <div>
-                        <p class="text-xs text-csc-ink/60">Assessed</p>
-                        <p class="mt-0.5 text-lg font-semibold text-csc-ink">₱{{ money(revenue.gross ?? 0) }}</p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-csc-ink/60">PRIME-HRM Discount</p>
-                        <p class="mt-0.5 text-lg font-semibold text-warning">
-                            − ₱{{ money(revenue.discount ?? 0) }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-csc-ink/60">Collected</p>
-                        <p class="mt-0.5 text-lg font-semibold text-csc-blue">
-                            ₱{{ money(revenue.collected ?? 0) }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-csc-ink/60">On Promissory Note</p>
-                        <p class="mt-0.5 text-lg font-semibold text-csc-ink/70">
-                            ₱{{ money(revenue.promissory ?? 0) }}
-                        </p>
-                        <p v-if="revenue.promissory_count" class="text-2xs text-csc-ink/55">
-                            {{ revenue.promissory_count }} outstanding
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Which participants, by name — the question the office asks. -->
-                <div v-if="revenue.discounted?.length" class="mt-5 border-t border-csc-line pt-4">
-                    <p class="text-xs font-semibold text-csc-ink">
-                        PRIME-HRM discount granted to {{ revenue.discounted_count }} participant(s)
-                    </p>
-                    <div class="mt-2 overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead class="border-b border-csc-line text-xs uppercase">
-                                <tr>
-                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">Participant</th>
-                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">OR No.</th>
-                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
-                                        Full Fee
-                                    </th>
-                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
-                                        Discount
-                                    </th>
-                                    <th scope="col" class="py-2 text-right font-semibold text-csc-ink/70">Paid</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-csc-line">
-                                <tr v-for="row in revenue.discounted" :key="row.id">
-                                    <td class="py-2.5 pr-4 text-csc-ink/80">{{ row.participant }}</td>
-                                    <td class="py-2.5 pr-4 font-mono text-xs text-csc-ink/60">
-                                        {{ row.or_number ?? '—' }}
-                                    </td>
-                                    <td class="py-2.5 pr-4 text-right text-csc-ink/70">₱{{ money(row.gross) }}</td>
-                                    <td class="py-2.5 pr-4 text-right font-medium text-warning">
-                                        − ₱{{ money(row.discount) }}
-                                    </td>
-                                    <td class="py-2.5 text-right font-medium text-csc-ink">₱{{ money(row.net) }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </AppCard>
-
-            <!--
-                Who is coming, by field office, and what each still owes. The
-                office that recruited a participant is the one HRD chases for an
-                outstanding fee, so the split is what makes chasing possible.
-            -->
-            <AppCard
-                v-if="officeBreakdown.length > 1"
-                title="By Field Office"
-                subtitle="Excludes cancelled registrations."
-                class="print:hidden"
-            >
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm">
-                        <thead class="border-b border-csc-line text-xs uppercase">
-                            <tr>
-                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">Field Office</th>
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
-                                    Participants
-                                </th>
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">Paid</th>
-                                <!-- Money promised but not received. Kept as its
-                                     own column, as v1 had it: folded into Paid it
-                                     reads as an office that owes nothing. -->
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink/70">
-                                    On Note
-                                </th>
-                                <th scope="col" class="py-2 text-right font-semibold text-csc-ink/70">Outstanding</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-csc-line">
-                            <tr v-for="office in officeBreakdown" :key="office.label">
-                                <td class="py-2.5 pr-4 text-csc-ink/80">{{ office.label }}</td>
-                                <td class="py-2.5 pr-4 text-right font-medium text-csc-ink">{{ office.count }}</td>
-                                <td class="py-2.5 pr-4 text-right text-csc-ink/70">{{ office.settled }}</td>
-                                <td
-                                    class="py-2.5 pr-4 text-right font-medium"
-                                    :class="office.promissory ? 'text-info' : 'text-csc-ink/50'"
-                                >
-                                    {{ office.promissory }}
-                                </td>
-                                <td
-                                    class="py-2.5 text-right font-medium"
-                                    :class="office.outstanding ? 'text-warning' : 'text-csc-ink/50'"
-                                >
-                                    {{ office.outstanding }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </AppCard>
 
             <!-- Catering needs this as a list, not buried per-row -->
             <AppAlert v-if="restrictions.length" tone="warning" title="Food restrictions for catering" class="print:hidden">
@@ -1075,14 +798,14 @@ const printedAt = new Date().toLocaleString();
                             :class="
                                 statusFilter === chip
                                     ? 'bg-csc-blue text-white shadow-sm'
-                                    : 'bg-csc-blue-tint/60 text-csc-ink/70 hover:text-csc-ink'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink-muted hover:text-csc-ink'
                             "
                             @click="statusFilter = chip"
                         >
                             {{ chip === 'all' ? 'All' : chip }}
                             <span
                                 class="ml-1 text-xs"
-                                :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                                :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
                             >
                                 {{ statusCounts[chip] ?? 0 }}
                             </span>
@@ -1118,7 +841,7 @@ const printedAt = new Date().toLocaleString();
                         v-if="training.days.length > 1"
                         class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3 print:hidden"
                     >
-                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink/60 uppercase">
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                             Marking
                         </span>
                         <button
@@ -1154,7 +877,7 @@ const printedAt = new Date().toLocaleString();
                         v-if="training.is_supervisory"
                         class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3"
                     >
-                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink/50 uppercase">
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                             Document
                         </span>
                         <button
@@ -1165,14 +888,14 @@ const printedAt = new Date().toLocaleString();
                             :class="
                                 docFilter === chip
                                     ? 'bg-csc-blue text-white shadow-sm'
-                                    : 'bg-csc-blue-tint/60 text-csc-ink/70 hover:text-csc-ink'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink-muted hover:text-csc-ink'
                             "
                             @click="docFilter = chip"
                         >
                             {{ chip === 'all' ? 'All' : chip }}
                             <span
                                 class="ml-1 text-xs"
-                                :class="docFilter === chip ? 'text-white/80' : 'text-csc-ink/45'"
+                                :class="docFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
                             >
                                 {{ docStatusCounts[chip] ?? 0 }}
                             </span>
@@ -1216,7 +939,7 @@ const printedAt = new Date().toLocaleString();
 
                     <button
                         type="button"
-                        class="rounded text-xs font-medium text-csc-ink/60 underline hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded text-xs font-medium text-csc-ink-subtle underline hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         @click="selected = new Set()"
                     >
                         Clear
@@ -1285,7 +1008,7 @@ const printedAt = new Date().toLocaleString();
                                         @change="toggleAll"
                                     />
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1294,7 +1017,7 @@ const printedAt = new Date().toLocaleString();
                                         Participant{{ sortIndicator('name') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1303,7 +1026,7 @@ const printedAt = new Date().toLocaleString();
                                         Agency{{ sortIndicator('organization') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1312,7 +1035,7 @@ const printedAt = new Date().toLocaleString();
                                         Field Office{{ sortIndicator('field_office') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1321,7 +1044,7 @@ const printedAt = new Date().toLocaleString();
                                         Status{{ sortIndicator('status') }}
                                     </button>
                                 </th>
-                                <th v-if="training.is_supervisory" scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th v-if="training.is_supervisory" scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1330,19 +1053,49 @@ const printedAt = new Date().toLocaleString();
                                         Document{{ sortIndicator('supervisory_document.status_label') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink/70">
+                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     Attendance
                                     <span
                                         v-if="training.days.length > 1"
-                                        class="ml-1 font-normal text-csc-ink/50 normal-case"
+                                        class="ml-1 font-normal text-csc-ink-subtle normal-case"
                                     >
                                         · {{ activeDayLabel }}
                                     </span>
                                 </th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink/70">Action</th>
+                                <!--
+                                    Only where there is a panel to evaluate. A
+                                    run with no experts assigned has nothing to
+                                    chase, and a column of dashes reads as a
+                                    fault rather than as "not applicable".
+                                -->
+                                <th
+                                    v-if="training.collects_evaluations"
+                                    scope="col"
+                                    class="px-5 py-3 font-semibold text-csc-ink-muted"
+                                >
+                                    <button
+                                        type="button"
+                                        class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                        @click="toggleSort('evaluation.submitted')"
+                                    >
+                                        Evaluation{{ sortIndicator('evaluation.submitted') }}
+                                    </button>
+                                </th>
+                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Action</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-csc-line">
+                        <!--
+                             A decision that moves a participant out of the current
+                             status filter takes the row off the list, and the whole
+                             point of the undo window is that this was a thing that
+                             just happened and can still be caught. A row that simply
+                             blinks out of existence does not read that way; one that
+                             fades and slides does, and it lands in the same beat as
+                             the Undo toast. Rows that stay are keyed by id, so
+                             nothing animates on an ordinary re-sort or re-filter
+                             beyond closing the gap the departed row left.
+                        -->
+                        <TransitionGroup tag="tbody" name="roster-row" class="divide-y divide-csc-line">
                             <tr
                                 v-for="registration in filtered"
                                 :key="registration.id"
@@ -1360,75 +1113,33 @@ const printedAt = new Date().toLocaleString();
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <p class="font-medium text-csc-ink">{{ registration.name }}</p>
-                                    <p class="mt-0.5 text-xs text-csc-ink/60">{{ registration.email }}</p>
+                                    <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ registration.email }}</p>
                                 </td>
-                                <td class="px-5 py-3.5 text-csc-ink/75">
+                                <td class="px-5 py-3.5 text-csc-ink-muted">
                                     {{ registration.organization ?? '—' }}
-                                    <p v-if="registration.position" class="mt-0.5 text-xs text-csc-ink/55">
+                                    <p v-if="registration.position" class="mt-0.5 text-xs text-csc-ink-subtle">
                                         {{ registration.position }}
                                     </p>
                                 </td>
-                                <td class="px-5 py-3.5 text-xs text-csc-ink/70">
+                                <td class="px-5 py-3.5 text-xs text-csc-ink-muted">
                                     {{ registration.field_office ?? '—' }}
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <AppBadge :status="registration.status" />
                                     <p
                                         v-if="registration.review_remarks"
-                                        class="mt-1 max-w-48 text-xs text-csc-ink/55"
+                                        class="mt-1 max-w-48 text-xs text-csc-ink-subtle"
                                     >
                                         {{ registration.review_remarks }}
                                     </p>
                                 </td>
                                 <td v-if="training.is_supervisory" class="px-5 py-3.5">
-                                    <template v-if="registration.supervisory_document">
-                                        <div class="flex items-center gap-2">
-                                            <AppBadge :status="`document_${registration.supervisory_document.status}`" />
-                                            <a
-                                                v-if="registration.supervisory_document.download_url"
-                                                :href="registration.supervisory_document.download_url"
-                                                class="shrink-0 rounded text-xs font-medium text-csc-blue underline underline-offset-2 hover:text-csc-blue-deep"
-                                            >
-                                                View
-                                            </a>
-                                        </div>
-                                        <div
-                                            v-if="registration.supervisory_document.can_review"
-                                            class="mt-1.5 flex gap-2"
-                                        >
-                                            <button
-                                                type="button"
-                                                class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="decideDocument(registration, 'verified')"
-                                            >
-                                                Verify
-                                            </button>
-                                            <span class="text-csc-line">|</span>
-                                            <button
-                                                type="button"
-                                                class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="decideDocument(registration, 'rejected')"
-                                            >
-                                                Reject
-                                            </button>
-                                        </div>
-                                        <p
-                                            v-if="registration.supervisory_document.remarks"
-                                            class="mt-1 max-w-48 text-xs text-csc-ink/55"
-                                        >
-                                            {{ registration.supervisory_document.remarks }}
-                                        </p>
-                                        <p
-                                            v-else-if="registration.supervisory_document.reviewed_by"
-                                            class="mt-1 text-2xs text-csc-ink/45"
-                                        >
-                                            {{ registration.supervisory_document.reviewed_by }}
-                                            <template v-if="registration.supervisory_document.reviewed_at">
-                                                · {{ registration.supervisory_document.reviewed_at }}
-                                            </template>
-                                        </p>
-                                    </template>
-                                    <span v-else class="text-xs text-csc-ink/50">—</span>
+                                    <RosterDocument
+                                        :document="registration.supervisory_document"
+                                        :name="registration.name"
+                                        layout="row"
+                                        @decide="(decision) => decideDocument(registration, decision)"
+                                    />
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <template v-if="isMarkable(registration)">
@@ -1465,7 +1176,7 @@ const printedAt = new Date().toLocaleString();
                                         <button
                                             v-if="training.duration_days > 1"
                                             type="button"
-                                            class="mt-1 block rounded text-2xs text-csc-ink/55 hover:text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                            class="mt-1 block rounded text-2xs text-csc-ink-subtle hover:text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                             @click="correcting = registration.id"
                                         >
                                             {{ registration.credited_days }} of {{ training.duration_days }} days ·
@@ -1473,117 +1184,36 @@ const printedAt = new Date().toLocaleString();
                                         </button>
                                     </template>
 
-                                    <span v-else class="text-xs text-csc-ink/50">—</span>
+                                    <span v-else class="text-xs text-csc-ink-subtle">—</span>
                                 </td>
-                                <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                    <template v-if="registration.status === 'pending'">
-                                        <button
-                                            type="button"
-                                            class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="decide(registration, 'approved')"
-                                        >
-                                            Approve
-                                        </button>
-                                        <span class="px-2 text-csc-line">|</span>
-                                        <button
-                                            type="button"
-                                            class="rounded text-xs font-semibold text-warning hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="decide(registration, 'waitlisted')"
-                                        >
-                                            Waitlist
-                                        </button>
-                                        <span class="px-2 text-csc-line">|</span>
-                                        <button
-                                            type="button"
-                                            class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="decide(registration, 'rejected')"
-                                        >
-                                            Reject
-                                        </button>
-                                    </template>
-
-                                    <AppButton
-                                        v-else-if="registration.status === 'approved'"
-                                        size="sm"
-                                        variant="ghost"
-                                        @click="markComplete(registration)"
-                                    >
-                                        {{ registration.can_complete ? 'Mark Complete' : 'Complete (Override)' }}
-                                    </AppButton>
-
-                                    <template v-else-if="registration.status === 'completed'">
-                                        <span
-                                            v-if="registration.certificate_number"
-                                            class="font-mono text-2xs text-csc-ink/60"
-                                        >
-                                            {{ registration.certificate_number }}
-                                        </span>
-                                        <!--
-                                            A promissory note gets someone into
-                                            the room but not onto a certificate,
-                                            so the button is replaced by the
-                                            reason rather than left to fail.
-                                        -->
-                                        <span
-                                            v-else-if="!registration.fee_cleared"
-                                            class="text-2xs text-warning"
-                                        >
-                                            Fee outstanding
-                                        </span>
-                                        <AppButton
-                                            v-else
-                                            size="sm"
-                                            variant="ghost"
-                                            @click="releaseCertificate(registration.id)"
-                                        >
-                                            Issue Certificate
-                                        </AppButton>
-                                    </template>
-
-                                    <span v-else class="text-xs text-csc-ink/50">—</span>
-
-                                    <template v-if="canRecordPayment(registration)">
-                                        <span class="px-2 text-csc-line">|</span>
-                                        <button
-                                            type="button"
-                                            class="rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="startPayment(registration)"
-                                        >
-                                            Record Payment
-                                        </button>
-                                    </template>
-                                    <span
-                                        v-else-if="registration.payment.or_number"
-                                        class="ml-2 font-mono text-2xs text-csc-ink/60"
-                                        :title="`Paid by ${registration.payment.method}`"
-                                    >
-                                        {{ registration.payment.or_number }}
-                                    </span>
-                                    <span
-                                        v-else-if="registration.payment.awaiting_review"
-                                        class="ml-2 text-2xs text-warning"
-                                    >
-                                        Payment awaiting review
-                                    </span>
-
-                                    <template v-if="isCancellable(registration)">
-                                        <span class="px-2 text-csc-line">|</span>
-                                        <button
-                                            type="button"
-                                            class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="cancelRegistration(registration)"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </template>
+                                <td v-if="training.collects_evaluations" class="px-5 py-3.5">
+                                    <RosterEvaluation :evaluation="registration.evaluation" layout="row" />
+                                </td>
+                                <td class="px-5 py-3.5 text-right">
+                                    <RosterActions
+                                        :registration="registration"
+                                        layout="row"
+                                        :can-record-payment="canRecordPayment(registration)"
+                                        :cancellable="isCancellable(registration)"
+                                        @decide="decide"
+                                        @complete="markComplete"
+                                        @issue="releaseCertificate"
+                                        @record-payment="startPayment"
+                                        @cancel="cancelRegistration"
+                                    />
                                 </td>
                             </tr>
-                        </tbody>
+                        </TransitionGroup>
                     </table>
                 </div>
 
-                <!-- Mobile: the same participants as stacked cards -->
-                <ul class="space-y-3 md:hidden print:hidden">
+                <!--
+                    Mobile: the same participants as stacked cards — and the
+                    word "same" is load-bearing. Both layouts render the shared
+                    Roster* components, so an action added to one is an action
+                    in both. They had already drifted apart once.
+                -->
+                <TransitionGroup tag="ul" name="roster-row" class="space-y-3 md:hidden print:hidden">
                     <li
                         v-for="registration in filtered"
                         :key="registration.id"
@@ -1604,57 +1234,36 @@ const printedAt = new Date().toLocaleString();
                                     <p class="text-sm font-semibold text-csc-ink">{{ registration.name }}</p>
                                     <AppBadge :status="registration.status" />
                                 </div>
-                                <p class="mt-0.5 text-xs text-csc-ink/60">{{ registration.email }}</p>
-                                <p class="mt-1 text-xs text-csc-ink/70">
+                                <p class="mt-0.5 text-xs text-csc-ink-subtle">{{ registration.email }}</p>
+                                <p class="mt-1 text-xs text-csc-ink-muted">
                                     {{ registration.organization ?? '—' }}
                                     <template v-if="registration.position"> · {{ registration.position }}</template>
                                 </p>
-                                <p v-if="registration.field_office" class="text-xs text-csc-ink/55">
+                                <p v-if="registration.field_office" class="text-xs text-csc-ink-subtle">
                                     {{ registration.field_office }}
                                 </p>
-                                <div
-                                    v-if="training.is_supervisory && registration.supervisory_document"
-                                    class="mt-2 flex flex-wrap items-center gap-2"
-                                >
-                                    <AppBadge :status="`document_${registration.supervisory_document.status}`" />
-                                    <a
-                                        v-if="registration.supervisory_document.download_url"
-                                        :href="registration.supervisory_document.download_url"
-                                        class="rounded text-xs font-medium text-csc-blue underline underline-offset-2 hover:text-csc-blue-deep"
-                                    >
-                                        View
-                                    </a>
-                                    <button
-                                        v-if="registration.supervisory_document.can_review"
-                                        type="button"
-                                        class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                        @click="decideDocument(registration, 'verified')"
-                                    >
-                                        Verify
-                                    </button>
-                                    <button
-                                        v-if="registration.supervisory_document.can_review"
-                                        type="button"
-                                        class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                        @click="decideDocument(registration, 'rejected')"
-                                    >
-                                        Reject
-                                    </button>
+
+                                <div v-if="training.is_supervisory && registration.supervisory_document" class="mt-2">
+                                    <RosterDocument
+                                        :document="registration.supervisory_document"
+                                        :name="registration.name"
+                                        layout="card"
+                                        @decide="(decision) => decideDocument(registration, decision)"
+                                    />
                                 </div>
-                                <p
-                                    v-if="training.is_supervisory && registration.supervisory_document?.remarks"
-                                    class="mt-1 text-xs text-csc-ink/55"
-                                >
-                                    {{ registration.supervisory_document.remarks }}
-                                </p>
-                                <p v-if="registration.review_remarks" class="mt-1 text-xs text-csc-ink/55">
+
+                                <p v-if="registration.review_remarks" class="mt-1 text-xs text-csc-ink-subtle">
                                     {{ registration.review_remarks }}
                                 </p>
+
+                                <div v-if="training.collects_evaluations" class="mt-2">
+                                    <RosterEvaluation :evaluation="registration.evaluation" layout="card" />
+                                </div>
                             </div>
                         </div>
 
                         <div v-if="isMarkable(registration)" class="mt-3 border-t border-csc-line pt-3">
-                            <p class="mb-1.5 text-2xs font-semibold tracking-wide text-csc-ink/50 uppercase">
+                            <p class="mb-1.5 text-2xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                                 Attendance · {{ activeDayLabel }}
                             </p>
                             <div
@@ -1683,75 +1292,190 @@ const printedAt = new Date().toLocaleString();
                             <button
                                 v-if="training.duration_days > 1"
                                 type="button"
-                                class="mt-2 block rounded text-2xs text-csc-ink/55 hover:text-csc-blue hover:underline"
+                                class="mt-2 block rounded text-2xs text-csc-ink-subtle hover:text-csc-blue hover:underline"
                                 @click="correcting = registration.id"
                             >
                                 {{ registration.credited_days }} of {{ training.duration_days }} days · all days
                             </button>
                         </div>
 
-                        <div
-                            class="mt-3 flex flex-wrap items-center justify-end gap-x-3 gap-y-2 border-t border-csc-line pt-3"
-                        >
-                            <template v-if="registration.status === 'pending'">
-                                <button
-                                    type="button"
-                                    class="rounded text-xs font-semibold text-success hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                    @click="decide(registration, 'approved')"
-                                >
-                                    Approve
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded text-xs font-semibold text-warning hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                    @click="decide(registration, 'waitlisted')"
-                                >
-                                    Waitlist
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded text-xs font-semibold text-danger hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                    @click="decide(registration, 'rejected')"
-                                >
-                                    Reject
-                                </button>
-                            </template>
-
-                            <AppButton
-                                v-else-if="registration.status === 'approved'"
-                                size="sm"
-                                variant="ghost"
-                                @click="markComplete(registration)"
-                            >
-                                {{ registration.can_complete ? 'Mark Complete' : 'Complete (Override)' }}
-                            </AppButton>
-
-                            <template v-else-if="registration.status === 'completed'">
-                                <span
-                                    v-if="registration.certificate_number"
-                                    class="font-mono text-2xs text-csc-ink/60"
-                                >
-                                    {{ registration.certificate_number }}
-                                </span>
-                                <span v-else-if="!registration.fee_cleared" class="text-2xs text-warning">
-                                    Fee outstanding
-                                </span>
-                                <AppButton
-                                    v-else
-                                    size="sm"
-                                    variant="ghost"
-                                    @click="releaseCertificate(registration.id)"
-                                >
-                                    Issue Certificate
-                                </AppButton>
-                            </template>
-
-                            <span v-else class="text-xs text-csc-ink/50">—</span>
+                        <div class="mt-3 border-t border-csc-line pt-3">
+                            <RosterActions
+                                :registration="registration"
+                                layout="card"
+                                :can-record-payment="canRecordPayment(registration)"
+                                :cancellable="isCancellable(registration)"
+                                @decide="decide"
+                                @complete="markComplete"
+                                @issue="releaseCertificate"
+                                @record-payment="startPayment"
+                                @cancel="cancelRegistration"
+                            />
                         </div>
                     </li>
-                </ul>
+                </TransitionGroup>
                 </template>
                 </template>
+            </AppCard>
+
+            <!--
+                 Everything below the roster is reference rather than work.
+                 Preparing a door, reading what the run earned and splitting it
+                 by office are each the reason someone opens this page perhaps
+                 one visit in ten; the participant list is the reason for the
+                 other nine, and it used to sit under all three of them. The
+                 panels keep their own order — you set a station up before the
+                 run, read revenue during and after it, chase offices last.
+            -->
+
+            <RosterScanStations :training="training" :scan-links="scanLinks" />
+
+            <!--
+                What this run earned. Every figure is summed from the payment
+                rows, each of which froze its own gross and discount when it was
+                taken — so repricing the course later cannot restate what was
+                collected.
+            -->
+            <AppCard
+                v-if="training.payment_required && can.record_payment"
+                title="Revenue"
+                subtitle="Verified payments only. A pending upload is a claim, not money."
+                collapsible
+                remember-as="roster.revenue"
+                class="print:hidden"
+            >
+                <template #action>
+                    <AppButton
+                        :href="revenueExportUrl"
+                        external
+                        size="sm"
+                        variant="ghost"
+                        icon="download"
+                        :loading="downloading === revenueExportUrl"
+                        @click.prevent="start(revenueExportUrl)"
+                    >
+                        Export
+                    </AppButton>
+                </template>
+
+                <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <div>
+                        <p class="text-xs text-csc-ink-subtle">Assessed</p>
+                        <p class="mt-0.5 text-lg font-semibold text-csc-ink">₱{{ money(revenue.gross ?? 0) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-csc-ink-subtle">PRIME-HRM Discount</p>
+                        <p class="mt-0.5 text-lg font-semibold text-warning">
+                            − ₱{{ money(revenue.discount ?? 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-csc-ink-subtle">Collected</p>
+                        <p class="mt-0.5 text-lg font-semibold text-csc-blue">
+                            ₱{{ money(revenue.collected ?? 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-csc-ink-subtle">On Promissory Note</p>
+                        <p class="mt-0.5 text-lg font-semibold text-csc-ink-muted">
+                            ₱{{ money(revenue.promissory ?? 0) }}
+                        </p>
+                        <p v-if="revenue.promissory_count" class="text-2xs text-csc-ink-subtle">
+                            {{ revenue.promissory_count }} outstanding
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Which participants, by name — the question the office asks. -->
+                <div v-if="revenue.discounted?.length" class="mt-5 border-t border-csc-line pt-4">
+                    <p class="text-xs font-semibold text-csc-ink">
+                        PRIME-HRM discount granted to {{ revenue.discounted_count }} participant(s)
+                    </p>
+                    <div class="mt-2 overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="border-b border-csc-line text-xs uppercase">
+                                <tr>
+                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">Participant</th>
+                                    <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">OR No.</th>
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
+                                        Full Fee
+                                    </th>
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
+                                        Discount
+                                    </th>
+                                    <th scope="col" class="py-2 text-right font-semibold text-csc-ink-muted">Paid</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-csc-line">
+                                <tr v-for="row in revenue.discounted" :key="row.id">
+                                    <td class="py-2.5 pr-4 text-csc-ink-muted">{{ row.participant }}</td>
+                                    <td class="py-2.5 pr-4 font-mono text-xs text-csc-ink-subtle">
+                                        {{ row.or_number ?? '—' }}
+                                    </td>
+                                    <td class="py-2.5 pr-4 text-right text-csc-ink-muted">₱{{ money(row.gross) }}</td>
+                                    <td class="py-2.5 pr-4 text-right font-medium text-warning">
+                                        − ₱{{ money(row.discount) }}
+                                    </td>
+                                    <td class="py-2.5 text-right font-medium text-csc-ink">₱{{ money(row.net) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </AppCard>
+
+            <!--
+                Who is coming, by field office, and what each still owes. The
+                office that recruited a participant is the one HRD chases for an
+                outstanding fee, so the split is what makes chasing possible.
+            -->
+            <AppCard
+                v-if="officeBreakdown.length > 1"
+                title="By Field Office"
+                subtitle="Excludes cancelled registrations."
+                collapsible
+                remember-as="roster.by-office"
+                class="print:hidden"
+            >
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="border-b border-csc-line text-xs uppercase">
+                            <tr>
+                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">Field Office</th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
+                                    Participants
+                                </th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">Paid</th>
+                                <!-- Money promised but not received. Kept as its
+                                     own column, as v1 had it: folded into Paid it
+                                     reads as an office that owes nothing. -->
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
+                                    On Note
+                                </th>
+                                <th scope="col" class="py-2 text-right font-semibold text-csc-ink-muted">Outstanding</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-csc-line">
+                            <tr v-for="office in officeBreakdown" :key="office.label">
+                                <td class="py-2.5 pr-4 text-csc-ink-muted">{{ office.label }}</td>
+                                <td class="py-2.5 pr-4 text-right font-medium text-csc-ink">{{ office.count }}</td>
+                                <td class="py-2.5 pr-4 text-right text-csc-ink-muted">{{ office.settled }}</td>
+                                <td
+                                    class="py-2.5 pr-4 text-right font-medium"
+                                    :class="office.promissory ? 'text-info' : 'text-csc-ink-subtle'"
+                                >
+                                    {{ office.promissory }}
+                                </td>
+                                <td
+                                    class="py-2.5 text-right font-medium"
+                                    :class="office.outstanding ? 'text-warning' : 'text-csc-ink-subtle'"
+                                >
+                                    {{ office.outstanding }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </AppCard>
 
             <!--
@@ -1766,7 +1490,7 @@ const printedAt = new Date().toLocaleString();
                     </p>
                     <h1 class="mt-2 text-xl font-bold">{{ training.title }}</h1>
                     <p class="mt-1 text-sm">
-                        {{ training.starts_at }} · {{ training.venue }} · {{ training.status_label }}
+                        {{ trainingDateRange }} · {{ training.venue }} · {{ training.status_label }}
                     </p>
                 </header>
 
@@ -1887,7 +1611,7 @@ const printedAt = new Date().toLocaleString();
                     <div>
                         <p class="text-sm font-medium text-csc-ink">
                             Day {{ day.day }}
-                            <span class="ml-1 text-xs font-normal text-csc-ink/60">{{ day.label }}</span>
+                            <span class="ml-1 text-xs font-normal text-csc-ink-subtle">{{ day.label }}</span>
                         </p>
                         <p v-if="day.is_today" class="text-2xs font-semibold text-csc-blue uppercase">Today</p>
                     </div>
@@ -1953,11 +1677,11 @@ const printedAt = new Date().toLocaleString();
                         class="mt-3 space-y-1 border-t border-csc-line pt-3 text-xs"
                     >
                         <div class="flex justify-between">
-                            <dt class="text-csc-ink/60">Full fee</dt>
+                            <dt class="text-csc-ink-subtle">Full fee</dt>
                             <dd class="font-medium text-csc-ink">₱{{ money(primeHrm.gross) }}</dd>
                         </div>
                         <div class="flex justify-between">
-                            <dt class="text-csc-ink/60">Discount (20%)</dt>
+                            <dt class="text-csc-ink-subtle">Discount (20%)</dt>
                             <dd class="font-medium text-warning">− ₱{{ money(primeHrm.discount) }}</dd>
                         </div>
                         <div class="flex justify-between border-t border-csc-line pt-1">

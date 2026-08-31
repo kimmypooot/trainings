@@ -181,6 +181,27 @@ class SupervisoryDocumentTest extends TestCase
         );
     }
 
+    /**
+     * The download route is reached by a direct URL, not only through the
+     * roster review action above — so the same office guard has to apply
+     * there too, or a field-office user could read another office's
+     * designation order just by knowing the registration id.
+     */
+    public function test_a_field_office_cannot_download_another_offices_document(): void
+    {
+        $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();
+        $samar = FieldOffice::where('code', 'sfo')->firstOrFail();
+        $training = $this->supervisoryTraining();
+        $registration = $this->registerWithDocument(
+            $this->participantIn($samar, 'samar@example.com'),
+            $training
+        );
+
+        $this->actingAs($this->fieldOfficeStaff($leyte))
+            ->get("/registrations/{$registration->id}/supporting-document")
+            ->assertNotFound();
+    }
+
     public function test_a_rejection_demands_a_reason(): void
     {
         $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();

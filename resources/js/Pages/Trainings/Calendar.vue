@@ -5,6 +5,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import { spansMultipleDays } from '@/dateRange';
 
 defineProps({
     month: { type: Object, required: true },
@@ -63,7 +64,7 @@ const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                 v-for="weekday in weekdays"
                                 :key="weekday"
                                 scope="col"
-                                class="px-2 py-2.5 text-xs font-semibold text-csc-ink/70 uppercase"
+                                class="px-2 py-2.5 text-xs font-semibold text-csc-ink-muted uppercase"
                             >
                                 {{ weekday }}
                             </th>
@@ -84,7 +85,7 @@ const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                                     <span
                                         class="text-xs font-semibold"
                                         :class="[
-                                            day.in_month ? 'text-csc-ink' : 'text-csc-ink/35',
+                                            day.in_month ? 'text-csc-ink' : 'text-csc-ink-subtle',
                                             day.is_today ? 'text-csc-blue' : '',
                                         ]"
                                     >
@@ -114,7 +115,7 @@ const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 </table>
             </AppCard>
 
-            <div class="hidden items-center gap-4 text-xs text-csc-ink/60 md:flex">
+            <div class="hidden items-center gap-4 text-xs text-csc-ink-subtle md:flex">
                 <span class="flex items-center gap-1.5">
                     <span class="size-3 rounded bg-csc-blue-tint" aria-hidden="true" />
                     Open to register
@@ -136,8 +137,8 @@ const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                             <Link :href="training.url" class="text-sm font-medium text-csc-blue hover:underline">
                                 {{ training.title }}
                             </Link>
-                            <p class="mt-0.5 text-xs text-csc-ink/60">
-                                {{ training.starts_at }}<span v-if="training.ends_at"> – {{ training.ends_at }}</span>
+                            <p class="mt-0.5 text-xs text-csc-ink-subtle">
+                                {{ training.starts_at }}<span v-if="spansMultipleDays(training.starts_at, training.ends_at)"> – {{ training.ends_at }}</span>
                                 <span v-if="training.venue"> · {{ training.venue }}</span>
                                 · {{ training.mode_label }}
                             </p>

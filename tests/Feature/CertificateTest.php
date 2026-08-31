@@ -339,6 +339,26 @@ class CertificateTest extends TestCase
             );
     }
 
+    /**
+     * The result page is printed and filed — by an HR officer confirming a new
+     * hire, by an auditor working a folder — so it has to carry the code it was
+     * checked against and the moment the check was made. Without the timestamp
+     * a filed printout claims only that the certificate was genuine at some
+     * unstated point, which is the one thing a record in a folder must not be
+     * vague about.
+     */
+    public function test_the_result_carries_the_code_and_when_it_was_checked(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->get("/verify/{$certificate->verification_code}")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('certificate.code', $certificate->verification_code)
+                ->has('verifiedAt')
+            );
+    }
+
     public function test_verification_never_discloses_contact_details(): void
     {
         $registration = $this->completedRegistration();
@@ -361,6 +381,69 @@ class CertificateTest extends TestCase
         $this->assertSame(2, CertificateVerification::count());
         $this->assertSame(2, $certificate->fresh()->verification_count);
         $this->assertNotNull($certificate->fresh()->last_verified_at);
+    }
+
+    /**
+     * The front door.
+     *
+     * Verification existed from the first release but only for someone who
+     * already held the URL, which the QR on a printed certificate encodes.
+     * Anyone reading the code off the page, holding a photocopy, or simply
+     * told to "check it online" had no way in — nothing linked there and the
+     * only route was to type the address by hand.
+     */
+    public function test_the_verification_form_is_public(): void
+    {
+        $this->get('/verify')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->component('Certificates/VerifyLookup'));
+    }
+
+    public function test_a_typed_code_redirects_to_the_canonical_result_url(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        // A redirect, not a render: what the verifier ends up looking at is the
+        // address they can bookmark or forward, and it is the same address the
+        // QR points at, so there is only one result view to keep honest.
+        $this->post('/verify', ['code' => $certificate->verification_code])
+            ->assertRedirect("/verify/{$certificate->verification_code}");
+    }
+
+    public function test_a_surrounding_space_does_not_defeat_a_retyped_code(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->post('/verify', ['code' => "  {$certificate->verification_code}  "])
+            ->assertRedirect("/verify/{$certificate->verification_code}");
+    }
+
+    /**
+     * A mistyped code comes back to the form, not to a 404.
+     *
+     * A direct link with a bad code still 404s — that is a wrong URL. But
+     * someone who has just typed into a box has almost certainly made a typo,
+     * and an error page throws away what they typed and offers nothing to
+     * correct.
+     */
+    public function test_an_unknown_typed_code_returns_to_the_form_with_an_error(): void
+    {
+        $this->from('/verify')
+            ->post('/verify', ['code' => str_repeat('x', 32)])
+            ->assertRedirect('/verify')
+            ->assertSessionHasErrors('code');
+    }
+
+    public function test_an_unreleased_certificate_cannot_be_reached_through_the_form(): void
+    {
+        // Same guard as the direct URL: a row with no PDF behind it is not a
+        // certificate anyone can hold, so the form must not confirm it exists.
+        $certificate = Certificate::factory()->create();
+
+        $this->from('/verify')
+            ->post('/verify', ['code' => $certificate->verification_code])
+            ->assertRedirect('/verify')
+            ->assertSessionHasErrors('code');
     }
 
     public function test_an_unknown_verification_code_is_not_found(): void

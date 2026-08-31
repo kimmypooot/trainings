@@ -2,6 +2,7 @@
 import AppBadge from '@/Components/AppBadge.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import ProgramStatusPill from '@/Components/ProgramStatusPill.vue';
+import { spansMultipleDays } from '@/dateRange';
 
 /**
  * One program in the public catalogue.
@@ -59,13 +60,13 @@ const money = (value) =>
 
         <h3 class="mt-5 text-lg leading-snug font-semibold text-csc-blue">{{ program.title }}</h3>
 
-        <div class="mt-5 space-y-2.5 text-sm text-csc-ink/70">
+        <div class="mt-5 space-y-2.5 text-sm text-csc-ink-muted">
             <div class="flex items-center gap-2">
                 <AppIcon name="calendar" size="sm" class="shrink-0 text-csc-blue/60" />
                 <span>
                     <span class="font-semibold text-csc-ink">{{ program.starts_at }}</span>
                     <!-- A single-day run stores the same date twice; "Oct 4 – Oct 4" is noise. -->
-                    <template v-if="program.ends_at && program.ends_at !== program.starts_at">
+                    <template v-if="spansMultipleDays(program.starts_at, program.ends_at)">
                         – <span class="font-semibold text-csc-ink">{{ program.ends_at }}</span>
                     </template>
                 </span>

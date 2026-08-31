@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\SubjectMatterExpert;
 use App\Models\Training;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,23 +62,33 @@ class ProgramCatalogTest extends TestCase
      */
     public function test_the_payload_withholds_what_signing_in_earns(): void
     {
-        Training::factory()->create([
+        $training = Training::factory()->create([
             'starts_at' => now()->addDays(30),
             'meeting_link' => 'https://meet.example.test/secret-room',
-            'facilitator_name' => 'MARIA SANTOS',
-            'facilitator_contact' => '09171234567',
+            'signatory_name' => 'MARIA SANTOS',
         ]);
+
+        // An expert's contact details are internal, and the catalogue card is
+        // the most public surface in the app — so the number is planted here
+        // and asserted absent rather than merely assumed to be unreferenced.
+        $expert = SubjectMatterExpert::factory()->create([
+            'name' => 'MARIA SANTOS',
+            'contact_number' => '09171234567',
+            'email' => 'sme.private@csc.gov.ph',
+        ]);
+        $training->subjectMatterExperts()->attach($expert);
 
         $response = $this->get('/')->assertOk();
 
         $response->assertDontSee('secret-room', false);
         $response->assertDontSee('09171234567', false);
+        $response->assertDontSee('sme.private@csc.gov.ph', false);
 
         $card = $response->viewData('page')['props']['programs'][0];
 
         $this->assertArrayNotHasKey('meeting_link', $card);
-        $this->assertArrayNotHasKey('facilitator_name', $card);
-        $this->assertArrayNotHasKey('facilitator_contact', $card);
+        $this->assertArrayNotHasKey('signatory_name', $card);
+        $this->assertArrayNotHasKey('subject_matter_experts', $card);
     }
 
     public function test_drafts_and_finished_runs_are_absent(): void
@@ -161,8 +172,11 @@ class ProgramCatalogTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->has('programs', 0)
                 // The hero and the stats block are not part of the catalogue and
-                // must survive a filter that matches nothing.
-                ->has('stats', 4)
+                // must survive a filter that matches nothing. The count is not
+                // asserted: HomeController now publishes only the figures it can
+                // stand behind, so the size is a property of how much history the
+                // deployment has, not of whether this filter broke the page.
+                ->has('stats')
             );
     }
 

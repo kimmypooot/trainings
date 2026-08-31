@@ -39,6 +39,6 @@ const tag = computed(() => {
         "
     >
         <span class="block text-2xl font-bold text-csc-blue sm:text-3xl">{{ value }}</span>
-        <span class="mt-1 block text-xs font-medium text-csc-ink/60 sm:text-sm">{{ label }}</span>
+        <span class="mt-1 block text-xs font-medium text-csc-ink-subtle sm:text-sm">{{ label }}</span>
     </component>
 </template>

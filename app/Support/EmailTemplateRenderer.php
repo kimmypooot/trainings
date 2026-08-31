@@ -105,25 +105,15 @@ class EmailTemplateRenderer
 
     /**
      * "12 March 2026" for a one-day run, "12–14 March 2026" for a longer one.
+     *
+     * The formatting itself is Training::dateRange() — participants must read
+     * the same dates in their confirmation email as staff read on the report.
+     * This wrapper only handles the case the model cannot: a registration
+     * whose training has gone.
      */
     private static function dateRange(Registration $registration): string
     {
-        $training = $registration->training;
-
-        if ($training?->starts_at === null) {
-            return '';
-        }
-
-        $starts = $training->starts_at;
-        $ends = $training->ends_at;
-
-        if ($ends === null || $starts->isSameDay($ends)) {
-            return $starts->format('d F Y');
-        }
-
-        return $starts->isSameMonth($ends)
-            ? $starts->format('d').'–'.$ends->format('d F Y')
-            : $starts->format('d F').' – '.$ends->format('d F Y');
+        return $registration->training?->dateRange() ?? '';
     }
 
     private static function paymentStatus(Registration $registration): string

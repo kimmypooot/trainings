@@ -7,20 +7,27 @@ use App\Http\Controllers\Admin\AttendanceController as AdminAttendanceController
 use App\Http\Controllers\Admin\CertificateController as AdminCertificateController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\EmailController as AdminEmailController;
+use App\Http\Controllers\Admin\EvaluationController as AdminEvaluationController;
 use App\Http\Controllers\Admin\ExportController as AdminExportController;
 use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeController;
 use App\Http\Controllers\Admin\MaintenanceController as AdminMaintenanceController;
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PhysicalOrRequestController as AdminPhysicalOrRequestController;
+use App\Http\Controllers\Admin\RegistrationTransferController;
 use App\Http\Controllers\Admin\RequestQueueController as AdminRequestQueueController;
+use App\Http\Controllers\Admin\RosterBulkController;
+use App\Http\Controllers\Admin\RosterController;
 use App\Http\Controllers\Admin\ScanLinkController as AdminScanLinkController;
 use App\Http\Controllers\Admin\ScannerController;
+use App\Http\Controllers\Admin\SearchController;
+use App\Http\Controllers\Admin\SubjectMatterExpertController as AdminSubjectMatterExpertController;
 use App\Http\Controllers\Admin\TrainingController as AdminTrainingController;
 use App\Http\Controllers\Admin\UndoController as AdminUndoController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\AgencyRequestController;
 use App\Http\Controllers\Auth\ChangePasswordController;
+use App\Http\Controllers\Auth\EmailChangeController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\LoginController;
@@ -29,6 +36,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\CertificateVerificationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
@@ -89,6 +97,11 @@ Route::get('/sitemap.xml', function () {
         '/forgot-password',
         '/privacy-policy',
         '/terms-of-service',
+        '/accessibility',
+        // The verification front door is a public entry point in its own right:
+        // an employer searching for how to check a CSC certificate should be
+        // able to land on it without holding a code first.
+        '/verify',
     ]);
 
     return response(view('sitemap', ['urls' => $urls]))
@@ -100,6 +113,18 @@ Route::get('/sitemap.xml', function () {
  * point is that anyone holding the printed document can confirm it is genuine.
  * Throttled because it is the one public endpoint that touches issued records.
  */
+Route::get('/verify', [CertificateVerificationController::class, 'form'])
+    ->name('certificates.verify-form');
+
+/*
+ * Throttled harder than the GET below it. A form that answers "does this code
+ * exist" is the one place on the site someone could sit and guess codes, and
+ * unlike the QR route there is no printed document implied by the request.
+ */
+Route::post('/verify', [CertificateVerificationController::class, 'lookup'])
+    ->middleware('throttle:10,1')
+    ->name('certificates.lookup');
+
 Route::get('/verify/{code}', [CertificateVerificationController::class, 'show'])
     ->middleware('throttle:30,1')
     ->name('certificates.verify');
@@ -142,17 +167,41 @@ Route::prefix('station')->name('station.')->group(function () {
 Route::get('/privacy-policy', fn () => Inertia::render('Legal/PrivacyPolicy'))->name('privacy-policy');
 Route::get('/terms-of-service', fn () => Inertia::render('Legal/TermsOfService'))->name('terms-of-service');
 
+/*
+ * The accessibility statement. Expected of a Philippine government site
+ * alongside the privacy and terms pages — a visitor using assistive technology
+ * needs somewhere to read what this site claims to conform to and where to
+ * report a barrier, and that has to be a page, not a promise in a policy PDF.
+ */
+Route::get('/accessibility', fn () => Inertia::render('Legal/Accessibility'))->name('accessibility');
+
 // The maintenance notice, rendered standalone. The page is normally served by
 // EnsureSiteIsAvailable with a 503, but the route keeps the same page directly
 // reachable without going through the closure — and, being named `maintenance`,
 // sits on the middleware's exempt list so the notice never closes itself.
-Route::get('/maintenance', fn () => Inertia::render('Maintenance'))->name('maintenance');
+Route::get('/maintenance', fn () => Inertia::render('Maintenance', [
+    // Kept in step with what EnsureSiteIsAvailable passes. The page shows the
+    // office's contact details, and this route reaches it without going through
+    // the middleware — so the details have to be handed over here too, or the
+    // standalone notice is the one version with nobody to write to.
+    'office' => [
+        'name' => config('office.name'),
+        'email' => config('office.email'),
+        'phone' => config('office.phone'),
+    ],
+]))->name('maintenance');
 
 Route::get('/login', [LoginController::class, 'create'])->name('login');
 Route::post('/login', [LoginController::class, 'store'])->name('login.store');
 
 Route::get('/register', [RegisterController::class, 'create'])->name('register');
-Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
+// Throttled like every other unauthenticated state-change endpoint here —
+// without it, account creation is the one public POST in this file a script
+// could hit without limit, whether to spam mailbox verification or to probe
+// the unique:users,email rule for account enumeration.
+Route::post('/register', [RegisterController::class, 'store'])
+    ->middleware('throttle:10,1')
+    ->name('register.store');
 
 /*
  * Password reset. The route names are the broker's defaults (password.request,
@@ -211,8 +260,53 @@ Route::post('/email/resend', [EmailVerificationController::class, 'resend'])
     ->middleware('throttle:3,1')
     ->name('verification.resend');
 
+/*
+ * Changing the address the account lives at.
+ *
+ * Outside the completeness and verification gates, like the photo and password
+ * routes: a participant whose agency inbox has died cannot verify the address
+ * they are trying to leave, and gating the fix behind it would be a locked door
+ * whose key is inside the room.
+ *
+ * `confirm` is a signed GET open to guests — it is opened from whichever
+ * browser has the new mailbox, which is rarely the one holding the session —
+ * and it is throttled because an unauthenticated route that reads a user id is
+ * worth rate-limiting even when it discloses nothing.
+ */
+Route::get('/profile/email/confirm/{id}/{hash}', [EmailChangeController::class, 'confirm'])
+    ->middleware(['signed', 'throttle:10,1'])
+    ->name('profile.email.confirm');
+
+Route::middleware('auth')->group(function () {
+    Route::post('/profile/email', [EmailChangeController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('profile.email.store');
+    Route::delete('/profile/email', [EmailChangeController::class, 'destroy'])->name('profile.email.destroy');
+});
+
 Route::get('/auth/google', [GoogleController::class, 'redirect'])->name('auth.google');
 Route::get('/auth/google/callback', [GoogleController::class, 'callback'])->name('auth.google.callback');
+
+/*
+ * The stop between "Google says who you are" and "you now have an account".
+ *
+ * A Google sign-in that matches no identity and no address used to create an
+ * account on the spot, which is how one participant with an office address and
+ * a personal Gmail quietly became two participants. These three routes are the
+ * question asked in between — see GoogleController::PENDING_SIGNUP for why it
+ * is asked of everyone rather than only of the people we suspect.
+ *
+ * Unauthenticated by definition: the account does not exist yet. What
+ * authorises them is the verified Google payload parked in the session, which
+ * is also the only thing the account is ever built from — so `create` and
+ * `cancel` are POSTs carrying nothing but a CSRF token.
+ */
+Route::get('/auth/google/new', [GoogleController::class, 'confirmNew'])->name('auth.google.new');
+Route::post('/auth/google/new', [GoogleController::class, 'storeNew'])
+    ->middleware('throttle:10,1')
+    ->name('auth.google.new.store');
+Route::post('/auth/google/new/cancel', [GoogleController::class, 'cancelNew'])
+    ->name('auth.google.new.cancel');
 
 /*
  * Connecting Google to an account that already exists — the path for a
@@ -242,6 +336,15 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
     ->group(function () {
         Route::get('/', AdminDashboardController::class)->name('dashboard');
 
+        /*
+         * The header search box. It reaches the participants directory and the
+         * trainings catalogue, both of which every staff role already reads
+         * from this same group — so it opens no door that was not already open,
+         * and it carries the field-office scope inside GlobalSearch rather than
+         * relying on this line to narrow it.
+         */
+        Route::get('/search', SearchController::class)->name('search');
+
         // Creating and editing trainings is HRD work; field offices and
         // management get the roster but not the pen.
         Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
@@ -251,25 +354,44 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('trainings.edit');
             Route::put('/trainings/{training}', [AdminTrainingController::class, 'update'])
                 ->name('trainings.update');
-            Route::post('/registrations/{registration}/review', [AdminTrainingController::class, 'review'])
+
+            /*
+             * Rescheduling. The form that opens is the create form, prefilled —
+             * a rescheduled run is a new record, because the original's dates,
+             * attendance and collected fees are history that an edit would
+             * falsify. It sits with create and edit for the same reason they do.
+             */
+            Route::get('/trainings/{training}/reschedule', [AdminTrainingController::class, 'reschedule'])
+                ->name('trainings.reschedule');
+
+            /*
+             * Who the reschedule stranded: everyone still holding or waiting on
+             * a slot, with what the office is holding their money against. Read
+             * -only, but HRD-only rather than open to every staff role that can
+             * read a roster — it exists to be acted on, and the action it leads
+             * to is the transfer below.
+             */
+            Route::get('/trainings/{training}/affected', [AdminTrainingController::class, 'affected'])
+                ->name('trainings.affected');
+            Route::post('/registrations/{registration}/review', [RosterController::class, 'review'])
                 ->name('registrations.review');
-            Route::post('/registrations/{registration}/complete', [AdminTrainingController::class, 'complete'])
+            Route::post('/registrations/{registration}/complete', [RosterController::class, 'complete'])
                 ->name('registrations.complete');
 
             // Cancelling on a participant's behalf — a phoned-in withdrawal, a
             // duplicate, a confirmed no-show. Reviewing a cancellation the
             // participant *filed* is a different thing and lives in the request
             // queue; this one starts the decision, so it is HRD's alone.
-            Route::post('/registrations/{registration}/cancel', [AdminTrainingController::class, 'cancelRegistration'])
+            Route::post('/registrations/{registration}/cancel', [RosterController::class, 'cancelRegistration'])
                 ->name('registrations.cancel');
 
             // One decision applied to a roster selection.
             // Moving a roster selection to another run — rescheduling and
             // splitting are HRD's calls, so it sits with the same roles that
             // create trainings rather than with everyone who can read a roster.
-            Route::post('/trainings/{training}/registrations/transfer', [AdminTrainingController::class, 'transfer'])
+            Route::post('/trainings/{training}/registrations/transfer', RegistrationTransferController::class)
                 ->name('trainings.registrations.transfer');
-            Route::post('/trainings/{training}/registrations/bulk', [AdminTrainingController::class, 'bulk'])
+            Route::post('/trainings/{training}/registrations/bulk', RosterBulkController::class)
                 ->name('registrations.bulk');
 
             // Takes back the decision just made, within its window.
@@ -283,7 +405,7 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         });
 
         Route::get('/trainings', [AdminTrainingController::class, 'index'])->name('trainings.index');
-        Route::get('/trainings/{training}/roster', [AdminTrainingController::class, 'roster'])
+        Route::get('/trainings/{training}/roster', [RosterController::class, 'show'])
             ->name('trainings.roster');
 
         /*
@@ -314,7 +436,7 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                  * The controller re-resolves the registration against the
                  * field-office scope, exactly as the roster does.
                  */
-                Route::post('/registrations/{registration}/supervisory-document', [AdminTrainingController::class, 'reviewSupervisoryDocument'])
+                Route::post('/registrations/{registration}/supervisory-document', [RosterController::class, 'reviewSupervisoryDocument'])
                     ->name('registrations.supervisory-document');
 
                 /*
@@ -487,6 +609,47 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('field-offices.update');
             Route::post('/field-offices/{fieldOffice}/toggle', [AdminFieldOfficeController::class, 'toggle'])
                 ->name('field-offices.toggle');
+
+            /*
+             * Subject matter experts. Reference data in the same sense a field
+             * office is — created once, assigned to many runs — and managed by
+             * the same roles that own the trainings those assignments appear
+             * on, because choosing who delivers a programme is part of building
+             * it. There is no destroy: an expert carrying evaluations cannot be
+             * deleted (the database refuses), so `toggle` is the retirement.
+             */
+            Route::get('/smes', [AdminSubjectMatterExpertController::class, 'index'])
+                ->name('smes.index');
+            Route::get('/smes/create', [AdminSubjectMatterExpertController::class, 'create'])
+                ->name('smes.create');
+            Route::post('/smes', [AdminSubjectMatterExpertController::class, 'store'])
+                ->name('smes.store');
+            Route::get('/smes/{expert}', [AdminSubjectMatterExpertController::class, 'show'])
+                ->name('smes.show');
+            Route::get('/smes/{expert}/edit', [AdminSubjectMatterExpertController::class, 'edit'])
+                ->name('smes.edit');
+            Route::put('/smes/{expert}', [AdminSubjectMatterExpertController::class, 'update'])
+                ->name('smes.update');
+            Route::post('/smes/{expert}/toggle', [AdminSubjectMatterExpertController::class, 'toggle'])
+                ->name('smes.toggle');
+        });
+
+        /*
+         * Evaluation results.
+         *
+         * Region-wide by construction: an average over one office's
+         * participants, labelled with the training's name, is a number that
+         * would be quoted as the training's rating and would not be one. So
+         * the field-office role — the one role scoped to a subset of
+         * participants — is not in this group, rather than being shown a
+         * filtered version of the same page. Management is: reading how the
+         * region's programmes were received is exactly their remit.
+         */
+        Route::middleware(EnsureUserIsStaff::class.':admin|superadmin|management')->group(function () {
+            Route::get('/evaluations', [AdminEvaluationController::class, 'index'])
+                ->name('evaluations.index');
+            Route::get('/trainings/{training}/evaluations', [AdminEvaluationController::class, 'show'])
+                ->name('trainings.evaluations');
         });
 
         /*
@@ -551,6 +714,11 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             ->name('exports.participant-history');
         Route::get('/exports/trainings/{training}/roster', [AdminExportController::class, 'roster'])
             ->name('exports.roster');
+        // The affected-participants list for a rescheduled run, with the fee
+        // state that decides each case. Office-scoped in the controller like
+        // every other export here.
+        Route::get('/exports/trainings/{training}/affected', [AdminExportController::class, 'affected'])
+            ->name('exports.affected');
         Route::get('/exports/payments', [AdminExportController::class, 'payments'])
             ->name('exports.payments');
         // Per-training revenue, with the PRIME-HRM discounts identified.
@@ -635,6 +803,10 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
         ->name('registrations.store');
 
     Route::get('/my/registrations', [RegistrationController::class, 'index'])->name('registrations.index');
+    // The training as an .ics the participant can keep. Owner-only, decided in
+    // the controller — a registration is nobody else's appointment.
+    Route::get('/my/registrations/{registration}/calendar', [RegistrationController::class, 'calendar'])
+        ->name('registrations.calendar');
     // Owner-or-staff, decided in the controller — the participant needs to
     // re-read what they attached, and staff need it to review the claim.
     Route::get('/registrations/{registration}/supporting-document', [RegistrationController::class, 'supportingDocument'])
@@ -706,6 +878,23 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
         ->name('outputs.store');
     Route::get('/outputs/{output}/download', [RegistrationOutputController::class, 'download'])
         ->name('outputs.download');
+
+    /*
+     * Evaluating the experts who delivered a training day.
+     *
+     * Keyed by registration and day number rather than by a token in an email,
+     * because the form has to be reachable on the evening of day 2 by somebody
+     * who deleted the day 1 message — and because the registration is what
+     * proves the person was on the programme. Ownership is checked in the
+     * controller; which days are open is SmeEvaluationService's call.
+     */
+    Route::get('/my/evaluations', [EvaluationController::class, 'index'])->name('evaluations.index');
+    Route::get('/my/evaluations/{registration}/days/{day}', [EvaluationController::class, 'show'])
+        ->whereNumber('day')
+        ->name('evaluations.show');
+    Route::post('/my/evaluations/{registration}/days/{day}', [EvaluationController::class, 'store'])
+        ->whereNumber('day')
+        ->name('evaluations.store');
 
     Route::get('/my/certificates', [CertificateController::class, 'index'])->name('certificates.index');
     Route::get('/my/certificates/{certificate}/download', [CertificateController::class, 'download'])

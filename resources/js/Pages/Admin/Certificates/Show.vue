@@ -71,7 +71,7 @@ const details = [
                     <div class="min-w-0">
                         <p class="font-mono text-sm font-semibold text-csc-blue">{{ certificate.number }}</p>
                         <p class="mt-1 text-lg font-semibold text-csc-ink">{{ certificate.participant }}</p>
-                        <p class="mt-0.5 text-sm text-csc-ink/70">{{ certificate.training }}</p>
+                        <p class="mt-0.5 text-sm text-csc-ink-muted">{{ certificate.training }}</p>
 
                         <div class="mt-4 flex flex-wrap gap-2">
                             <AppButton :href="certificate.download_url" external size="sm" variant="ghost" icon="download">
@@ -97,7 +97,7 @@ const details = [
                             alt="QR code linking to this certificate's public verification page"
                             class="size-40 rounded-lg border border-csc-line bg-white p-2"
                         />
-                        <figcaption class="mt-2 text-2xs text-csc-ink/55">Printed on the certificate</figcaption>
+                        <figcaption class="mt-2 text-2xs text-csc-ink-subtle">Printed on the certificate</figcaption>
                     </figure>
                 </div>
             </AppCard>
@@ -114,7 +114,7 @@ const details = [
             <AppCard title="Certificate Details">
                 <dl class="grid gap-4 text-sm sm:grid-cols-2">
                     <div v-for="[label, key] in details" :key="key">
-                        <dt class="text-csc-ink/60">{{ label }}</dt>
+                        <dt class="text-csc-ink-subtle">{{ label }}</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ certificate[key] ?? '—' }}</dd>
                     </div>
                 </dl>
@@ -129,18 +129,18 @@ const details = [
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-csc-line text-xs uppercase">
                             <tr>
-                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">When</th>
-                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink/70">From</th>
-                                <th scope="col" class="py-2 font-semibold text-csc-ink/70">Client</th>
+                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">When</th>
+                                <th scope="col" class="py-2 pr-4 font-semibold text-csc-ink-muted">From</th>
+                                <th scope="col" class="py-2 font-semibold text-csc-ink-muted">Client</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
                             <tr v-for="hit in verifications" :key="hit.id">
-                                <td class="py-2.5 pr-4 whitespace-nowrap text-csc-ink/80">{{ hit.verified_at }}</td>
-                                <td class="py-2.5 pr-4 font-mono text-xs text-csc-ink/70">
+                                <td class="py-2.5 pr-4 whitespace-nowrap text-csc-ink-muted">{{ hit.verified_at }}</td>
+                                <td class="py-2.5 pr-4 font-mono text-xs text-csc-ink-muted">
                                     {{ hit.ip_address ?? '—' }}
                                 </td>
-                                <td class="max-w-md truncate py-2.5 text-xs text-csc-ink/55" :title="hit.user_agent">
+                                <td class="max-w-md truncate py-2.5 text-xs text-csc-ink-subtle" :title="hit.user_agent">
                                     {{ hit.user_agent ?? '—' }}
                                 </td>
                             </tr>

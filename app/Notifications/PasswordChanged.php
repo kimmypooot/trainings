@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\BrandsMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -33,6 +34,7 @@ use Illuminate\Notifications\Notification;
  */
 class PasswordChanged extends Notification
 {
+    use BrandsMail;
     use Queueable;
 
     /**
@@ -55,7 +57,7 @@ class PasswordChanged extends Notification
             ->subject($this->created
                 ? 'A password was added to your CSC TIMS account'
                 : 'Your CSC TIMS password was changed')
-            ->greeting('Hello '.($notifiable->name ?: 'there').',');
+            ->greeting($this->greetingFor($notifiable));
 
         if ($this->created) {
             $message
@@ -65,10 +67,14 @@ class PasswordChanged extends Notification
             $message->line('The password for your CSC TIMS account was changed just now.');
         }
 
+        $this->withPreheader($message, $this->created
+            ? 'A password was added to your account. If this was not you, act now.'
+            : 'Your password was changed. If this was not you, act now.');
+
         return $message
             ->line('If this was you, nothing further is needed — this message is only to let you know.')
             ->line('**If this was not you, someone else may have access to your account.** Reset your password immediately and contact the CSC Regional Office VIII.')
             ->action('Reset my password', route('password.request'))
-            ->salutation('— Civil Service Commission Regional Office VIII');
+            ->salutation($this->signature());
     }
 }

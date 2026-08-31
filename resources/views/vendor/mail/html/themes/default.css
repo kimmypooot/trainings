@@ -1,17 +1,67 @@
+/*
+ * CSC TIMS mail theme.
+ *
+ * This was Laravel's stock theme with the font swapped: black #18181b buttons,
+ * zinc greys, a plain-text header. It arrived in a participant's inbox looking
+ * like a framework default rather than like correspondence from a Commission
+ * regional office, and next to the site it announces — same font, none of the
+ * same colour — it read as a different product.
+ *
+ * The palette below is the app's own, hex-for-hex (see resources/css/app.css),
+ * because an @theme token cannot cross into an email: Laravel inlines this
+ * stylesheet with CssToInlineStyles before sending, and custom properties do
+ * not survive that. So these values are duplicated on purpose. If a brand
+ * colour changes there, it has to change here too — there is no way to make
+ * one the source of the other without shipping a build step for mail.
+ *
+ * Shape: one card, letterhead included. The ribbon and seal are rows inside
+ * .inner-body rather than full-bleed bands above it, so the corners, the
+ * hairlines and the shadow all belong to a single object. Everything below is
+ * written to that — the card's top and bottom rows carry the rounding, because
+ * a border-radius on the table itself is not clipped by anything an email
+ * client will honour.
+ *
+ * Constraints worth remembering before editing:
+ *   - Everything is inlined, so only simple, well-supported declarations work.
+ *     No flexbox, no grid, no custom properties, no background-image.
+ *   - The @media blocks in html/layout.blade.php are the only rules that stay
+ *     in a <style> tag, so responsive behaviour has to live there, not here.
+ *   - Outlook on Windows ignores border-radius and box-shadow entirely. Nothing
+ *     here depends on either to stay legible — they are softening, not
+ *     structure. There it degrades to a square-cornered card, which is the
+ *     correct fallback.
+ *   - Contrast is measured against the surface a thing actually sits on. The
+ *     footer sits on the #eef0f9 wrapper, not on white, which is why it does
+ *     not use the same grey the subcopy does.
+ */
+
 /* Base */
 
+/*
+ * The font stack is repeated on concrete selectors below rather than declared
+ * once here, and that is not an oversight.
+ *
+ * Laravel inlines this stylesheet with CssToInlineStyles, which can only apply
+ * rules whose selectors it can resolve to elements. It cannot resolve the
+ * :not() chain this rule used to carry, so the declaration was silently dropped
+ * on every send: the @import in layout.blade.php dutifully fetched Poppins and
+ * nothing ever asked for it, leaving each message in whatever serif the client
+ * defaults to. Simple selectors survive inlining; clever ones do not.
+ *
+ * layout.blade.php also keeps a plain <style> rule as a second line of defence
+ * for clients that honour it, covering anything not enumerated here.
+ */
 body,
 body *:not(html):not(style):not(br):not(tr):not(code) {
     box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif,
-        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
     position: relative;
 }
 
 body {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     -webkit-text-size-adjust: none;
-    background-color: #ffffff;
-    color: #52525b;
+    background-color: #eef0f9;
+    color: #5f6774;
     height: 100%;
     line-height: 1.4;
     margin: 0;
@@ -23,12 +73,14 @@ p,
 ul,
 ol,
 blockquote {
-    line-height: 1.4;
+    line-height: 1.65;
     text-align: start;
 }
 
 a {
-    color: #18181b;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #2a338f;
+    font-weight: 500;
 }
 
 a img {
@@ -37,37 +89,82 @@ a img {
 
 /* Typography */
 
+/*
+ * h1 is the greeting — MailMessage renders "Hello Rosa," as a heading, so it is
+ * the first line of every message we send. Ink rather than brand blue: a blue
+ * greeting competes with the wordmark directly above it and with the action
+ * button below, and three blues stacked inside 200px is what made the old
+ * message read as busy. The colour in the body is spent on the one thing worth
+ * clicking.
+ */
 h1 {
-    color: #18181b;
-    font-size: 18px;
-    font-weight: bold;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2937;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
     margin-top: 0;
+    margin-bottom: 16px;
     text-align: start;
 }
 
 h2 {
-    font-size: 16px;
-    font-weight: bold;
-    margin-top: 0;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2937;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+    margin-top: 26px;
+    margin-bottom: 12px;
     text-align: start;
 }
 
 h3 {
-    font-size: 14px;
-    font-weight: bold;
-    margin-top: 0;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #374151;
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 22px;
+    margin-bottom: 10px;
     text-align: left;
 }
 
 p {
-    font-size: 16px;
-    line-height: 1.5em;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #5f6774;
+    font-size: 15px;
+    line-height: 1.7;
     margin-top: 0;
+    margin-bottom: 16px;
     text-align: left;
 }
 
 p.sub {
     font-size: 12px;
+}
+
+/*
+ * Lists were never styled, so they inherited the client's default 16px serif in
+ * the middle of a 15px Poppins message — the one place the font stack did not
+ * reach even after the selectors above were made inlineable.
+ */
+ul,
+ol {
+    color: #5f6774;
+    font-size: 15px;
+    margin-top: 0;
+    margin-bottom: 16px;
+    padding-left: 20px;
+}
+
+li {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #5f6774;
+    font-size: 15px;
+    line-height: 1.7;
+    margin-bottom: 6px;
 }
 
 img {
@@ -80,7 +177,7 @@ img {
     -premailer-cellpadding: 0;
     -premailer-cellspacing: 0;
     -premailer-width: 100%;
-    background-color: #fafafa;
+    background-color: #eef0f9;
     margin: 0;
     padding: 0;
     width: 100%;
@@ -97,26 +194,98 @@ img {
 
 /* Header */
 
+/*
+ * The GOVPH ribbon, carried over from the site header so the two open the same
+ * way. Deep blue rather than the mid blue of the wordmark, exactly as on the
+ * web. It is the card's top row now, which is why it carries the top corners.
+ */
+.gov-ribbon {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #1e2668;
+    border-radius: 14px 14px 0 0;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    padding: 10px 24px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+/*
+ * A 3px hairline of brand red between the ribbon and the white letterhead.
+ *
+ * This replaces the short centred rule that used to sit under the wordmark,
+ * where it read as decoration on the end of the lockup. Between the two bands it
+ * does structural work instead. It is still the only brand red in the message
+ * and still what red is everywhere else in this codebase: a rule, never a fill
+ * and never behind text. White on --color-csc-red fails AA, which is why the
+ * error button further down uses the darker red-ink.
+ */
+.brand-rule {
+    background-color: #ec1c2d;
+    font-size: 0;
+    height: 3px;
+    line-height: 3px;
+    mso-line-height-rule: exactly;
+    padding: 0;
+}
+
 .header {
-    padding: 25px 0;
+    background-color: #ffffff;
+    border-bottom: 1px solid #eef0f9;
+    padding: 28px 32px 24px;
     text-align: center;
 }
 
 .header a {
-    color: #18181b;
+    color: #2a338f;
     font-size: 19px;
-    font-weight: bold;
+    font-weight: 600;
     text-decoration: none;
 }
 
 /* Logo */
 
+/*
+ * 52x49, not 52x52.
+ *
+ * The seal is 256x243 — very nearly square, which is what makes forcing it into
+ * a square box the kind of error nobody reports and everybody half-notices: the
+ * mark simply looks very slightly wrong. These numbers hold its real 1.053
+ * ratio. Any 256/512 variant in public/images is the same artwork at a
+ * different size; MailBranding picks the 256 because at 38KB it is the smallest
+ * of them and still around five times the rendered size, which is more than any
+ * display needs — and it now travels with the message, so that weight is paid
+ * once per send rather than once per open.
+ */
 .logo {
-    height: 75px;
-    margin-top: 15px;
-    margin-bottom: 10px;
-    max-height: 75px;
-    width: 75px;
+    display: block;
+    height: 49px;
+    margin: 0 auto 12px;
+    max-height: 49px;
+    width: 52px;
+}
+
+.wordmark {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #2a338f;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+}
+
+.wordmark-sub {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #5f6774;
+    display: block;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    line-height: 1.5;
+    margin-top: 6px;
+    text-transform: uppercase;
 }
 
 /* Body */
@@ -125,11 +294,9 @@ img {
     -premailer-cellpadding: 0;
     -premailer-cellspacing: 0;
     -premailer-width: 100%;
-    background-color: #fafafa;
-    border-bottom: 1px solid #fafafa;
-    border-top: 1px solid #fafafa;
+    background-color: #eef0f9;
     margin: 0;
-    padding: 0;
+    padding: 32px 12px 0;
     width: 100%;
 }
 
@@ -138,29 +305,44 @@ img {
     -premailer-cellspacing: 0;
     -premailer-width: 570px;
     background-color: #ffffff;
-    border-color: #e4e4e7;
-    border-radius: 4px;
-    border-width: 1px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(30, 38, 104, 0.05), 0 10px 30px rgba(30, 38, 104, 0.07);
     margin: 0 auto;
     padding: 0;
     width: 570px;
 }
 
-.inner-body a {
+/*
+ * Only URLs printed as literal text — the fallback line under an action button —
+ * want breaking mid-word. Applied to every link in the card, as it used to be,
+ * this also broke ordinary anchor text such as the office email address at an
+ * arbitrary character.
+ */
+.inner-body a.break-all,
+.inner-body .break-all a {
     word-break: break-all;
+}
+
+.content-cell {
+    border-radius: 0 0 14px 14px;
+    max-width: 100vw;
+    padding: 36px 36px 38px;
 }
 
 /* Subcopy */
 
 .subcopy {
-    border-top: 1px solid #e4e4e7;
-    margin-top: 25px;
-    padding-top: 25px;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 32px;
+    padding-top: 22px;
 }
 
 .subcopy p {
-    font-size: 14px;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.65;
+    margin-bottom: 0;
 }
 
 /* Footer */
@@ -175,44 +357,68 @@ img {
     width: 570px;
 }
 
+/*
+ * #5f6774, not the #6b7280 used inside the card.
+ *
+ * The footer is the one block of text sitting on the blue-tinted wrapper rather
+ * than on white, and the placeholder grey measures 4.20:1 there — under AA. This
+ * is the muted token, 5.02:1 on the tint. The rule from app.css holds in mail
+ * too: pick the step for the surface the text is actually on.
+ */
 .footer p {
-    color: #a1a1aa;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #5f6774;
     font-size: 12px;
+    line-height: 1.7;
+    margin-bottom: 10px;
     text-align: center;
 }
 
 .footer a {
-    color: #a1a1aa;
-    text-decoration: underline;
+    color: #2a338f;
+    font-weight: 500;
+    text-decoration: none;
 }
 
 /* Tables */
 
+/*
+ * Boxed rather than ruled. A markdown table in a notification is nearly always a
+ * small set of facts — a schedule, an amount, a reference number — and a
+ * bordered block reads as a record at a glance, where naked rows read as more
+ * body copy that happens to be aligned.
+ */
 .table table {
     -premailer-cellpadding: 0;
     -premailer-cellspacing: 0;
     -premailer-width: 100%;
-    margin: 30px auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin: 26px auto;
     width: 100%;
 }
 
 .table th {
-    border-bottom: 1px solid #e4e4e7;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f7f8fc;
+    border-bottom: 1px solid #e5e7eb;
+    color: #374151;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     margin: 0;
-    padding-bottom: 8px;
+    padding: 11px 16px;
+    text-transform: uppercase;
 }
 
 .table td {
-    color: #52525b;
-    font-size: 15px;
-    line-height: 18px;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    border-bottom: 1px solid #f3f4f6;
+    color: #5f6774;
+    font-size: 14px;
+    line-height: 20px;
     margin: 0;
-    padding: 10px 0;
-}
-
-.content-cell {
-    max-width: 100vw;
-    padding: 32px;
+    padding: 12px 16px;
 }
 
 /* Buttons */
@@ -228,57 +434,86 @@ img {
     float: unset;
 }
 
+/*
+ * The padding is drawn with borders rather than padding on purpose — it is the
+ * one way to get a reliably tappable target in Outlook, which collapses padding
+ * on an inline-block anchor. Keep the border colour identical to the background
+ * or the button grows a visible frame.
+ *
+ * 46px tall at these numbers (15px text at 1.2, plus 14px of border top and
+ * bottom), which clears the 44px minimum touch target both mobile platforms ask
+ * for. Shrinking the text or the borders puts it back under.
+ */
 .button {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     -webkit-text-size-adjust: none;
-    border-radius: 4px;
-    color: #fff;
+    border-radius: 10px;
+    color: #ffffff;
     display: inline-block;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
     overflow: hidden;
     text-decoration: none;
 }
 
 .button-blue,
 .button-primary {
-    background-color: #18181b;
-    border-bottom: 8px solid #18181b;
-    border-left: 18px solid #18181b;
-    border-right: 18px solid #18181b;
-    border-top: 8px solid #18181b;
+    background-color: #2a338f;
+    border-bottom: 14px solid #2a338f;
+    border-left: 28px solid #2a338f;
+    border-right: 28px solid #2a338f;
+    border-top: 14px solid #2a338f;
+    box-shadow: 0 2px 6px rgba(42, 51, 143, 0.28);
 }
 
 .button-green,
 .button-success {
-    background-color: #16a34a;
-    border-bottom: 8px solid #16a34a;
-    border-left: 18px solid #16a34a;
-    border-right: 18px solid #16a34a;
-    border-top: 8px solid #16a34a;
+    background-color: #15803d;
+    border-bottom: 14px solid #15803d;
+    border-left: 28px solid #15803d;
+    border-right: 28px solid #15803d;
+    border-top: 14px solid #15803d;
+    box-shadow: 0 2px 6px rgba(21, 128, 61, 0.28);
 }
 
+/*
+ * red-ink, not the brand red. White on #ec1c2d is 4.40:1 and fails AA for
+ * normal-size text; this is 6.09:1 and is the same value the app uses wherever
+ * red sits behind white text.
+ */
 .button-red,
 .button-error {
-    background-color: #dc2626;
-    border-bottom: 8px solid #dc2626;
-    border-left: 18px solid #dc2626;
-    border-right: 18px solid #dc2626;
-    border-top: 8px solid #dc2626;
+    background-color: #c4111f;
+    border-bottom: 14px solid #c4111f;
+    border-left: 28px solid #c4111f;
+    border-right: 28px solid #c4111f;
+    border-top: 14px solid #c4111f;
+    box-shadow: 0 2px 6px rgba(196, 17, 31, 0.28);
 }
 
 /* Panels */
 
 .panel {
-    border-left: #18181b solid 4px;
-    margin: 21px 0;
+    border-left: #2a338f solid 4px;
+    border-radius: 0 10px 10px 0;
+    margin: 26px 0;
+    overflow: hidden;
 }
 
 .panel-content {
-    background-color: #fafafa;
-    color: #52525b;
-    padding: 16px;
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f7f8fc;
+    border-radius: 0 10px 10px 0;
+    color: #5f6774;
+    padding: 18px 22px;
 }
 
 .panel-content p {
-    color: #52525b;
+    color: #5f6774;
+    font-size: 14px;
+    margin-bottom: 0;
 }
 
 .panel-item {
@@ -294,4 +529,23 @@ img {
 
 .break-all {
     word-break: break-all;
+}
+
+/*
+ * The inbox preview line. Pulled off-screen by every trick the various clients
+ * respect, because it must never be visible in the message body itself — it is
+ * written for the list view and would read as a duplicated first sentence if it
+ * rendered.
+ */
+.preheader {
+    color: transparent;
+    display: none;
+    height: 0;
+    max-height: 0;
+    max-width: 0;
+    mso-hide: all;
+    opacity: 0;
+    overflow: hidden;
+    visibility: hidden;
+    width: 0;
 }

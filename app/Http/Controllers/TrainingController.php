@@ -157,6 +157,8 @@ class TrainingController extends Controller
             'registrations as active_registrations_count' => fn ($query) => $query->whereIn('status', RegistrationStatus::occupying()),
         ]);
 
+        $training->loadMissing('subjectMatterExperts');
+
         /*
          * The join link is withheld on the server rather than sent and hidden
          * in the page: an Inertia payload is plain JSON in the response body,
@@ -173,7 +175,20 @@ class TrainingController extends Controller
                 'ends_at' => $training->ends_at->format('d M Y'),
                 'registration_opens_at' => $training->registration_opens_at?->format('d M Y, g:i A'),
                 'registration_closes_at' => $training->registration_closes_at?->format('d M Y, g:i A'),
-                'facilitator_name' => $training->facilitator_name,
+                /*
+                 * Names and positions only. Who is delivering a programme is
+                 * part of deciding whether to attend it, so it belongs on the
+                 * page — their email and mobile number do not, and this is the
+                 * payload a signed-in participant receives as plain JSON.
+                 */
+                'subject_matter_experts' => $training->subjectMatterExperts
+                    ->map(fn ($expert) => [
+                        'name' => $expert->name,
+                        'position' => $expert->position,
+                        'organization' => $expert->organization,
+                        'topic' => $expert->pivot->topic,
+                    ])
+                    ->all(),
                 'prerequisites' => $training->prerequisites,
                 'target_participants' => $training->target_participants,
                 'level_label' => $training->level?->label(),

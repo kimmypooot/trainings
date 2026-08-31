@@ -14,9 +14,34 @@
     <style>
         @page { margin: 0; }
 
+        /*
+            Poppins, so an issued certificate matches the app and the mail it
+            arrives with. dompdf reads neither the woff2 the browser gets nor a
+            remote URL (enable_remote is off), so the family is declared here
+            against the TTFs committed in resources/fonts. Paths are absolute
+            and forward-slashed: they sit inside dompdf's chroot (the app root)
+            and the Windows separator does not survive its URL parser.
+
+            Only the two weights this page actually sets are registered — every
+            extra face is parsed and cached on first render for nothing.
+        */
+        @font-face {
+            font-family: 'Poppins';
+            font-weight: 400;
+            font-style: normal;
+            src: url("{{ str_replace(DIRECTORY_SEPARATOR, '/', resource_path('fonts/Poppins-Regular.ttf')) }}") format('truetype');
+        }
+
+        @font-face {
+            font-family: 'Poppins';
+            font-weight: 700;
+            font-style: normal;
+            src: url("{{ str_replace(DIRECTORY_SEPARATOR, '/', resource_path('fonts/Poppins-Bold.ttf')) }}") format('truetype');
+        }
+
         body {
             margin: 0;
-            font-family: 'DejaVu Serif', Georgia, serif;
+            font-family: 'Poppins', 'DejaVu Sans', sans-serif;
             color: #1f2937;
             /* A4 landscape at 96dpi. */
             width: 1123px;
@@ -138,7 +163,7 @@
         <tr>
             <td width="40%">
                 <div class="signature-line">
-                    {{ $training->facilitator_name ?: 'Authorized Signatory' }}<br>
+                    {{ $training->signatory_name ?: 'Authorized Signatory' }}<br>
                     <span style="font-size: 10px; color: #6b7280;">Civil Service Commission RO VIII</span>
                 </div>
             </td>

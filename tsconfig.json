@@ -1,0 +1,53 @@
+{
+    // Gradual adoption, not a migration.
+    //
+    // `allowJs` with `checkJs: false` is the whole strategy: every existing .js
+    // and every .vue with a plain <script setup> is parsed but not type-checked,
+    // so adding this file changes nothing about the current build and breaks
+    // nothing. Type checking applies only where a file opts in, by being .ts or
+    // by carrying <script setup lang="ts">.
+    //
+    // What that buys immediately is the Inertia boundary. Controller props cross
+    // into Vue untyped today, so renaming a prop server-side surfaces as a blank
+    // cell in production rather than an error — and the same gap let a
+    // `defineProps` that was never bound to `props` compile clean and render an
+    // empty page. `resources/js/types/` is where the shared vocabulary lives.
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+        "allowJs": true,
+        "checkJs": false,
+        "noEmit": true,
+
+        // Strict for anything that does opt in. A file that has gone to the
+        // trouble of declaring its types should get the benefit of them.
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noFallthroughCasesInSwitch": true,
+
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": false,
+
+        // Matches the `@` alias in vite.config.js and vitest.config.js, so an
+        // import resolves the same way in the editor, the build and the tests.
+        "baseUrl": ".",
+        "paths": {
+            "@/*": ["resources/js/*"]
+        },
+
+        "types": ["vite/client"]
+    },
+    "include": [
+        "resources/js/**/*.ts",
+        "resources/js/**/*.d.ts",
+        "resources/js/**/*.vue"
+    ],
+    "exclude": ["node_modules", "public", "vendor"]
+}

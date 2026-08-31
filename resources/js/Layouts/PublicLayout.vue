@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import AppLogo from '@/Components/AppLogo.vue';
 import AppButton from '@/Components/AppButton.vue';
@@ -44,6 +44,10 @@ const quickLinks = [
     // visitor in two different sections, neither of them obviously wrong.
     { label: 'Programs', href: '/#upcoming' },
     { label: 'About TIMS', href: '/#about' },
+    // Aimed at a different visitor from the rest of this list: an employer or
+    // an auditor holding someone else's certificate, who has no account and
+    // wants none. Without a link here the feature is unreachable to them.
+    { label: 'Verify a certificate', href: '/verify' },
     { label: 'Create an account', href: '/register' },
     { label: 'Sign in', href: '/login' },
 ];
@@ -53,11 +57,18 @@ const aboutGovphLinks = [
     { label: 'GOV.PH', href: 'https://www.gov.ph' },
     { label: 'Open Data Portal', href: 'https://data.gov.ph' },
     { label: 'Official Gazette', href: 'https://www.officialgazette.gov.ph' },
+    // Required of national government agency sites under EO No. 2 (2016). It
+    // was the one member of the standard GOVPH footer cluster missing here.
+    { label: 'Freedom of Information', href: 'https://www.foi.gov.ph' },
 ];
 
 // Shared from HandleInertiaRequests; counted once per session.
 const page = usePage();
 const visitorCount = computed(() => page.props.visitors ?? 0);
+
+// Office identity for the footer. Shared from HandleInertiaRequests so a
+// deployment can correct its own address without a front-end change.
+const office = computed(() => page.props.office ?? {});
 
 // Signed-in staff pass straight through maintenance mode, so without this they
 // see a working public site and conclude the switch is broken.
@@ -70,12 +81,39 @@ const onScroll = () => {
     scrolled.value = window.scrollY > 8;
 };
 
+/*
+ * Escape closes the menu.
+ *
+ * It was openable and closeable only by the same button, which is the one
+ * control the menu covers least reliably — an open panel on a small screen
+ * pushes the toggle around, and Escape is what people try first. Every other
+ * dismissible surface in this app answers to it, so a visitor arriving here
+ * from the signed-in shell has already learned that it should.
+ */
+const onKeydown = (event) => {
+    if (event.key === 'Escape' && menuOpen.value) menuOpen.value = false;
+};
+
 onMounted(() => {
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('keydown', onKeydown);
 });
 
-onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
+onBeforeUnmount(() => {
+    window.removeEventListener('scroll', onScroll);
+    window.removeEventListener('keydown', onKeydown);
+});
+
+// A navigation always closes it. The in-page anchors do not remount this
+// layout, so without this the menu stays open over the section it just
+// scrolled to.
+watch(
+    () => page.component,
+    () => {
+        menuOpen.value = false;
+    }
+);
 </script>
 
 <template>
@@ -87,13 +125,24 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
             Skip to content
         </a>
 
-        <header class="sticky top-0 z-50">
+        <header class="sticky top-0 z-(--z-header)">
             <!-- GOVPH-style official ribbon above the navigation bar -->
             <div class="bg-csc-blue-deep">
                 <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1 sm:px-6 lg:px-8">
-                    <p class="text-2xs font-medium tracking-widest text-white/70 uppercase">
+                    <!--
+                        A link, not a label. The GOVPH pattern makes the
+                        Republic wordmark the way out to gov.ph, and a visitor
+                        checking whether a site is genuinely government is the
+                        exact person who tries to click it.
+                    -->
+                    <a
+                        href="https://www.gov.ph"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="rounded text-2xs font-medium tracking-widest text-white/70 uppercase transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    >
                         Republic of the Philippines
-                    </p>
+                    </a>
                     <p class="hidden text-2xs font-medium tracking-widest text-white/70 uppercase sm:block">
                         Civil Service Commission
                     </p>
@@ -246,7 +295,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                             </a>
                         </div>
 
-                        <p class="mt-4 text-xs leading-relaxed text-white/40">
+                        <p class="mt-4 text-xs leading-relaxed text-white/60">
                             All content is in the public domain unless otherwise stated.
                         </p>
                     </div>
@@ -269,7 +318,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                     <!-- Col 3: GOVPH -->
                     <div>
                         <h2 class="mb-3 text-xs font-semibold tracking-wider text-white uppercase">GOVPH</h2>
-                        <p class="mb-3 text-xs leading-relaxed text-white/50">
+                        <p class="mb-3 text-xs leading-relaxed text-white/60">
                             Learn more about the Philippine government, its structure, how government works and the
                             people behind it.
                         </p>
@@ -304,13 +353,20 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                                     <path d="m3 6 9 6 9-6" stroke-linecap="round" />
                                 </svg>
                                 <a
-                                    href="mailto:tims@csc.gov.ph"
+                                    :href="`mailto:${office.email}`"
                                     class="rounded transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                                 >
-                                    tims@csc.gov.ph
+                                    {{ office.email }}
                                 </a>
                             </li>
-                            <li class="flex items-start gap-2">
+                            <!--
+                                Rendered only when a number is configured. The
+                                default is unset on purpose (config/office.php):
+                                the number that used to sit here was the Central
+                                Office trunkline, and a wrong number costs a
+                                caller more than a missing one.
+                            -->
+                            <li v-if="office.phone" class="flex items-start gap-2">
                                 <svg
                                     class="mt-0.5 size-4 shrink-0 text-white/40"
                                     viewBox="0 0 24 24"
@@ -324,7 +380,12 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                                         stroke-linejoin="round"
                                     />
                                 </svg>
-                                (02) 8931-8092
+                                <a
+                                    :href="`tel:${office.phone.replace(/[^+\d]/g, '')}`"
+                                    class="rounded transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                >
+                                    {{ office.phone }}
+                                </a>
                             </li>
                             <li class="flex items-start gap-2">
                                 <svg
@@ -338,7 +399,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                                     <path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke-linejoin="round" />
                                     <circle cx="12" cy="10" r="2.5" />
                                 </svg>
-                                Civil Service Commission, IBP Road, Constitution Hills, Quezon City
+                                <span>{{ office.name }}<br />{{ office.address }}</span>
                             </li>
                         </ul>
 
@@ -359,12 +420,20 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                                     Terms of Service
                                 </Link>
                             </li>
+                            <li>
+                                <Link
+                                    href="/accessibility"
+                                    class="rounded text-white/60 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                                >
+                                    Accessibility
+                                </Link>
+                            </li>
                         </ul>
                     </div>
                 </div>
 
                 <div class="mt-8 flex flex-col items-center justify-between gap-2 border-t border-white/10 pt-6 sm:flex-row">
-                    <p class="text-xs text-white/40">
+                    <p class="text-xs text-white/60">
                         &copy; {{ new Date().getFullYear() }} Civil Service Commission. All rights reserved.
                     </p>
 
@@ -383,7 +452,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll));
                                 stroke-linejoin="round"
                             />
                         </svg>
-                        <span class="text-2xs font-medium tracking-wide text-white/50">TOTAL VISITORS</span>
+                        <span class="text-2xs font-medium tracking-wide text-white/70">TOTAL VISITORS</span>
                         <span class="text-xs font-semibold text-white/80">{{ visitorCount.toLocaleString() }}</span>
                     </p>
                 </div>

@@ -44,6 +44,86 @@ class DashboardTest extends TestCase
             );
     }
 
+    /**
+     * The "needs your attention" block is empty until something is owed.
+     *
+     * It earns its place on the page by being absent most of the time, so an
+     * all-clear participant seeing an empty block would be the bug.
+     */
+    public function test_nothing_is_owed_when_there_is_nothing_outstanding(): void
+    {
+        $this->actingAs($this->completedUser())
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('attention', []));
+    }
+
+    public function test_an_unsettled_fee_is_surfaced_as_something_owed(): void
+    {
+        $user = $this->completedUser();
+
+        RegistrationService::register($user, Training::factory()->paid()->create());
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $attention = $page->toArray()['props']['attention'];
+
+                $this->assertCount(1, $attention);
+                $this->assertSame('payments', $attention[0]['key']);
+                $this->assertSame('/my/payments', $attention[0]['href']);
+            });
+    }
+
+    /**
+     * The hero's QR button is gated on approval.
+     *
+     * A pending registration cannot be checked in, and offering the code anyway
+     * only tells the participant at the door.
+     */
+    public function test_the_check_in_code_is_withheld_until_a_registration_is_approved(): void
+    {
+        $user = $this->completedUser();
+        $training = Training::factory()->paid()->create(['starts_at' => now()->addWeek()]);
+
+        $registration = RegistrationService::register($user, $training);
+
+        $this->assertSame(RegistrationStatus::Pending, $registration->status);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('nextTraining.can_check_in', false)
+                // The fee is named as owed rather than left as a bare figure.
+                ->where('nextTraining.fee_settled', false)
+            );
+
+        $registration->forceFill(['status' => RegistrationStatus::Approved])->save();
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('nextTraining.can_check_in', true));
+    }
+
+    /** A free training has no fee to settle, so the line says nothing at all. */
+    public function test_a_free_training_carries_no_fee_state(): void
+    {
+        $user = $this->completedUser();
+
+        RegistrationService::register($user, Training::factory()->create(['starts_at' => now()->addWeek()]));
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('nextTraining.payment_amount', null)
+                ->where('nextTraining.fee_settled', null)
+            );
+    }
+
     public function test_activity_lists_each_event_rather_than_one_row_per_registration(): void
     {
         $user = $this->completedUser();

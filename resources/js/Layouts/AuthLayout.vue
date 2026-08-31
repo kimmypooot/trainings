@@ -26,10 +26,30 @@ const patternId = useId();
     <div class="min-h-screen lg:grid lg:grid-cols-2">
         <!-- Left: branding. Hidden below lg. -->
         <aside class="relative hidden overflow-hidden lg:flex lg:min-h-screen lg:flex-col lg:justify-center">
+            <!--
+                The media condition is load-bearing, not decoration. This aside
+                is `hidden lg:flex`, but display:none does not stop a browser
+                fetching an <img> inside it — every phone was pulling the full
+                facade photo for a panel it would never show. Both sources are
+                gated at the same breakpoint the panel appears at, so below lg
+                there is no candidate to fetch at all.
+            -->
             <picture class="absolute inset-0" aria-hidden="true">
-                <source srcset="/images/cscbg_facade.webp" type="image/webp" />
+                <source
+                    media="(min-width: 1024px)"
+                    srcset="/images/cscbg_facade.webp"
+                    type="image/webp"
+                />
+                <source media="(min-width: 1024px)" srcset="/images/cscbg_facade.jpeg" type="image/jpeg" />
+                <!--
+                    A 1x1 transparent GIF, inline. The <img> is the fallback
+                    every <picture> must carry, so it cannot simply be dropped —
+                    and a src-less <img> is what the browser treats as broken.
+                    Below lg this resolves to 43 bytes that were already in the
+                    document instead of a photograph.
+                -->
                 <img
-                    src="/images/cscbg_facade.jpeg"
+                    src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
                     alt=""
                     decoding="async"
                     class="absolute inset-0 size-full object-cover"
@@ -87,7 +107,18 @@ const patternId = useId();
             </div>
         </aside>
 
-        <!-- Mobile brand strip. Replaces the left panel below lg. -->
+        <!--
+            Mobile brand strip. Replaces the left panel below lg.
+
+            It used to be the logo alone, which meant every phone visitor met
+            the form with none of the reason for filling it in — the headline,
+            the tagline and the three benefits all lived in the desktop-only
+            panel. Most people reaching a regional office's portal are on a
+            phone, so the copy that sells the account was being withheld from
+            the majority. The tagline comes across; the benefit list does not,
+            since three ticked bullets above a form is a scroll cost on a small
+            screen where the form itself is the point.
+        -->
         <div class="bg-csc-blue px-4 py-6 sm:px-6 lg:hidden">
             <Link
                 href="/"
@@ -96,6 +127,10 @@ const patternId = useId();
                 <AppLogo variant="light" size="md" />
                 <span class="sr-only">Back to CSC TIMS home</span>
             </Link>
+
+            <p class="mt-4 max-w-prose text-sm leading-relaxed text-pretty text-white/85">
+                {{ tagline }}
+            </p>
         </div>
 
         <!-- Right: form -->

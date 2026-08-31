@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\BrandsMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -16,6 +17,7 @@ use Illuminate\Notifications\Notification;
  */
 abstract class ParticipantNotification extends Notification implements ShouldQueue
 {
+    use BrandsMail;
     use Queueable;
 
     abstract public function title(object $notifiable): string;
@@ -57,13 +59,18 @@ abstract class ParticipantNotification extends Notification implements ShouldQue
     {
         $mail = (new MailMessage)
             ->subject($this->title($notifiable))
-            ->greeting('Hello '.($notifiable->name ?: 'there').',')
+            ->greeting($this->greetingFor($notifiable))
             ->line($this->body($notifiable));
 
         if ($action = $this->action($notifiable)) {
             $mail->action($action, $this->url($notifiable));
         }
 
-        return $mail->salutation('— Civil Service Commission Regional Office VIII');
+        // The body doubles as the inbox preview: clients take their snippet
+        // from the first text they find, which would otherwise be the greeting —
+        // the one line identical on every message we send.
+        $this->withPreheader($mail, $this->body($notifiable));
+
+        return $mail->salutation($this->signature());
     }
 }

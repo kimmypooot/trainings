@@ -47,10 +47,10 @@ const markAllRead = () => router.post('/notifications/read');
                         />
                         <div class="min-w-0 flex-1">
                             <h2 class="text-sm font-semibold text-csc-blue">{{ notification.title }}</h2>
-                            <p v-if="notification.body" class="mt-1 text-sm leading-relaxed text-csc-ink/75">
+                            <p v-if="notification.body" class="mt-1 text-sm leading-relaxed text-csc-ink-muted">
                                 {{ notification.body }}
                             </p>
-                            <p class="mt-1.5 text-xs text-csc-ink/55">{{ notification.created_at }}</p>
+                            <p class="mt-1.5 text-xs text-csc-ink-subtle">{{ notification.created_at }}</p>
                             <Link
                                 v-if="notification.url"
                                 :href="notification.url"

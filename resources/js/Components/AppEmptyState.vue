@@ -38,7 +38,7 @@ defineProps({
         </h3>
         <p
             v-if="description"
-            class="max-w-sm text-sm leading-relaxed text-csc-ink/65"
+            class="max-w-sm text-sm leading-relaxed text-csc-ink-subtle"
             :class="compact ? 'mt-1.5' : 'mt-2'"
         >
             {{ description }}

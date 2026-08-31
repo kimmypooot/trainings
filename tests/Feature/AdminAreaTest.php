@@ -64,6 +64,85 @@ class AdminAreaTest extends TestCase
             );
     }
 
+    /**
+     * A full run says so, and a nearly-full one is a separate state.
+     *
+     * The two used to collapse into one flag, so a session at 40/40 read as
+     * "Nearly full" — an understatement, and a different decision for whoever
+     * is looking at it.
+     */
+    public function test_a_full_session_is_distinguished_from_a_nearly_full_one(): void
+    {
+        $full = Training::factory()->create([
+            'title' => 'Full Run',
+            'capacity' => 2,
+            'starts_at' => now()->addWeek(),
+        ]);
+        $nearly = Training::factory()->create([
+            'title' => 'Nearly Full Run',
+            'capacity' => 10,
+            'starts_at' => now()->addWeeks(2),
+        ]);
+
+        foreach (range(1, 2) as $ignored) {
+            app(RegistrationService::class)->register($this->participant(), $full);
+        }
+
+        foreach (range(1, 9) as $ignored) {
+            app(RegistrationService::class)->register($this->participant(), $nearly);
+        }
+
+        $this->actingAs($this->staff())
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $rows = collect($page->toArray()['props']['upcoming'])->keyBy('title');
+
+                $this->assertTrue($rows['Full Run']['full']);
+                $this->assertFalse($rows['Full Run']['nearly_full']);
+                $this->assertSame(100, $rows['Full Run']['fill']);
+
+                $this->assertFalse($rows['Nearly Full Run']['full']);
+                $this->assertTrue($rows['Nearly Full Run']['nearly_full']);
+                $this->assertSame(90, $rows['Nearly Full Run']['fill']);
+            });
+    }
+
+    /**
+     * The total behind "View all N".
+     *
+     * The button used to appear whenever the card was showing its five-row cap,
+     * which at exactly five opened a dialog onto the same five rows.
+     */
+    public function test_the_needs_attention_total_counts_beyond_the_cards_cap(): void
+    {
+        $participant = $this->participant();
+
+        foreach (range(1, 7) as $index) {
+            // Registered while the run is still ahead, then moved into the past
+            // — the service refuses a registration on a closed training, which
+            // is exactly the state this card is about.
+            $training = Training::factory()->create(['starts_at' => now()->addWeek()]);
+
+            $registration = app(RegistrationService::class)->register($participant, $training);
+            $registration->forceFill(['status' => RegistrationStatus::Approved])->save();
+
+            $training->forceFill([
+                'starts_at' => now()->subDays($index + 1),
+                'ends_at' => now()->subDays($index),
+            ])->save();
+        }
+
+        $this->actingAs($this->staff())
+            ->get('/admin')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                // The card still shows five; the label can now name all seven.
+                ->has('awaitingCompletion', 5)
+                ->where('awaitingCompletionTotal', 7)
+            );
+    }
+
     public function test_dashboard_modal_lists_are_withheld_until_asked_for(): void
     {
         $this->actingAs($this->staff())

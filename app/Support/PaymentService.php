@@ -170,6 +170,62 @@ class PaymentService
     }
 
     /**
+     * A participant submitting proof of payment (or a promissory note) online.
+     *
+     * Locked and guarded the same way RefundService and PhysicalOrRequestService
+     * guard their own "one open claim at a time" rule: without it, a double
+     * form submission (double-click, slow response resubmitted, two tabs)
+     * lands two pending payments on the same registration, and nothing stops
+     * a collecting officer from verifying both — double-counting the fee in
+     * RevenueService's sum and satisfying hasClearedFee() twice over for no
+     * reason.
+     *
+     * @param  array{amount: mixed, payment_method: string, payment_date: mixed,
+     *               reference_number?: ?string, proof_path?: ?string}  $data
+     */
+    public static function submit(Registration $registration, array $data): Payment
+    {
+        return DB::transaction(function () use ($registration, $data) {
+            $locked = Registration::whereKey($registration->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $locked->loadMissing(['training', 'payments']);
+
+            // hasClearedFee(), not hasSettledFee(): a verified promissory note
+            // must still be payable online, the same way recordAtCounter()
+            // lets staff clear one at the counter. Only an actually-cleared
+            // fee is a reason to refuse a second payment.
+            if ($locked->hasClearedFee()) {
+                throw ValidationException::withMessages([
+                    'payment' => 'This registration has already been paid.',
+                ]);
+            }
+
+            $hasPending = $locked->payments->contains(
+                fn (Payment $payment) => $payment->status === PaymentStatus::Pending
+            );
+
+            if ($hasPending) {
+                throw ValidationException::withMessages([
+                    'payment' => 'You already have a payment awaiting verification for this registration.',
+                ]);
+            }
+
+            return Payment::create([
+                'registration_id' => $locked->getKey(),
+                'user_id' => $locked->user_id,
+                'training_id' => $locked->training_id,
+                'amount' => $data['amount'],
+                'payment_method' => $data['payment_method'],
+                'reference_number' => $data['reference_number'] ?? null,
+                'payment_date' => $data['payment_date'],
+                'proof_path' => $data['proof_path'] ?? null,
+            ]);
+        });
+    }
+
+    /**
      * Record a payment taken at the counter, already verified.
      *
      * v1's `payment-actions.php` let staff set a registration's payment status

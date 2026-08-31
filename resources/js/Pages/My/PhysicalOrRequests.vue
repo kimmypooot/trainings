@@ -87,11 +87,11 @@ const confirmCancel = () => {
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">
                                     {{ request.payment.training }}
-                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink/50">
+                                    <span class="ml-1 font-mono text-xs font-normal text-csc-ink-subtle">
                                         {{ request.request_code }}
                                     </span>
                                 </p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
                                     OR {{ request.payment.or_number }} ·
                                     Courier fee ₱{{ money(request.courier_fee) }}
                                 </p>
@@ -99,7 +99,7 @@ const confirmCancel = () => {
                             <AppBadge :status="request.status" />
                         </div>
 
-                        <p class="mt-3 text-sm text-csc-ink/75">{{ request.message }}</p>
+                        <p class="mt-3 text-sm text-csc-ink-muted">{{ request.message }}</p>
 
                         <p v-if="request.rejection_reason" class="mt-1.5 text-sm text-csc-red-ink">
                             {{ request.rejection_reason }}
@@ -112,7 +112,7 @@ const confirmCancel = () => {
                                 v-for="stage in request.stages"
                                 :key="stage.label"
                                 class="flex items-center gap-1.5 text-xs"
-                                :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink/40'"
+                                :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink-subtle'"
                             >
                                 <AppIcon
                                     :name="stage.reached ? 'check' : 'clock'"
@@ -126,19 +126,19 @@ const confirmCancel = () => {
                         <!-- Shipping block: what the courier was and when it moved. -->
                         <dl v-if="request.courier_name" class="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                             <div class="flex gap-2">
-                                <dt class="text-csc-ink/55">Courier</dt>
+                                <dt class="text-csc-ink-subtle">Courier</dt>
                                 <dd class="text-csc-ink">{{ request.courier_name }}</dd>
                             </div>
                             <div class="flex gap-2">
-                                <dt class="text-csc-ink/55">Tracking no.</dt>
+                                <dt class="text-csc-ink-subtle">Tracking no.</dt>
                                 <dd class="font-mono text-csc-ink">{{ request.tracking_number || '—' }}</dd>
                             </div>
                             <div v-if="request.shipped_at" class="flex gap-2">
-                                <dt class="text-csc-ink/55">Shipped</dt>
+                                <dt class="text-csc-ink-subtle">Shipped</dt>
                                 <dd class="text-csc-ink">{{ request.shipped_at }}</dd>
                             </div>
                             <div v-if="request.delivered_at" class="flex gap-2">
-                                <dt class="text-csc-ink/55">Delivered</dt>
+                                <dt class="text-csc-ink-subtle">Delivered</dt>
                                 <dd class="text-csc-ink">{{ request.delivered_at }}</dd>
                             </div>
                         </dl>
@@ -162,13 +162,13 @@ const confirmCancel = () => {
             :subtitle="uploading ? `GCash proof of the ₱${money(uploading.courier_fee)} courier fee for ${uploading.request_code}.` : undefined"
             @close="uploading = null"
         >
-            <div class="rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm text-csc-ink/75">
+            <div class="rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm text-csc-ink-muted">
                 <p class="font-medium text-csc-ink">GCash</p>
                 <p class="mt-1">
                     Send the courier fee to <span class="font-mono font-semibold text-csc-ink">{{ gcash.number }}</span>
                     ({{ gcash.account_name }}).
                 </p>
-                <p class="mt-1 text-csc-ink/60">{{ gcash.instructions }}</p>
+                <p class="mt-1 text-csc-ink-subtle">{{ gcash.instructions }}</p>
             </div>
 
             <form class="mt-4 space-y-4" @submit.prevent="submitUpload">
@@ -179,6 +179,7 @@ const confirmCancel = () => {
                     accept=".pdf,.jpg,.jpeg,.png"
                     required
                     :error="uploadForm.errors.proof"
+                    :progress="uploadForm.progress"
                     @change="uploadForm.proof = $event"
                 />
 

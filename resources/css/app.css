@@ -27,6 +27,44 @@
     --color-csc-line: #e5e7eb;
 
     /*
+     * Secondary text, as named tokens rather than an opacity on --color-csc-ink.
+     *
+     * These used to be written text-csc-ink/70, /60, /55 and /50, which is how
+     * a palette stays compliant on paper while the rendered pixel is not: the
+     * token passes, the composite it flattens to does not. Measured against
+     * both surfaces they actually sit on — white content and the
+     * --color-csc-blue-tint panels — the old values came out at 4.33:1 (/70),
+     * 3.34:1 (/60) and 2.94:1 (/55), all under the 4.5:1 AA floor for
+     * body-size text. /70 was the default for every paragraph on the public
+     * site, and /55 was the unmet-requirement text on the register form, which
+     * is the copy a blocked user most needs to read.
+     *
+     * The replacements are fixed hexes so the ratio cannot drift with whatever
+     * surface ends up behind them. Both clear AA on white and on the tint:
+     *
+     *   --color-csc-ink-muted        5.71:1 on white, 5.02:1 on tint
+     *   --color-csc-ink-subtle       5.31:1 on white, 4.67:1 on tint
+     *   --color-csc-ink-placeholder  4.83:1 on white (inputs are always white)
+     *
+     * muted is body copy and secondary prose; subtle is hints, footnotes,
+     * metadata, inactive progress stages and unmet-requirement text. They are
+     * deliberately close together, and there is no third step below them: the
+     * 4.5:1 floor over --color-csc-blue-tint leaves no room for one. Anything
+     * fainter than subtle would pass on white and fail the moment it were used
+     * on a tinted panel, which is exactly the trap the old opacities fell into.
+     * The hierarchy between the two is carried by size and weight, not by
+     * pushing the grey down until it stops being readable.
+     *
+     * Use these, not an opacity on --color-csc-ink. The one place the codebase
+     * still writes text-csc-ink/40 is AppPagination's disabled arrows and its
+     * aria-hidden ellipsis, where WCAG exempts the control and the faintness is
+     * the affordance — see the comments there.
+     */
+    --color-csc-ink-muted: #5f6774;
+    --color-csc-ink-subtle: #646c78;
+    --color-csc-ink-placeholder: #6b7280;
+
+    /*
      * Semantic status colours, deliberately separate from the brand palette.
      *
      * Inside the signed-in app the brand red is retired, so a red "Cancelled"
@@ -47,8 +85,18 @@
      * Stacking order, named so a new overlay does not have to guess.
      *
      * The drawer sits above its own backdrop and above the header; the modal
-     * sits above everything, because it is the one surface that must not be
-     * reachable past.
+     * sits above everything it is stacked against, because it is the one
+     * surface that must not be reachable past.
+     *
+     * `--z-progress` is the exception above the modal, and it is not chrome
+     * being greedy. Every multipart upload in this app happens *inside* a
+     * modal — the payment proof, the refund proof, the agency documents — and
+     * at --z-popover the navigation bar tracking that upload's real percentage
+     * was painted underneath the modal's own bg-black/60 scrim. The one
+     * indicator that knows how far a slow upload has got cannot be the one
+     * thing the upload's own dialog hides. It is a 4px hairline pinned to the
+     * top edge and never takes a pointer event, so it cannot be "reached past"
+     * in the sense the modal's rule is protecting.
      */
     --z-tabbar: 20;
     --z-header: 20;
@@ -57,10 +105,82 @@
     --z-drawer: 40;
     --z-skip-link: 50;
     --z-modal: 100;
+    --z-progress: 110;
 
     /* The nav and badge sizes that were previously written as text-[11px]. */
     --text-2xs: 0.6875rem;
     --text-2xs--line-height: 1rem;
+
+    /*
+     * Chart palette.
+     *
+     * Charts need their own colour job, separate from both the brand palette
+     * and the semantic status set. A bar is not a status, and it is not
+     * branding either — it is an identity, and identity has to survive colour
+     * blindness, which "pick a nice blue and a nice green" does not.
+     *
+     * These are not eyeballed. The slots below were run through the OKLab
+     * checks that a categorical palette has to pass — lightness band, chroma
+     * floor, and adjacent-pair separation under simulated protanopia and
+     * deuteranopia — and the order is what makes them pass. Slot 1 is the CSC
+     * indigo stepped up into the legible band (the brand #2a338f itself sits
+     * below it and reads as near-black in a small mark); the rest are the
+     * standard CVD-safe hue order seeded from it. Measured on white:
+     *
+     *   worst adjacent pair, protanopia   ΔE 9.1  (≥8 target)
+     *   worst adjacent pair, normal sight ΔE 19.6 (≥15 floor)
+     *
+     * Two consequences to preserve:
+     *
+     * 1. Slots are assigned in fixed order and never cycled. The order IS the
+     *    safety mechanism — reshuffling them, or inventing a seventh, breaks
+     *    the separation the checks measured. Past six categories, fold the
+     *    tail into "Other" or use a table.
+     * 2. Colour follows the entity, never its rank. A filter that drops a
+     *    series must not repaint the survivors, or a reader who learned
+     *    "Regional Office is blue" has been lied to.
+     *
+     * Slots 3, 4 and 5 sit below 3:1 against white on purpose — they are fills
+     * carrying a value that is also printed as a number beside them. Every
+     * chart in this app shows its figures; none of them are colour-only, so
+     * the low-contrast fill is never the only way to read a value. Don't use
+     * these as text colours.
+     *
+     * There is no dark mode in this app, so there is no second column of
+     * steps. Adding one means re-stepping all six against the dark surface and
+     * re-running the checks — a flip of these values is not a dark palette.
+     */
+    --color-chart-1: #3d49c0; /* indigo — the CSC blue, in the legible band */
+    --color-chart-2: #eb6834; /* orange */
+    --color-chart-3: #1baf7a; /* aqua */
+    --color-chart-4: #eda100; /* yellow */
+    --color-chart-5: #e87ba4; /* magenta */
+    --color-chart-6: #008300; /* green */
+
+    /*
+     * The one-hue ramp, for *ordered* categories only — age bands, position
+     * levels, anything where shuffling the rows would destroy the meaning.
+     * There the colour should carry the order, so the reader sees the sequence
+     * without reading the labels.
+     *
+     * Five steps, not six: the checks want a visible lightness gap between
+     * neighbours (ΔL ≥ 0.06), and a sixth step squeezed into the same range
+     * fails it — two adjacent bands that look the same colour are worse than
+     * no ramp at all. The lightest step clears 2:1 on white so the low end is
+     * still a mark rather than a smudge.
+     *
+     * Never use this ramp on *unordered* categories. Colouring agencies
+     * darker-where-bigger spends the identity channel re-encoding what the bar
+     * length already says.
+     */
+    --color-chart-ramp-1: #a3abe2;
+    --color-chart-ramp-2: #7d88d5;
+    --color-chart-ramp-3: #5a67c8;
+    --color-chart-ramp-4: #3d49c0;
+    --color-chart-ramp-5: #2a338f;
+
+    /* Chart chrome: gridlines and axis rules, one step off the surface. */
+    --color-chart-grid: #eceef3;
 }
 
 /*
@@ -94,6 +214,176 @@
 }
 
 /*
+ * Certificate verification: the answer arriving.
+ *
+ * These two pages are the one place an outsider meets this system — an HR
+ * officer with a folder, an auditor working through a stack — and the moment
+ * that matters is the verdict landing. Static, it simply existed; there was no
+ * difference between a page that had just answered a question and a page that
+ * had been sitting open for an hour.
+ *
+ * The register is deliberately a document being stamped, not a celebration.
+ * Nothing bounces, nothing springs past its mark, and the whole sequence is
+ * under a second: this is a government record, and motion that reads as
+ * congratulation would undercut the one thing the page is for. The easing
+ * decelerates hard and settles, which is what makes a mark feel *placed*.
+ *
+ * `--delay` is what stages them. Set it per element rather than writing a
+ * class per step, so the order lives in the template next to the thing being
+ * ordered.
+ */
+@keyframes verify-rise {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* Settling onto the page from very slightly above it, like a stamp pressed. */
+@keyframes verify-stamp {
+    from {
+        opacity: 0;
+        transform: scale(1.06);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* A stroke drawing itself; the element supplies its own length. */
+@keyframes verify-draw {
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+/*
+ * One attention beat on the thing a callout points at.
+ *
+ * Twice, then it stops. An indefinite pulse on a page someone may sit on for
+ * a minute reading the small print stops being a pointer and becomes a
+ * flicker they have to ignore, and it is exactly the pattern that makes a
+ * government page look like an advertisement.
+ */
+@keyframes verify-pulse {
+    50% {
+        opacity: 0.45;
+    }
+}
+
+.verify-rise {
+    animation: verify-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--delay, 0s);
+}
+
+.verify-stamp {
+    animation: verify-stamp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--delay, 0s);
+}
+
+.verify-draw {
+    stroke-dasharray: var(--draw-length);
+    stroke-dashoffset: var(--draw-length);
+    animation: verify-draw 0.6s ease-out both;
+    animation-delay: var(--delay, 0s);
+}
+
+.verify-pulse {
+    animation: verify-pulse 1.1s ease-in-out 2 both;
+    animation-delay: var(--delay, 0s);
+}
+
+/*
+ * Paper is not optional here, and this block is load-bearing rather than tidy.
+ *
+ * `both` fill mode means an element sits at its *from* state — opacity 0, or a
+ * stroke fully retracted — for the whole of its delay. The verification result
+ * is a page people print and file, and Ctrl+P during that first second would
+ * otherwise commit a blank record to paper: the verdict, the name and the
+ * stamp, all absent from the copy that goes in the folder. Print gets the
+ * finished state and no animation at all.
+ */
+@media print {
+    .verify-rise,
+    .verify-stamp,
+    .verify-draw,
+    .verify-pulse {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+        stroke-dashoffset: 0 !important;
+    }
+}
+
+/*
+ * A donut segment.
+ *
+ * Two motions with different jobs share this element, and a single
+ * `transition-all` cannot serve both. The arc *drawing itself* on first paint
+ * is a 600ms gesture — long enough to read as the ring being traced out. The
+ * hover response — the segment thickening while its neighbours thin and fade —
+ * has to land within the frame the pointer arrived, or the chart feels like it
+ * is lagging behind the mouse. Naming the properties separately is the only way
+ * to have both, which is why this is a class here rather than utilities on the
+ * element.
+ *
+ * stroke-dasharray is the drawn one; stroke-width and opacity are the hover.
+ *
+ * The reduced-motion block below neutralises all three.
+ */
+.donut-segment {
+    transition:
+        stroke-dasharray 0.6s ease-out,
+        stroke-width 0.15s ease,
+        opacity 0.15s ease;
+}
+
+/*
+ * A row leaving a roster.
+ *
+ * Staff roster decisions are reversible for UndoService::WINDOW_SECONDS, and
+ * the Undo button in the toast is only half of telling someone that. The other
+ * half is the row itself: a participant who has just been approved drops out of
+ * the "Pending" filter, and a row that vanishes between two frames reads as a
+ * redraw, not as a decision that was taken and could still be taken back. A
+ * short slide out — in the same beat the toast arrives — is what makes the two
+ * read as one event.
+ *
+ * Only leaving and moving are animated. Rows are keyed by registration id, so
+ * re-sorting or narrowing the roster moves the survivors and animates nothing
+ * else; an arriving row is not a decision anyone needs to catch.
+ *
+ * Deliberately not absolutely positioned on the way out, which is the usual
+ * trick for collapsing a list cleanly: a <tr> taken out of flow loses its
+ * column widths and the row shears across the table. Leaving rows keep their
+ * space until they are gone, and the rows below close the gap on the -move
+ * transition afterwards.
+ *
+ * The global prefers-reduced-motion block below neutralises all of this.
+ */
+.roster-row-leave-active {
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease;
+}
+
+.roster-row-leave-to {
+    opacity: 0;
+    transform: translateX(1.5rem);
+}
+
+.roster-row-move {
+    transition: transform 0.25s ease;
+}
+
+/*
  * Print.
  *
  * Rosters, attendance sheets, and participant lists get printed — this is a
@@ -110,9 +400,19 @@
         background: #fff !important;
     }
 
-    /* The application shell */
+    /*
+     * The application shell.
+     *
+     * footer joins this list for the certificate verification result, which is
+     * a page people print and file as evidence. On paper the GOVPH link
+     * columns, the seals and the visitor counter are a second sheet of chrome
+     * wrapped around four lines that matter. Nothing in either footer — the
+     * public one or AppFooter's copyright line — is content a printed record
+     * needs.
+     */
     aside,
     header,
+    footer,
     nav[aria-label='Primary'],
     .print\:hidden {
         display: none !important;

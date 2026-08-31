@@ -292,7 +292,7 @@ class EmailTemplateTest extends TestCase
 
     // --- Test send ---------------------------------------------------------
 
-    public function test_a_test_send_goes_only_to_the_sender(): void
+    public function test_a_test_send_goes_only_to_the_nominated_address(): void
     {
         Notification::fake();
 
@@ -302,6 +302,7 @@ class EmailTemplateTest extends TestCase
 
         $this->actingAs($staff)
             ->post('/admin/emails/test', [
+                'email' => 'reviewer@example.com',
                 'subject' => 'Hello {first_name}',
                 'message' => 'Body.',
                 'statuses' => [RegistrationStatus::Approved->value],
@@ -309,12 +310,31 @@ class EmailTemplateTest extends TestCase
             ->assertSessionHas('success');
 
         // Rendered against a real match, so the test shows filled placeholders
-        // rather than the raw tokens.
-        Notification::assertSentTo(
-            $staff,
+        // rather than the raw tokens. Addressed to a bare route, not a User —
+        // the reviewer need not have an account, and no in-app notification
+        // row is left behind.
+        Notification::assertSentOnDemand(
             StaffAnnouncement::class,
-            fn ($notification) => str_contains($notification->title($staff), '[TEST] Hello Rosa')
+            fn ($notification, $channels, $notifiable) => $notifiable->routes['mail'] === 'reviewer@example.com'
+                && str_contains($notification->title($staff), '[TEST] Hello Rosa')
         );
+        Notification::assertNotSentTo($staff, StaffAnnouncement::class);
         Notification::assertNotSentTo($participant, StaffAnnouncement::class);
+    }
+
+    public function test_a_test_send_requires_a_valid_address(): void
+    {
+        Notification::fake();
+
+        $this->actingAs($this->staff())
+            ->post('/admin/emails/test', [
+                'email' => 'not-an-address',
+                'subject' => 'Subject',
+                'message' => 'Body.',
+                'statuses' => [RegistrationStatus::Approved->value],
+            ])
+            ->assertSessionHasErrors('email');
+
+        Notification::assertNothingSent();
     }
 }

@@ -10,6 +10,7 @@ import AppCard from '@/Components/AppCard.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppStat from '@/Components/AppStat.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     participant: { type: Object, required: true },
@@ -126,7 +127,7 @@ const confirm = () => {
                         <AppAvatar :name="participant.name" :src="participant.avatar" size="lg" />
                         <div class="min-w-0">
                             <p class="text-lg font-semibold text-csc-blue">{{ participant.name ?? '—' }}</p>
-                            <p class="text-sm text-csc-ink/70">{{ participant.email }}</p>
+                            <p class="text-sm text-csc-ink-muted">{{ participant.email }}</p>
                             <div class="mt-2 flex flex-wrap gap-2">
                                 <AppBadge
                                     :status="participant.is_active ? 'verified' : 'cancelled'"
@@ -153,15 +154,15 @@ const confirm = () => {
 
                 <dl class="mt-5 grid gap-4 border-t border-csc-line pt-4 text-sm sm:grid-cols-3">
                     <div>
-                        <dt class="text-csc-ink/60">Sign-in Method</dt>
+                        <dt class="text-csc-ink-subtle">Sign-in Method</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ signInMethod }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Last Sign-in</dt>
+                        <dt class="text-csc-ink-subtle">Last Sign-in</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ participant.last_login_at ?? 'Never' }}</dd>
                     </div>
                     <div>
-                        <dt class="text-csc-ink/60">Registered On</dt>
+                        <dt class="text-csc-ink-subtle">Registered On</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ participant.joined_at ?? '—' }}</dd>
                     </div>
                 </dl>
@@ -186,7 +187,7 @@ const confirm = () => {
                 <AppCard title="Personal Information">
                     <dl class="grid gap-4 text-sm sm:grid-cols-2">
                         <div v-for="[label, key] in personal" :key="key">
-                            <dt class="text-csc-ink/60">{{ label }}</dt>
+                            <dt class="text-csc-ink-subtle">{{ label }}</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ participant.profile[key] ?? '—' }}</dd>
                         </div>
                     </dl>
@@ -195,7 +196,7 @@ const confirm = () => {
                 <AppCard title="Employment Details">
                     <dl class="grid gap-4 text-sm sm:grid-cols-2">
                         <div v-for="[label, key] in employment" :key="key">
-                            <dt class="text-csc-ink/60">{{ label }}</dt>
+                            <dt class="text-csc-ink-subtle">{{ label }}</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ participant.profile[key] ?? '—' }}</dd>
                         </div>
                     </dl>
@@ -233,8 +234,9 @@ const confirm = () => {
                             >
                                 {{ registration.title }}
                             </Link>
-                            <p class="mt-0.5 text-xs text-csc-ink/60">
-                                Starts {{ registration.starts_at }} · Registered {{ registration.registered_at }}
+                            <p class="mt-0.5 text-xs text-csc-ink-subtle">
+                                {{ formatDateRange(registration.starts_at, registration.ends_at) }} ·
+                                Registered {{ registration.registered_at }}
                             </p>
                         </div>
                         <div class="flex shrink-0 flex-wrap gap-2">

@@ -78,6 +78,18 @@ class PendingActionCounter
             ->where('status', PhysicalOrRequestStatus::RequestSubmitted)
             ->count();
 
+        /*
+         * Training days the participant has attended but not yet evaluated.
+         *
+         * The one badge here that decays on its own: it clears as the forms are
+         * filled, and a run that is over with nothing outstanding contributes
+         * nothing. Computed rather than queried in one shot because whether a
+         * day is evaluable depends on the expert assignment and the attendance
+         * record, which is the service's rule to apply — see
+         * SmeEvaluationService::pendingFor().
+         */
+        $counts['evaluations'] = SmeEvaluationService::pendingFor($user)->count();
+
         return $counts;
     }
 

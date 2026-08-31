@@ -1,4 +1,15 @@
-<x-mail::message>
+{{--
+    The preheader is relayed down the whole chain, because each link is a Blade
+    component with its own scope: this view receives the notification's view
+    data, mail::message receives only what is written here, and mail::layout
+    only what mail::message passes on. A value set on the MailMessage therefore
+    reaches the <head> of the email only if every step hands it along.
+
+    ParticipantNotification sets it to the body of the message so the inbox
+    preview says what happened; see html/layout.blade.php for why that is worth
+    the relay.
+--}}
+<x-mail::message :preheader="$preheader ?? null">
 {{-- Greeting --}}
 @if (! empty($greeting))
 # {{ $greeting }}

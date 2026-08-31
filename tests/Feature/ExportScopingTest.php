@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\Role;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\Attendance;
 use App\Models\Certificate;
 use App\Models\FieldOffice;
@@ -301,6 +303,44 @@ class ExportScopingTest extends TestCase
         $this->assertStringNotContainsString($theirs->name, $csv);
     }
 
+    /**
+     * The affected-participants export carries fee state, which makes a leak
+     * here worse than a roster leak: it would disclose another office's
+     * participants *and* what each of them has or has not paid.
+     */
+    public function test_affected_export_is_scoped_and_names_the_fee_state(): void
+    {
+        $training = Training::factory()->paid()->create();
+
+        $mine = $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+        $theirs = $this->participantIn($this->officeB, 'BRAVO PARTICIPANT');
+
+        $registration = Registration::factory()->approved()->create([
+            'user_id' => $mine->getKey(), 'training_id' => $training->getKey(),
+        ]);
+        Registration::factory()->approved()->create([
+            'user_id' => $theirs->getKey(), 'training_id' => $training->getKey(),
+        ]);
+
+        Payment::factory()->verified()->create([
+            'registration_id' => $registration->getKey(),
+            'user_id' => $mine->getKey(),
+            'training_id' => $training->getKey(),
+            'payment_method' => PaymentMethod::Promissory,
+        ]);
+
+        $csv = $this->body(
+            $this->actingAs($this->staffFor($this->officeA))
+                ->get("/admin/exports/trainings/{$training->id}/affected")
+                ->assertOk()
+        );
+
+        $this->assertStringContainsString($mine->name, $csv);
+        $this->assertStringNotContainsString($theirs->name, $csv);
+        // Spelled out, because "promissory" alone has been read as money in.
+        $this->assertStringContainsString('Promissory note (unpaid)', $csv);
+    }
+
     public function test_roster_export_is_scoped_and_carries_attendance(): void
     {
         $training = Training::factory()->startingToday()->runningFor(2)->create();
@@ -395,7 +435,98 @@ class ExportScopingTest extends TestCase
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
     }
 
+    // --- The download handshake -------------------------------------------
+
+    /**
+     * An export is a plain link, so the page that opened it gets no event when
+     * the download begins — the button would stay pending forever, or never
+     * show pending at all. `?_dl=` comes back as a cookie, and that is the
+     * whole signal useDownload.js waits on.
+     */
+    public function test_an_export_echoes_the_download_token_back_as_a_cookie(): void
+    {
+        $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+
+        $this->actingAs($this->staffFor(null, Role::Admin))
+            ->get('/admin/exports/participants?_dl=abc123')
+            ->assertOk()
+            // encrypted: false — the page has to read this value verbatim, and
+            // the third test below is the guard on that staying true.
+            ->assertCookie('dl_token', 'abc123', false);
+    }
+
+    /**
+     * The token is reflected into a response header, so it is validated rather
+     * than trusted. A value carrying a newline is how an echo like this turns
+     * into response splitting; anything that is not a plain token comes back
+     * empty and the page falls back to its own timeout.
+     */
+    public function test_a_malformed_download_token_is_not_reflected(): void
+    {
+        $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+
+        $this->actingAs($this->staffFor(null, Role::Admin))
+            ->get('/admin/exports/participants?_dl='.urlencode("evil\r\nSet-Cookie: admin=1"))
+            ->assertOk()
+            ->assertCookie('dl_token', '', false);
+    }
+
+    /**
+     * The cookie must stay readable by JavaScript. Laravel encrypts cookies by
+     * default, and an encrypted value would never match the token the page
+     * generated — the button would hang until its timeout on every export.
+     */
+    public function test_the_download_token_cookie_is_not_encrypted(): void
+    {
+        $this->participantIn($this->officeA, 'ALPHA PARTICIPANT');
+
+        $response = $this->actingAs($this->staffFor(null, Role::Admin))
+            ->get('/admin/exports/participants?_dl=plaintoken');
+
+        $cookie = collect($response->headers->getCookies())
+            ->firstWhere(fn ($candidate) => $candidate->getName() === 'dl_token');
+
+        $this->assertNotNull($cookie);
+        $this->assertSame('plaintoken', $cookie->getValue());
+        $this->assertFalse($cookie->isHttpOnly(), 'The page has to be able to read this cookie.');
+    }
+
     // --- Analytics --------------------------------------------------------
+
+    /**
+     * The analytics overview, fetched the way the browser fetches it.
+     *
+     * `overview` is a deferred prop: the first response carries the page shell
+     * without it, and Inertia asks for it in a follow-up partial request once
+     * the page has mounted. A plain GET therefore sees no `overview` at all,
+     * which would silently turn every scoping assertion below into an
+     * assertion about an absent key — the failure mode these tests exist to
+     * catch. Asking for it explicitly keeps them pointed at the real figures.
+     *
+     * A partial visit answers in JSON rather than the HTML document, so these
+     * tests read the payload with `json('props.overview.…')` instead of
+     * `assertInertia` — that helper asserts against the view data an initial
+     * page render leaves behind, which a partial response does not have.
+     */
+    private function analyticsOverview(string $query = ''): TestResponse
+    {
+        /*
+         * The version has to come from the middleware, not from
+         * Inertia::getVersion(): the facade only knows the version after a
+         * request has passed through HandleInertiaRequests, so reading it up
+         * front yields an empty string and every one of these requests comes
+         * back 409 Conflict — Inertia's asset-refresh signal, not an error the
+         * assertions below would explain.
+         */
+        $version = app(HandleInertiaRequests::class)->version(request());
+
+        return $this->get('/admin/analytics'.$query, [
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => (string) $version,
+            'X-Inertia-Partial-Component' => 'Admin/Analytics',
+            'X-Inertia-Partial-Data' => 'overview',
+        ]);
+    }
 
     public function test_analytics_counts_are_scoped_to_the_office(): void
     {
@@ -415,19 +546,17 @@ class ExportScopingTest extends TestCase
         ]);
 
         $this->actingAs($this->staffFor($this->officeA))
-            ->get('/admin/analytics')
+            ->analyticsOverview()
             ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Admin/Analytics')
-                ->where('overview.headline.registrations', 1)
-                // The per-office breakdown is meaningless when scoped to one.
-                ->has('overview.byFieldOffice', 0)
-            );
+            ->assertJsonPath('component', 'Admin/Analytics')
+            ->assertJsonPath('props.overview.headline.registrations', 1)
+            // The per-office breakdown is meaningless when scoped to one.
+            ->assertJsonCount(0, 'props.overview.byFieldOffice');
 
         $this->actingAs($this->staffFor(null, Role::Admin))
-            ->get('/admin/analytics')
+            ->analyticsOverview()
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('overview.headline.registrations', 3));
+            ->assertJsonPath('props.overview.headline.registrations', 3);
     }
 
     /**
@@ -446,31 +575,28 @@ class ExportScopingTest extends TestCase
             ]);
         }
 
-        // Inertia's `where` hands the closure a Collection, not the raw array.
-        $total = fn ($rows) => collect($rows)->sum('count');
+        $total = fn (array $rows) => array_sum(array_column($rows, 'count'));
 
-        $this->actingAs($this->staffFor($this->officeA))
-            ->get('/admin/analytics')
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->where('overview.demographics.sex', fn ($rows) => $total($rows) === 1)
-                ->where('overview.demographics.positionLevel', fn ($rows) => $total($rows) === 1)
-                // The geographic cuts are scoped like every other one — a
-                // region chart that leaked the whole region would be the same
-                // disclosure as a name list.
-                ->where('overview.demographics.region', fn ($rows) => $total($rows) === 1)
-                ->where('overview.demographics.province', fn ($rows) => $total($rows) === 1)
-                ->where('overview.topAgencies', fn ($rows) => $total($rows) === 1)
-            );
+        $scoped = $this->actingAs($this->staffFor($this->officeA))
+            ->analyticsOverview()
+            ->assertOk();
 
-        $this->actingAs($this->staffFor(null, Role::Admin))
-            ->get('/admin/analytics')
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->where('overview.demographics.sex', fn ($rows) => $total($rows) === 3)
-                ->where('overview.demographics.region', fn ($rows) => $total($rows) === 3)
-                ->where('overview.topAgencies', fn ($rows) => $total($rows) === 3)
-            );
+        $this->assertSame(1, $total($scoped->json('props.overview.demographics.sex')));
+        $this->assertSame(1, $total($scoped->json('props.overview.demographics.positionLevel')));
+        // The geographic cuts are scoped like every other one — a region chart
+        // that leaked the whole region would be the same disclosure as a name
+        // list.
+        $this->assertSame(1, $total($scoped->json('props.overview.demographics.region')));
+        $this->assertSame(1, $total($scoped->json('props.overview.demographics.province')));
+        $this->assertSame(1, $total($scoped->json('props.overview.topAgencies')));
+
+        $region = $this->actingAs($this->staffFor(null, Role::Admin))
+            ->analyticsOverview()
+            ->assertOk();
+
+        $this->assertSame(3, $total($region->json('props.overview.demographics.sex')));
+        $this->assertSame(3, $total($region->json('props.overview.demographics.region')));
+        $this->assertSame(3, $total($region->json('props.overview.topAgencies')));
     }
 
     /**
@@ -489,18 +615,17 @@ class ExportScopingTest extends TestCase
             ]);
         }
 
-        $this->actingAs($this->staffFor(null, Role::Admin))
-            ->get('/admin/analytics')
+        $demographics = $this->actingAs($this->staffFor(null, Role::Admin))
+            ->analyticsOverview()
             ->assertOk()
-            ->assertInertia(function ($page) {
-                $demographics = $page->toArray()['props']['overview']['demographics'];
-                $totals = array_map(
-                    fn ($rows) => array_sum(array_column($rows, 'count')),
-                    $demographics,
-                );
+            ->json('props.overview.demographics');
 
-                $this->assertSame([3], array_values(array_unique($totals)));
-            });
+        $totals = array_map(
+            fn ($rows) => array_sum(array_column($rows, 'count')),
+            $demographics,
+        );
+
+        $this->assertSame([3], array_values(array_unique($totals)));
     }
 
     public function test_age_bands_keep_their_order_rather_than_sorting_by_size(): void
@@ -512,14 +637,15 @@ class ExportScopingTest extends TestCase
             'training_id' => $training->getKey(),
         ]);
 
-        $this->actingAs($this->staffFor(null, Role::Admin))
-            ->get('/admin/analytics')
+        $bands = $this->actingAs($this->staffFor(null, Role::Admin))
+            ->analyticsOverview()
             ->assertOk()
-            ->assertInertia(function ($page) {
-                $labels = array_column($page->toArray()['props']['overview']['demographics']['ageBand'], 'label');
+            ->json('props.overview.demographics.ageBand');
 
-                $this->assertSame(['18-25', '26-35', '36-45', '46-55', '56-65', 'Over 65'], $labels);
-            });
+        $this->assertSame(
+            ['18-25', '26-35', '36-45', '46-55', '56-65', 'Over 65'],
+            array_column($bands, 'label'),
+        );
     }
 
     public function test_analytics_hides_money_from_non_finance_roles(): void
@@ -527,14 +653,14 @@ class ExportScopingTest extends TestCase
         Payment::factory()->verified()->create();
 
         $this->actingAs($this->staffFor($this->officeA))
-            ->get('/admin/analytics')
+            ->analyticsOverview()
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('overview.payments', null));
+            ->assertJsonPath('props.overview.payments', null);
 
         $this->actingAs($this->collectorFor(null))
-            ->get('/admin/analytics')
+            ->analyticsOverview()
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->has('overview.payments.verified_total'));
+            ->assertJsonStructure(['props' => ['overview' => ['payments' => ['verified_total']]]]);
     }
 
     public function test_analytics_reports_an_attendance_rate(): void
@@ -549,12 +675,10 @@ class ExportScopingTest extends TestCase
         Attendance::factory()->absent()->onDay(2)->create(['registration_id' => $registration->getKey()]);
 
         $this->actingAs($this->staffFor(null, Role::Admin))
-            ->get('/admin/analytics')
+            ->analyticsOverview()
             ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->where('overview.attendance.total', 2)
-                // One Present, one Absent — JSON renders the 50.0 as 50.
-                ->where('overview.attendance.rate', 50)
-            );
+            ->assertJsonPath('props.overview.attendance.total', 2)
+            // One Present, one Absent — JSON renders the 50.0 as 50.
+            ->assertJsonPath('props.overview.attendance.rate', 50);
     }
 }

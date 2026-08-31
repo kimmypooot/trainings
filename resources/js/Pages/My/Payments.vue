@@ -13,6 +13,7 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppFileField from '@/Components/AppFileField.vue';
 import AppModal from '@/Components/AppModal.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     payments: { type: Array, required: true },
@@ -29,10 +30,16 @@ const form = useForm({
     amount: '',
     payment_method: 'online',
     payment_date: '',
+    reference_number: '',
     proof: null,
 });
 
 const isPromissory = computed(() => form.payment_method === 'promissory');
+const isOnlineTransfer = computed(() => form.payment_method === 'online');
+// A fee already paid in person — most often at a field office — that never
+// made it into a registration here. The OR number is what lets staff go
+// looking for it, so it is asked for only in this one case.
+const isOfficialReceipt = computed(() => form.payment_method === 'official_receipt');
 
 // Whether a document is expected with this method — asked for, never demanded.
 // A payment without one still goes through and is flagged for staff instead,
@@ -40,6 +47,29 @@ const isPromissory = computed(() => form.payment_method === 'promissory');
 // the two cannot drift apart.
 const proofExpected = computed(
     () => props.methods.find((method) => method.value === form.payment_method)?.expects_proof ?? false
+);
+
+const proofLabel = computed(() => {
+    if (isPromissory.value) return 'Signed Promissory Note';
+    if (isOfficialReceipt.value) return 'Photo of the Official Receipt';
+
+    return 'Proof of Payment';
+});
+
+const proofHint = computed(() => {
+    if (isOfficialReceipt.value) {
+        return 'A clear photo of the physical receipt, front side up — the OR number, amount, and date must all be readable. PDF or image, up to 5 MB.';
+    }
+
+    return proofExpected.value
+        ? 'Please attach the transfer slip if you have it — it is what CSC matches against the bank statement. You can submit without one, and staff will follow up. PDF or image, up to 5 MB. Only you and CSC finance staff can open it.'
+        : 'PDF or image, up to 5 MB. Only you and CSC finance staff can open it.';
+});
+
+const proofPreviewHint = computed(() =>
+    isOfficialReceipt.value
+        ? 'Check that the OR number, amount and date are all sharp and readable.'
+        : 'Check that the amount, date and reference number are all sharp and readable — a blurry or cropped photo will delay verification.'
 );
 
 // Offered only where the training was published as accepting one. The server
@@ -56,7 +86,7 @@ const startPaying = (item) => {
 };
 
 const submit = () =>
-    form.post(`/my/registrations/${paying.value}/payments`, {
+    form.post(`/my/registrations/${paying.value.registration_id}/payments`, {
         forceFormData: true,
         onSuccess: () => {
             paying.value = null;
@@ -159,23 +189,23 @@ const submitPhysicalOr = () =>
                     class="mb-4 rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm"
                 >
                     <p class="font-medium text-csc-ink">Deposit to</p>
-                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink/80 sm:grid-cols-2">
+                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink-muted sm:grid-cols-2">
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Bank</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Bank</dt>
                             <dd class="font-semibold text-csc-ink">{{ payment_settings.bank_name }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Account name</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Account name</dt>
                             <dd class="text-csc-ink">{{ payment_settings.account_name }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Account no.</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Account no.</dt>
                             <dd class="font-mono font-semibold text-csc-ink">{{ payment_settings.account_number }}</dd>
                         </div>
                     </dl>
                     <p
                         v-if="payment_settings.instructions"
-                        class="mt-2 border-t border-csc-line pt-2 leading-relaxed text-csc-ink/70"
+                        class="mt-2 border-t border-csc-line pt-2 leading-relaxed text-csc-ink-muted"
                     >
                         {{ payment_settings.instructions }}
                     </p>
@@ -190,9 +220,9 @@ const submitPhysicalOr = () =>
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <div class="min-w-0">
                                 <p class="font-semibold text-csc-ink">{{ item.training.title }}</p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">₱{{ money(item.amount) }}</p>
-                                <p class="text-xs text-csc-ink/55">
-                                    {{ item.training.starts_at }}
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">₱{{ money(item.amount) }}</p>
+                                <p class="text-xs text-csc-ink-subtle">
+                                    {{ formatDateRange(item.training.starts_at, item.training.ends_at) }}
                                     <span v-if="item.training.mode_label">· {{ item.training.mode_label }}</span>
                                 </p>
                             </div>
@@ -251,29 +281,66 @@ const submitPhysicalOr = () =>
                                 the fee is paid and verified.
                             </AppAlert>
 
-                            <div>
-                                <label for="proof" class="mb-1.5 block text-sm font-medium text-csc-ink">
-                                    {{ isPromissory ? 'Signed Promissory Note' : 'Proof of Payment' }}
-                                </label>
-                                <input
-                                    id="proof"
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink file:mr-3 file:rounded file:border-0 file:bg-csc-blue-tint file:px-3 file:py-1.5 file:text-sm file:text-csc-blue"
-                                    @change="form.proof = $event.target.files[0]"
-                                />
-                                <p class="mt-1.5 text-xs text-csc-ink/60">
-                                    <template v-if="proofExpected">
-                                        Please attach the transfer slip if you have it — it is what CSC
-                                        matches against the bank statement. You can submit without one,
-                                        and staff will follow up.
-                                    </template>
-                                    PDF or image, up to 5 MB. Only you and CSC finance staff can open it.
-                                </p>
-                                <p v-if="form.errors.proof" class="mt-1.5 text-xs font-medium text-csc-red-ink">
-                                    {{ form.errors.proof }}
-                                </p>
-                            </div>
+                            <!--
+                                Emphasised on purpose, not folded into the file
+                                field's hint: the two most common reasons a
+                                verification stalls are a screenshot of a
+                                transfer that never actually went through, and
+                                a photo too blurry to read the amount or
+                                reference number against. Scoped to an actual
+                                online transfer — the wording does not fit a
+                                counter receipt or an already-issued OR.
+                            -->
+                            <AppAlert v-else-if="isOnlineTransfer" tone="warning" title="Before you upload">
+                                <ul class="list-disc space-y-1.5 pl-4">
+                                    <li>
+                                        Open your screenshot or receipt and check that it clearly shows
+                                        <strong>“TRANSFER SUCCESSFUL”</strong> (or your bank/e-wallet’s own
+                                        success message). A pending, failed, or cancelled transaction cannot
+                                        be verified.
+                                    </li>
+                                    <li>
+                                        Make sure the amount, date, and reference number are sharp and
+                                        easy to read — not cropped out, covered, or blurry.
+                                    </li>
+                                </ul>
+                            </AppAlert>
+
+                            <!--
+                                Filing a fee already paid at a counter that
+                                never made it into a registration here — the
+                                gap this method exists for. Says so up front so
+                                it is not chosen by mistake for an ordinary
+                                counter payment the field office already has on
+                                record.
+                            -->
+                            <AppAlert v-else-if="isOfficialReceipt" tone="info" title="Already paid, not yet reflected">
+                                Use this only if you already paid in person — for example at your field
+                                office — and hold a physical Official Receipt, but the payment is not
+                                showing up here. Enter the OR number exactly as printed and attach a clear
+                                photo of the receipt; CSC staff will verify it directly with the field
+                                office.
+                            </AppAlert>
+
+                            <AppInput
+                                v-if="isOfficialReceipt"
+                                v-model="form.reference_number"
+                                label="Official Receipt (OR) Number"
+                                hint="Exactly as printed on the receipt."
+                                :error="form.errors.reference_number"
+                                required
+                            />
+
+                            <AppFileField
+                                id="proof"
+                                :label="proofLabel"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                :hint="proofHint"
+                                :preview-hint="proofPreviewHint"
+                                :error="form.errors.proof"
+                                :progress="form.progress"
+                                @change="form.proof = $event"
+                            />
 
                             <div class="flex flex-wrap justify-end gap-3">
                                 <AppButton variant="ghost" type="button" @click="paying = null">
@@ -307,15 +374,15 @@ const submitPhysicalOr = () =>
                                         {{ payment.training.title }}
                                     </a>
                                 </p>
-                                <p class="mt-0.5 text-sm text-csc-ink/60">
+                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
                                     ₱{{ money(payment.amount) }} · {{ payment.method }} ·
                                     {{ payment.payment_date }}
                                 </p>
-                                <p v-if="payment.training.starts_at" class="text-xs text-csc-ink/55">
-                                    {{ payment.training.starts_at }}
+                                <p v-if="payment.training.starts_at" class="text-xs text-csc-ink-subtle">
+                                    {{ formatDateRange(payment.training.starts_at, payment.training.ends_at) }}
                                     <span v-if="payment.training.mode_label">· {{ payment.training.mode_label }}</span>
                                 </p>
-                                <p v-if="payment.reference_number" class="text-xs text-csc-ink/55">
+                                <p v-if="payment.reference_number" class="text-xs text-csc-ink-subtle">
                                     Ref {{ payment.reference_number }}
                                 </p>
                             </div>
@@ -360,12 +427,12 @@ const submitPhysicalOr = () =>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <p class="text-sm font-medium text-csc-ink">
                                     Refund {{ payment.refund.request_code }}
-                                    <span class="text-csc-ink/55">· ₱{{ money(payment.refund.amount) }}</span>
+                                    <span class="text-csc-ink-subtle">· ₱{{ money(payment.refund.amount) }}</span>
                                 </p>
                                 <AppBadge :status="payment.refund.status" />
                             </div>
 
-                            <p class="mt-1.5 text-sm text-csc-ink/75">{{ payment.refund.message }}</p>
+                            <p class="mt-1.5 text-sm text-csc-ink-muted">{{ payment.refund.message }}</p>
 
                             <p
                                 v-if="payment.refund.rejection_reason"
@@ -387,7 +454,7 @@ const submitPhysicalOr = () =>
                                     v-for="stage in payment.refund.stages"
                                     :key="stage.label"
                                     class="flex items-center gap-1.5 text-xs"
-                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink/40'"
+                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink-subtle'"
                                 >
                                     <AppIcon
                                         :name="stage.reached ? 'check' : 'clock'"
@@ -409,7 +476,7 @@ const submitPhysicalOr = () =>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <p class="text-sm font-medium text-csc-ink">
                                     Physical OR {{ payment.physical_or.request_code }}
-                                    <span v-if="payment.physical_or.courier_name" class="text-csc-ink/55">
+                                    <span v-if="payment.physical_or.courier_name" class="text-csc-ink-subtle">
                                         · {{ payment.physical_or.courier_name }}
                                         <template v-if="payment.physical_or.tracking_number">
                                             {{ payment.physical_or.tracking_number }}
@@ -419,7 +486,7 @@ const submitPhysicalOr = () =>
                                 <AppBadge :status="payment.physical_or.status" />
                             </div>
 
-                            <p class="mt-1.5 text-sm text-csc-ink/75">{{ payment.physical_or.message }}</p>
+                            <p class="mt-1.5 text-sm text-csc-ink-muted">{{ payment.physical_or.message }}</p>
 
                             <p
                                 v-if="payment.physical_or.rejection_reason"
@@ -436,7 +503,7 @@ const submitPhysicalOr = () =>
                                     v-for="stage in payment.physical_or.stages"
                                     :key="stage.label"
                                     class="flex items-center gap-1.5 text-xs"
-                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink/40'"
+                                    :class="stage.reached ? 'text-csc-ink' : 'text-csc-ink-subtle'"
                                 >
                                     <AppIcon
                                         :name="stage.reached ? 'check' : 'clock'"
@@ -512,6 +579,7 @@ const submitPhysicalOr = () =>
                     accept=".pdf,.jpg,.jpeg,.png"
                     required
                     :error="refundForm.errors.proof"
+                    :progress="refundForm.progress"
                     @change="refundForm.proof = $event"
                 />
 
@@ -573,17 +641,17 @@ const submitPhysicalOr = () =>
 
                 <div class="rounded-lg border border-csc-line bg-csc-mist/40 p-3 text-sm">
                     <p class="font-medium text-csc-ink">Payment details</p>
-                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink/80">
+                    <dl class="mt-1.5 grid gap-y-1 text-csc-ink-muted">
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Courier fee</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Courier fee</dt>
                             <dd class="font-semibold text-csc-ink">₱{{ money(physical_or_settings?.courier_fee ?? 200) }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">GCash</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">GCash</dt>
                             <dd class="font-mono font-semibold text-csc-ink">{{ physical_or_settings?.gcash_number }}</dd>
                         </div>
                         <div class="flex gap-2">
-                            <dt class="w-28 shrink-0 text-csc-ink/55">Account name</dt>
+                            <dt class="w-28 shrink-0 text-csc-ink-subtle">Account name</dt>
                             <dd class="text-csc-ink">{{ physical_or_settings?.account_name }}</dd>
                         </div>
                     </dl>
@@ -595,6 +663,7 @@ const submitPhysicalOr = () =>
                     hint="Proof of the courier fee payment. PDF, JPG or PNG, up to 5 MB."
                     accept=".pdf,.jpg,.jpeg,.png"
                     :error="orForm.errors.proof"
+                    :progress="orForm.progress"
                     @change="orForm.proof = $event"
                 />
 

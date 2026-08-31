@@ -179,16 +179,19 @@ class EmailController extends Controller
     }
 
     /**
-     * Send the drafted message to the sender's own address.
+     * Send the drafted message to a single address the sender nominates.
      *
      * The one honest way to check how a message renders — placeholders, line
      * breaks, and the mail client's own formatting — before it reaches two
-     * hundred people.
+     * hundred people. The address is asked for rather than assumed to be the
+     * sender's: the copy often has to be seen in the mail client participants
+     * actually use, or cleared by someone who is not at this keyboard.
      */
     public function test(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             ...$this->audienceRules(),
+            'email' => ['required', 'string', 'email', 'max:255'],
             'subject' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:5000'],
         ]);
@@ -207,12 +210,14 @@ class EmailController extends Controller
             ? EmailTemplateRenderer::render($validated['message'], $sample)
             : $validated['message'];
 
-        Notification::send(
-            $request->user(),
-            new StaffAnnouncement("[TEST] {$subject}", $body),
-        );
+        // Routed to a bare address rather than to a User: the destination may
+        // have no account here, and a test must not leave a row in somebody's
+        // in-app notification list. Laravel skips the `database` channel for an
+        // anonymous notifiable, so only the mail goes out.
+        Notification::route('mail', $validated['email'])
+            ->notify(new StaffAnnouncement("[TEST] {$subject}", $body));
 
-        return back()->with('success', "Test message sent to {$request->user()->email}.");
+        return back()->with('success', "Test message sent to {$validated['email']}.");
     }
 
     public function storeTemplate(Request $request): RedirectResponse

@@ -12,6 +12,7 @@ use App\Models\PhysicalOrRequest;
 use App\Models\PhysicalOrSetting;
 use App\Models\RefundRequest;
 use App\Models\Registration;
+use App\Support\PaymentService;
 use App\Support\RefundService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -69,7 +70,12 @@ class PaymentController extends Controller
                 'id' => $payment->id,
                 'training' => [
                     'title' => $payment->training->title,
-                    'starts_at' => $payment->training->starts_at->format('d M Y, g:i A'),
+                    // Date only, and paired with ends_at — matching the
+                    // catalogue's own convention (TrainingController@index)
+                    // so a multi-day run reads as a range everywhere it
+                    // appears, not just here.
+                    'starts_at' => $payment->training->starts_at->format('d M Y'),
+                    'ends_at' => $payment->training->ends_at->format('d M Y'),
                     'mode_label' => $payment->training->mode->label(),
                     'url' => route('trainings.show', $payment->training->slug),
                 ],
@@ -98,7 +104,8 @@ class PaymentController extends Controller
                 'registration_id' => $registration->id,
                 'training' => [
                     'title' => $registration->training->title,
-                    'starts_at' => $registration->training->starts_at->format('d M Y, g:i A'),
+                    'starts_at' => $registration->training->starts_at->format('d M Y'),
+                    'ends_at' => $registration->training->ends_at->format('d M Y'),
                     'mode_label' => $registration->training->mode->label(),
                     'url' => route('trainings.show', $registration->training->slug),
                 ],
@@ -219,24 +226,29 @@ class PaymentController extends Controller
                 'required',
                 // A promissory note is only an option where the training was
                 // published as accepting one — otherwise it is a way to claim a
-                // slot without paying for it.
-                Rule::enum(PaymentMethod::class)->when(
-                    ! $registration->training->accepts_promissory,
-                    fn ($rule) => $rule->except(PaymentMethod::Promissory)
-                ),
+                // slot without paying for it. One rule, shared with the counter
+                // form — see PaymentMethod::rule().
+                PaymentMethod::rule($registration->training->accepts_promissory),
             ],
             /*
-             * No longer asked for at the counter form, so no longer required.
+             * No longer asked for at the counter form, so no longer required —
+             * except for an official receipt, where it is the one thing that
+             * lets staff go looking for the missing record: without the OR
+             * number, "I paid but it's not showing up" is a claim with nothing
+             * to chase.
              *
-             * It stays accepted rather than rejected: the column holds the
-             * references of every payment recorded before this, the admin
-             * screens still read it, and staff recording a payment on a
-             * participant's behalf may still have one to enter. Requiring it
-             * here after the field was removed from the form would have failed
-             * every online payment with a message pinned to an input that is
-             * not on the page.
+             * It stays accepted rather than rejected for every other method:
+             * the column holds the references of every payment recorded
+             * before this, the admin screens still read it, and staff
+             * recording a payment on a participant's behalf may still have
+             * one to enter. Requiring it here after the field was removed
+             * from the form would have failed every online payment with a
+             * message pinned to an input that is not on the page.
              */
-            'reference_number' => ['nullable', 'string', 'max:64'],
+            'reference_number' => [
+                Rule::requiredIf($request->input('payment_method') === PaymentMethod::OfficialReceipt->value),
+                'nullable', 'string', 'max:64',
+            ],
             'payment_date' => ['required', 'date', 'before_or_equal:today'],
             // Never refused for want of a document. An online transfer without
             // a slip is accepted and then flagged in the verification queue —
@@ -245,10 +257,7 @@ class PaymentController extends Controller
             'proof' => ['nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
         ]);
 
-        Payment::create([
-            'registration_id' => $registration->getKey(),
-            'user_id' => $registration->user_id,
-            'training_id' => $registration->training_id,
+        PaymentService::submit($registration, [
             'amount' => $validated['amount'],
             'payment_method' => $validated['payment_method'],
             'reference_number' => $validated['reference_number'] ?? null,
@@ -307,7 +316,10 @@ class PaymentController extends Controller
 
         $isOwner = $refundRequest->payment->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->collectsPayments(), 403);
+        if (! $isOwner) {
+            abort_unless($request->user()->collectsPayments(), 403);
+            $this->assertPaymentInScope($request, $refundRequest->payment);
+        }
 
         // Served inline rather than as an attachment: the officer who acts on
         // the claim reviews the receipt on screen, not after opening a download.
@@ -316,6 +328,25 @@ class PaymentController extends Controller
             null,
             ['Content-Disposition' => 'inline; filename="proof-of-payment"'],
         );
+    }
+
+    /**
+     * Field-office scoping for the two proof routes above, mirroring
+     * Admin\PaymentController::scopedPayment() — a field office's collecting
+     * officer may verify only its own money, and must not be able to open
+     * another office's payment proof by walking ids in the URL either.
+     */
+    private function assertPaymentInScope(Request $request, Payment $payment): void
+    {
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        if ($officeId === null) {
+            return;
+        }
+
+        $payment->loadMissing('user.profile');
+
+        abort_unless($payment->user->profile?->field_office_id === $officeId, 404);
     }
 
     /**
@@ -328,7 +359,10 @@ class PaymentController extends Controller
 
         $isOwner = $payment->user_id === $request->user()->getKey();
 
-        abort_unless($isOwner || $request->user()->collectsPayments(), 403);
+        if (! $isOwner) {
+            abort_unless($request->user()->collectsPayments(), 403);
+            $this->assertPaymentInScope($request, $payment);
+        }
 
         // Inline, not attachment: the collecting officer has to actually look
         // at the uploaded proof before it is verified, and a download adds a

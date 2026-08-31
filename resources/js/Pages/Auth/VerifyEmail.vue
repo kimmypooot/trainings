@@ -58,11 +58,23 @@ const resend = () => {
                     <AppIcon name="envelope" size="lg" class="text-csc-blue" />
                 </span>
 
+                <!--
+                    Keeps the counter the register form started. That form
+                    announces "Step 1 of 2" and the profile form finishes with
+                    "Step 2 of 2", but this page sat between them showing no
+                    position at all — so the one screen where someone has to
+                    stop and go to their inbox was also the one screen that
+                    gave no sign the sequence was still running.
+                -->
+                <p class="mt-4 inline-flex items-center gap-1.5 rounded-full bg-csc-blue-tint px-3 py-1 text-2xs font-semibold tracking-widest text-csc-blue uppercase">
+                    Step 1 of 2 complete
+                </p>
+
                 <h1 class="mt-4 text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
                     Verify your email address
                 </h1>
 
-                <p class="mt-3 text-sm leading-relaxed text-csc-ink/70">
+                <p class="mt-3 text-sm leading-relaxed text-csc-ink-muted">
                     We sent a verification link to
                     <span class="font-semibold text-csc-ink">{{ props.email }}</span>. Click the link to activate your
                     account. You will be able to sign in once your email is verified.
@@ -84,7 +96,7 @@ const resend = () => {
                     </AppButton>
                 </div>
 
-                <p class="mt-6 border-t border-csc-line pt-5 text-xs leading-relaxed text-csc-ink/60">
+                <p class="mt-6 border-t border-csc-line pt-5 text-xs leading-relaxed text-csc-ink-subtle">
                     Didn't receive it? Check your spam or junk folder, or make sure your email address was typed
                     correctly during registration. Typo in your address?
                     <a

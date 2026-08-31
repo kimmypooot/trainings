@@ -89,8 +89,18 @@ const fullName = computed(
 const previewSections = computed(() => [
     {
         title: 'Personal Information',
+        anchor: 'section-personal',
+        /*
+         * Full Name is not in this grid. It leads the modal instead — see the
+         * template. It is the only field here whose cost of being wrong is not
+         * borne by editing it later: ProfileService::save copies fullName()
+         * onto the user record, and that string is printed into the certificate
+         * PDF, which is rendered once at release and stored. Every other value
+         * on this screen can be corrected at /profile with one click and no
+         * consequence; this one, once a certificate exists, needs the office to
+         * re-issue the document.
+         */
         rows: [
-            { label: 'Full Name', value: fullName.value },
             { label: 'Date of Birth', value: form.date_of_birth },
             { label: 'Sex', value: form.sex },
             { label: 'Civil Status', value: form.civil_status },
@@ -104,6 +114,7 @@ const previewSections = computed(() => [
     },
     {
         title: 'Employment Details',
+        anchor: 'section-employment',
         rows: [
             {
                 label: 'Employment Type',
@@ -121,7 +132,28 @@ const previewSections = computed(() => [
     },
     {
         title: 'Consent',
-        rows: [{ label: 'Personal Data Consent', value: 'I consent to the processing of my personal data.' }],
+        anchor: 'section-consent',
+        /*
+         * One row, and the statement is the row.
+         *
+         * This used to carry a "Personal Data Consent" label above the
+         * sentence, sitting directly under a section heading that already read
+         * "Consent" — three words of chrome introducing one line that says the
+         * same thing. Every other row in this modal pairs a field name with a
+         * value the person typed; this one has no field name, because the
+         * sentence is the whole of it.
+         *
+         * `label` is kept for assistive technology only (see the sr-only dt
+         * below): a <dd> with no <dt> is not a valid description list, so the
+         * pairing stays in the markup even though it is not drawn.
+         */
+        rows: [
+            {
+                label: 'Personal Data Consent',
+                labelHidden: true,
+                value: 'I consent to the processing of my personal data.',
+            },
+        ],
     },
 ]);
 
@@ -138,6 +170,38 @@ const openPreview = () => {
     }
 
     previewOpen.value = true;
+};
+
+/*
+ * Leave the review and land on the part being corrected.
+ *
+ * The only reason to read this modal is to catch a wrong value, and until now
+ * catching one closed the modal at whatever scroll position the form happened
+ * to be at — which, after the submit bar opened the preview, is the bottom.
+ * Someone who spotted a mistyped salary grade had to go and find it again among
+ * nineteen fields, and the further down the modal the mistake was, the further
+ * the hunt. A review step that makes acting on the review expensive is a speed
+ * bump wearing a confirmation's clothes.
+ *
+ * Focus follows the scroll rather than only the viewport moving: a keyboard or
+ * screen-reader user dismissing the modal would otherwise be returned to the
+ * top of the document with no indication anything had happened.
+ */
+const editSection = (anchor) => {
+    previewOpen.value = false;
+
+    nextTick(() => {
+        const section = document.getElementById(anchor);
+        if (!section) return;
+
+        section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+
+        // The heading is not focusable on its own, so aim at the first control
+        // in the group — that is where a correction actually starts. tabindex
+        // -1 on the section is the fallback when a group holds no control.
+        const target = section.querySelector('input, select, textarea') ?? section;
+        target.focus({ preventScroll: true });
+    });
 };
 
 // Employment classification gate: answers whether the participant is a
@@ -405,7 +469,7 @@ onMounted(() => {
                 <h1 class="mt-4 text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
                     Complete your profile
                 </h1>
-                <p class="mt-3 text-sm leading-relaxed text-csc-ink/70">
+                <p class="mt-3 text-sm leading-relaxed text-csc-ink-muted">
                     Signed in as {{ props.user.email }}. We need a few details before you can register for
                     trainings. Free-text records are kept in uppercase, and your progress is saved on this device.
                 </p>
@@ -425,7 +489,7 @@ onMounted(() => {
 
             <form ref="formEl" class="space-y-8" novalidate @submit.prevent="submit">
                 <!-- Personal information -->
-                <fieldset class="rounded-xl border border-csc-line bg-white p-6 sm:p-8">
+                <fieldset id="section-personal" tabindex="-1" class="rounded-xl border border-csc-line bg-white p-6 sm:p-8 focus:outline-none">
                     <legend class="sr-only">Personal Information</legend>
 
                     <h2 class="flex items-center gap-2.5 text-sm font-semibold tracking-wide text-csc-blue uppercase">
@@ -587,7 +651,7 @@ onMounted(() => {
                 </fieldset>
 
                 <!-- Employment details -->
-                <fieldset class="rounded-xl border border-csc-line bg-white p-6 sm:p-8">
+                <fieldset id="section-employment" tabindex="-1" class="rounded-xl border border-csc-line bg-white p-6 sm:p-8 focus:outline-none">
                     <legend class="sr-only">Employment Details</legend>
 
                     <h2 class="flex items-center gap-2.5 text-sm font-semibold tracking-wide text-csc-blue uppercase">
@@ -630,7 +694,7 @@ onMounted(() => {
                                 />
                                 <span>
                                     <span class="block text-sm font-semibold text-csc-ink">Government employee</span>
-                                    <span class="mt-1 block text-xs leading-relaxed text-csc-ink/60">
+                                    <span class="mt-1 block text-xs leading-relaxed text-csc-ink-subtle">
                                         Employed in a national or local government agency, GOCC, SUC, or other
                                         government institution.
                                     </span>
@@ -654,7 +718,7 @@ onMounted(() => {
                                 />
                                 <span>
                                     <span class="block text-sm font-semibold text-csc-ink">Private sector / Others</span>
-                                    <span class="mt-1 block text-xs leading-relaxed text-csc-ink/60">
+                                    <span class="mt-1 block text-xs leading-relaxed text-csc-ink-subtle">
                                         Employed in the private sector, an NGO, or another non-government
                                         organization.
                                     </span>
@@ -762,7 +826,7 @@ onMounted(() => {
                 </fieldset>
 
                 <!-- Consent -->
-                <div class="rounded-xl border border-csc-line bg-white p-6 sm:p-8">
+                <div id="section-consent" tabindex="-1" class="rounded-xl border border-csc-line bg-white p-6 sm:p-8 focus:outline-none">
                     <label class="flex items-start gap-3 text-sm text-csc-ink">
                         <input
                             v-model="form.consent"
@@ -787,7 +851,7 @@ onMounted(() => {
                 <!-- Sticky submit bar: the way forward stays in view while the long form is scrolled -->
                 <div class="sticky bottom-0 -mx-4 border-t border-csc-line bg-white/90 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
                     <div class="flex items-center justify-between gap-4">
-                        <p class="hidden text-sm font-medium text-csc-ink/60 sm:block">
+                        <p class="hidden text-sm font-medium text-csc-ink-subtle sm:block">
                             Step 2 of 2 · Profile details
                         </p>
                         <AppButton type="button" size="lg" block class="sm:w-auto" icon="check" @click="openPreview">
@@ -810,7 +874,7 @@ onMounted(() => {
                     <h1 class="mt-4 text-2xl font-semibold tracking-tight text-csc-blue sm:text-3xl">
                         Registration Successful!
                     </h1>
-                    <p class="mx-auto mt-3 max-w-md text-sm leading-relaxed text-csc-ink/70">
+                    <p class="mx-auto mt-3 max-w-md text-sm leading-relaxed text-csc-ink-muted">
                         Your account has been successfully registered. Please check your email and click the
                         verification link to verify your account before logging in.
                     </p>
@@ -837,12 +901,84 @@ onMounted(() => {
             @close="previewOpen = false"
         >
             <div class="space-y-4">
+                <!--
+                    The name leads, because it is the only thing on this screen
+                    that a later edit cannot fully undo.
+
+                    Everything else here is editable at /profile afterwards —
+                    one click, no confirmation, same save path — which is a fair
+                    argument that a review step is not worth anyone's twenty
+                    seconds. The name is the exception that earns it:
+                    ProfileService::save copies fullName() onto the user record,
+                    and that string is printed into the certificate PDF, which
+                    is rendered once at release and stored. Correcting a
+                    misspelling after a certificate exists means asking the
+                    office to re-issue the document.
+
+                    So the screen now spends its most prominent line on the one
+                    field where proof-reading actually pays, and says why rather
+                    than leaving the reader to weigh twenty identical rows.
+                -->
+                <section class="rounded-lg border border-csc-blue/25 bg-csc-blue-tint p-4">
+                    <div class="flex items-baseline justify-between gap-4">
+                        <h3 class="text-xs font-semibold tracking-widest text-csc-blue uppercase">
+                            Name on your certificates
+                        </h3>
+                        <button
+                            type="button"
+                            class="shrink-0 rounded text-xs font-semibold text-csc-blue underline underline-offset-4 transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            @click="editSection('section-personal')"
+                        >
+                            Edit<span class="sr-only"> your name</span>
+                        </button>
+                    </div>
+
+                    <p class="mt-2 text-xl leading-tight font-semibold text-balance text-csc-blue sm:text-2xl">
+                        {{ fullName }}
+                    </p>
+
+                    <p class="mt-2.5 text-xs leading-relaxed text-csc-ink-muted">
+                        Please check the spelling. This is the name that will be printed on every certificate you
+                        earn, and a certificate is written once when it is issued — correcting the spelling
+                        afterwards means asking the office to re-issue the document.
+                    </p>
+                </section>
+
                 <section v-for="section in previewSections" :key="section.title" class="rounded-lg border border-csc-line p-4">
-                    <h3 class="text-xs font-semibold tracking-widest text-csc-blue uppercase">{{ section.title }}</h3>
+                    <div class="flex items-baseline justify-between gap-4">
+                        <h3 class="text-xs font-semibold tracking-widest text-csc-blue uppercase">
+                            {{ section.title }}
+                        </h3>
+
+                        <!--
+                            Per section, not one button for the whole form. The
+                            footer's "Edit details" only ever meant "close this",
+                            which left the reader to find the wrong value a
+                            second time; naming the section in the accessible
+                            label keeps three identical "Edit" links tellable
+                            apart when they are read out of context.
+                        -->
+                        <button
+                            type="button"
+                            class="shrink-0 rounded text-xs font-semibold text-csc-blue underline underline-offset-4 transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            @click="editSection(section.anchor)"
+                        >
+                            Edit<span class="sr-only"> {{ section.title }}</span>
+                        </button>
+                    </div>
                     <dl class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-                        <div v-for="row in section.rows" :key="row.label">
-                            <dt class="text-xs font-medium text-csc-ink/50">{{ row.label }}</dt>
-                            <dd class="mt-0.5 text-sm font-medium text-csc-ink">{{ row.value || '—' }}</dd>
+                        <!--
+                            A row whose label is hidden takes the full width:
+                            with nothing above it, half a grid column would
+                            leave the sentence wrapping against empty space.
+                        -->
+                        <div v-for="row in section.rows" :key="row.label" :class="row.labelHidden ? 'sm:col-span-2' : ''">
+                            <dt :class="row.labelHidden ? 'sr-only' : 'text-xs font-medium text-csc-ink-subtle'">
+                                {{ row.label }}
+                            </dt>
+                            <dd class="text-sm font-medium text-csc-ink" :class="row.labelHidden ? '' : 'mt-0.5'">
+                                {{ row.value || '—' }}
+                            </dd>
                         </div>
                     </dl>
                 </section>
@@ -850,7 +986,13 @@ onMounted(() => {
 
             <template #footer>
                 <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                    <AppButton variant="ghost" @click="previewOpen = false">Edit details</AppButton>
+                    <!--
+                        "Back to form" rather than "Edit details": editing is
+                        now what the per-section links do, and two controls both
+                        offering to edit would just raise the question of how
+                        they differ. This one only dismisses.
+                    -->
+                    <AppButton variant="ghost" @click="previewOpen = false">Back to form</AppButton>
                     <AppButton :loading="form.processing" icon="check" @click="submit">
                         {{ form.processing ? 'Submitting…' : 'Submit Registration' }}
                     </AppButton>
@@ -871,7 +1013,7 @@ onMounted(() => {
                     <AppIcon name="check" size="lg" class="text-success" />
                 </span>
                 <h2 class="mt-4 text-xl font-semibold tracking-tight text-csc-ink">Registration Successful!</h2>
-                <p class="mt-2 text-sm leading-relaxed text-csc-ink/70">
+                <p class="mt-2 text-sm leading-relaxed text-csc-ink-muted">
                     Your account has been successfully registered. Please check your email and click the verification
                     link to verify your account before logging in.
                 </p>

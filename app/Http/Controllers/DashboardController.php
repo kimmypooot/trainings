@@ -6,6 +6,7 @@ use App\Enums\RegistrationStatus;
 use App\Models\Certificate;
 use App\Models\Registration;
 use App\Models\User;
+use App\Support\PendingActionCounter;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -19,7 +20,10 @@ class DashboardController extends Controller
     {
         $user = $request->user()->loadMissing('profile');
 
-        $registrations = Registration::with('training')
+        // payments rides along because the hero card asks hasSettledFee() of
+        // whichever registration turns out to be next, and there is no telling
+        // which one that is until the sort below has run.
+        $registrations = Registration::with(['training', 'payments'])
             ->where('user_id', $user->getKey())
             ->get();
 
@@ -51,9 +55,21 @@ class DashboardController extends Controller
                 'payment_amount' => $next->training->payment_required
                     ? $next->training->payment_amount
                     : null,
+                // A fee with no word on whether it is settled is worse than no
+                // fee line at all: the participant cannot tell whether the
+                // figure is a receipt or a bill. Null when nothing is owed.
+                'fee_settled' => $next->training->payment_required
+                    ? $next->hasSettledFee()
+                    : null,
                 'status' => $next->status->value,
+                // The QR code only opens a door once the registration has been
+                // approved. Offering it on a pending one sends the participant
+                // to a scanner that will turn them away.
+                'can_check_in' => $next->status === RegistrationStatus::Approved,
                 'url' => route('trainings.show', $next->training->slug),
+                'calendar_url' => route('registrations.calendar', $next),
             ] : null,
+            'attention' => $this->attention($user),
             'recentActivity' => $this->activityFeed($user, $registrations),
             'profile' => [
                 'first_name' => $user->profile?->first_name,
@@ -61,6 +77,72 @@ class DashboardController extends Controller
                 'position' => $user->profile?->position_title,
             ],
         ]);
+    }
+
+    /**
+     * What the participant still owes, if anything.
+     *
+     * Deliberately reuses PendingActionCounter rather than re-deriving the
+     * rules. The sidebar badge and this block must never disagree about
+     * whether there is work waiting, and the counter is already the one place
+     * that knows what "pending" means for each queue — including the two kinds
+     * of pending payment, and the evaluation count that decays on its own.
+     *
+     * A zero count is dropped, so an all-clear renders nothing at all: this
+     * block exists to be empty most of the time.
+     *
+     * @return array<int, array<string, string>>
+     */
+    private function attention(User $user): array
+    {
+        // Ordered by how much the participant is holding up: an unpaid fee can
+        // cost them their slot, an unfilled evaluation costs them nothing yet.
+        $queues = [
+            'payments' => [
+                'href' => '/my/payments',
+                'icon' => 'card',
+                'one' => 'A training fee needs settling',
+                'many' => 'training fees need settling',
+            ],
+            'agency-requests' => [
+                'href' => '/my/agency-requests',
+                'icon' => 'building',
+                'one' => 'An agency request needs your response',
+                'many' => 'agency requests need your response',
+            ],
+            'physical-or' => [
+                'href' => '/my/physical-or',
+                'icon' => 'document',
+                'one' => 'A receipt request is waiting on your proof of payment',
+                'many' => 'receipt requests are waiting on your proof of payment',
+            ],
+            'evaluations' => [
+                'href' => '/my/evaluations',
+                'icon' => 'clipboard',
+                'one' => 'A training day is waiting to be evaluated',
+                'many' => 'training days are waiting to be evaluated',
+            ],
+        ];
+
+        $counts = PendingActionCounter::for($user);
+        $items = [];
+
+        foreach ($queues as $key => $queue) {
+            $count = $counts[$key] ?? 0;
+
+            if ($count < 1) {
+                continue;
+            }
+
+            $items[] = [
+                'key' => $key,
+                'href' => $queue['href'],
+                'icon' => $queue['icon'],
+                'label' => $count === 1 ? $queue['one'] : "{$count} {$queue['many']}",
+            ];
+        }
+
+        return $items;
     }
 
     /**
@@ -84,7 +166,7 @@ class DashboardController extends Controller
             $training = $registration->training;
             $url = route('trainings.show', $training->slug);
 
-            $events[] = $this->event('registered', 'Registered', $training->title, $registration->registered_at, $url);
+            $events[] = $this->event('registered', 'Registered', $training->title, $registration->registered_at, $url, $registration->id);
 
             // reviewed_at carries whichever decision was last made; for a
             // registration that has since been completed, that decision was the
@@ -96,7 +178,7 @@ class DashboardController extends Controller
                     default => ['approved', 'Registration approved'],
                 };
 
-                $events[] = $this->event($decision[0], $decision[1], $training->title, $registration->reviewed_at, $url);
+                $events[] = $this->event($decision[0], $decision[1], $training->title, $registration->reviewed_at, $url, $registration->id);
             }
 
             if ($registration->status === RegistrationStatus::Completed) {
@@ -105,12 +187,13 @@ class DashboardController extends Controller
                     'Training completed',
                     $training->title,
                     $registration->attended_at ?? $registration->reviewed_at,
-                    $url
+                    $url,
+                    $registration->id,
                 );
             }
 
             if ($registration->cancelled_at) {
-                $events[] = $this->event('withdrawn', 'Withdrew', $training->title, $registration->cancelled_at, $url);
+                $events[] = $this->event('withdrawn', 'Withdrew', $training->title, $registration->cancelled_at, $url, $registration->id);
             }
         }
 
@@ -128,6 +211,7 @@ class DashboardController extends Controller
                 $certificate->registration?->training?->title ?? 'Training',
                 $certificate->generated_at,
                 route('certificates.index'),
+                "cert-{$certificate->id}",
             );
         }
 
@@ -147,10 +231,19 @@ class DashboardController extends Controller
      * beyond it, and always the other form in the tooltip — "3 days ago" is
      * easier to place, but only while the span is short enough to feel.
      */
-    private function event(string $kind, string $title, string $subject, ?CarbonInterface $at, string $url): array
-    {
+    private function event(
+        string $kind,
+        string $title,
+        string $subject,
+        ?CarbonInterface $at,
+        string $url,
+        int|string|null $owner = null,
+    ): array {
         return [
-            'id' => "{$kind}-{$subject}-{$at?->timestamp}",
+            // Keyed on the row the event came off rather than on its subject:
+            // two events of the same kind against the same training title would
+            // otherwise collide, and a duplicate key silently drops a tile.
+            'id' => "{$kind}-{$owner}-{$at?->timestamp}",
             'kind' => $kind,
             'title' => $title,
             'subject' => $subject,

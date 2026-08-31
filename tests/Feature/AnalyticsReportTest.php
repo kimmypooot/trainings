@@ -462,4 +462,78 @@ class AnalyticsReportTest extends TestCase
         $this->assertStringContainsString('ALPHA MINE', $csv);
         $this->assertStringNotContainsString('BRAVO THEIRS', $csv);
     }
+
+    public function test_the_training_report_names_the_full_run_not_just_its_first_day(): void
+    {
+        // Three days inside one month. Reported as its start date alone this
+        // is indistinguishable from a one-day run, which is what the header
+        // used to show.
+        $training = Training::factory()->create([
+            'starts_at' => CarbonImmutable::create(2026, 3, 12, 9),
+            'ends_at' => CarbonImmutable::create(2026, 3, 14, 17),
+            'duration_days' => 3,
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get('/admin/analytics?view=training&training_id='.$training->getKey())
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainingReport.training.dates', '12–14 March 2026')
+                ->where('trainingReport.training.duration_days', 3)
+            );
+    }
+
+    public function test_a_run_spanning_two_months_names_both(): void
+    {
+        $training = Training::factory()->create([
+            'starts_at' => CarbonImmutable::create(2026, 2, 28, 9),
+            'ends_at' => CarbonImmutable::create(2026, 3, 2, 17),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get('/admin/analytics?view=training&training_id='.$training->getKey())
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainingReport.training.dates', '28 February – 02 March 2026')
+            );
+    }
+
+    public function test_a_single_day_run_names_one_date(): void
+    {
+        $day = CarbonImmutable::create(2026, 3, 12, 9);
+
+        $training = Training::factory()->create([
+            'starts_at' => $day,
+            'ends_at' => $day->setTime(17, 0),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get('/admin/analytics?view=training&training_id='.$training->getKey())
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainingReport.training.dates', '12 March 2026')
+            );
+    }
+
+    public function test_the_training_picker_distinguishes_two_runs_in_one_month(): void
+    {
+        // The picker labelled both of these "… — Mar 2026", so selecting the
+        // wrong run was a coin flip and the report gave no way to notice.
+        Training::factory()->create([
+            'title' => 'Foundations of Public Service',
+            'starts_at' => CarbonImmutable::create(2026, 3, 3, 9),
+            'ends_at' => CarbonImmutable::create(2026, 3, 4, 17),
+        ]);
+        Training::factory()->create([
+            'title' => 'Foundations of Public Service',
+            'starts_at' => CarbonImmutable::create(2026, 3, 24, 9),
+            'ends_at' => CarbonImmutable::create(2026, 3, 25, 17),
+        ]);
+
+        $this->actingAs($this->admin())
+            ->get('/admin/analytics?view=training')
+            ->assertInertia(function (AssertableInertia $page) {
+                $labels = collect($page->toArray()['props']['trainingOptions'])->pluck('label');
+
+                $this->assertContains('Foundations of Public Service — 03–04 March 2026', $labels->all());
+                $this->assertContains('Foundations of Public Service — 24–25 March 2026', $labels->all());
+            });
+    }
 }

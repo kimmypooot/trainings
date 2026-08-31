@@ -135,7 +135,7 @@ const submit = () => form.put(`/admin/participants/${props.participant.id}`);
                     <AppAvatar :name="participant.name" :src="participant.avatar" size="lg" />
                     <div class="min-w-0">
                         <p class="text-lg font-semibold text-csc-blue">{{ participant.name ?? '—' }}</p>
-                        <p class="text-sm text-csc-ink/70">{{ participant.email }}</p>
+                        <p class="text-sm text-csc-ink-muted">{{ participant.email }}</p>
                     </div>
                 </div>
             </AppCard>

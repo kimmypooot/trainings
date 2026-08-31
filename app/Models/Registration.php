@@ -70,6 +70,12 @@ class Registration extends Model
         return $this->hasOne(Certificate::class);
     }
 
+    /** The participant's end-of-day evaluations of this run's experts. */
+    public function dayEvaluations(): HasMany
+    {
+        return $this->hasMany(TrainingDayEvaluation::class);
+    }
+
     public function cancellationRequests(): HasMany
     {
         return $this->hasMany(CancellationRequest::class);
@@ -124,6 +130,28 @@ class Registration extends Model
         return $this->payments->contains(
             fn (Payment $payment) => $payment->status === PaymentStatus::Verified
                 && $payment->payment_method->isSettlement()
+        );
+    }
+
+    /**
+     * The query-side twin of hasSettledFee().
+     *
+     * This is the "has money on it" filter — paid *or* on a promissory note —
+     * and it is what a reschedule asks: a participant who owes nothing can be
+     * moved or dropped freely, while one the office is already holding a
+     * payment or a signed promise for cannot be left on a run that will not
+     * happen.
+     *
+     * A free training matches for the same reason hasSettledFee() returns true
+     * on one: there is no fee to have settled.
+     */
+    public function scopeFeeSettled(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $registration) => $registration
+            ->whereHas('training', fn (Builder $training) => $training->where('payment_required', false))
+            ->orWhereHas('payments', fn (Builder $payment) => $payment
+                ->where('status', PaymentStatus::Verified)
+            )
         );
     }
 

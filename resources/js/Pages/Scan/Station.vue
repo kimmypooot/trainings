@@ -283,7 +283,7 @@ onMounted(async () => {
                             autocomplete="one-time-code"
                             maxlength="6"
                             placeholder="000000"
-                            class="w-full rounded-xl border border-white/25 bg-white/10 px-4 py-4 text-center text-2xl font-semibold tracking-[0.4em] placeholder:text-white/25 focus:border-white focus:outline-none"
+                            class="w-full rounded-xl border border-white/25 bg-white/10 px-4 py-4 text-center text-2xl font-semibold tracking-[0.4em] placeholder:text-white/60 focus:border-white focus:outline-none"
                         />
                     </label>
 
@@ -300,7 +300,7 @@ onMounted(async () => {
                     </button>
                 </form>
 
-                <p class="mt-6 text-center text-2xs leading-relaxed text-white/50">
+                <p class="mt-6 text-center text-2xs leading-relaxed text-white/70">
                     This station records attendance only. It cannot change registrations, payments or
                     certificates.
                 </p>
@@ -354,7 +354,7 @@ onMounted(async () => {
                     <span class="size-2 shrink-0 rounded-full" :class="toneDots[syncTone]" />
                     <div class="min-w-0 flex-1">
                         <p class="truncate text-sm font-medium">{{ syncLabel }}</p>
-                        <p v-if="lastSyncedAt" class="truncate text-2xs text-white/50">
+                        <p v-if="lastSyncedAt" class="truncate text-2xs text-white/70">
                             Last sync {{ lastSyncedAt.toLocaleTimeString() }} · {{ syncedCount }} sent in total
                         </p>
                     </div>
@@ -517,7 +517,7 @@ onMounted(async () => {
                             v-model="search"
                             type="search"
                             placeholder="Search by name or organisation"
-                            class="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2.5 text-sm placeholder:text-white/40 focus:border-white focus:outline-none"
+                            class="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2.5 text-sm placeholder:text-white/70 focus:border-white focus:outline-none"
                         />
                     </label>
 
@@ -533,7 +533,7 @@ onMounted(async () => {
                         >
                             <div class="min-w-0 flex-1">
                                 <p class="truncate text-sm font-medium">{{ row.name }}</p>
-                                <p v-if="row.organization" class="truncate text-2xs text-white/50">
+                                <p v-if="row.organization" class="truncate text-2xs text-white/70">
                                     {{ row.organization }}
                                 </p>
                             </div>
@@ -569,7 +569,7 @@ onMounted(async () => {
                         >
                             <div class="min-w-0 flex-1">
                                 <p class="truncate text-sm font-medium">{{ scan.name }}</p>
-                                <p class="truncate text-2xs text-white/50">
+                                <p class="truncate text-2xs text-white/70">
                                     Day {{ scan.training_day }} · {{ scan.time_in }}
                                     <span v-if="scan.by_hand"> · marked by hand</span>
                                     <span v-if="scan.message"> · {{ scan.message }}</span>

@@ -5,6 +5,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import ProgramStatusPill from '@/Components/ProgramStatusPill.vue';
+import { spansMultipleDays } from '@/dateRange';
 
 /**
  * The full catalogue view of one program, for anonymous visitors.
@@ -77,58 +78,58 @@ const money = (value) =>
 
             <dl class="grid gap-x-6 gap-y-5 text-sm sm:grid-cols-2">
                 <div>
-                    <dt class="text-csc-ink/60">Date</dt>
+                    <dt class="text-csc-ink-subtle">Date</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">
                         {{ program.starts_at }}
                         <!-- A single-day run stores the same date twice; "Oct 4 – Oct 4" is noise. -->
-                        <template v-if="program.ends_at && program.ends_at !== program.starts_at">
-                            <span class="text-csc-ink/55">– {{ program.ends_at }}</span>
+                        <template v-if="spansMultipleDays(program.starts_at, program.ends_at)">
+                            <span class="text-csc-ink-subtle">– {{ program.ends_at }}</span>
                         </template>
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-csc-ink/60">Venue</dt>
+                    <dt class="text-csc-ink-subtle">Venue</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ program.venue }}</dd>
                 </div>
                 <div>
-                    <dt class="text-csc-ink/60">Mode</dt>
+                    <dt class="text-csc-ink-subtle">Mode</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ program.mode }}</dd>
                 </div>
                 <div>
-                    <dt class="text-csc-ink/60">Fee</dt>
+                    <dt class="text-csc-ink-subtle">Fee</dt>
                     <dd class="mt-0.5 font-medium" :class="program.payment_required ? 'text-csc-ink' : 'text-success'">
                         {{ program.payment_required ? `₱${money(program.payment_amount)}` : 'Free of charge' }}
                     </dd>
                 </div>
                 <div v-if="program.category">
-                    <dt class="text-csc-ink/60">Curriculum</dt>
+                    <dt class="text-csc-ink-subtle">Curriculum</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ program.category }}</dd>
                 </div>
                 <div>
-                    <dt class="text-csc-ink/60">Available slots</dt>
+                    <dt class="text-csc-ink-subtle">Available slots</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ slotsDetail }}</dd>
                 </div>
                 <div v-if="program.duration_days">
-                    <dt class="text-csc-ink/60">Duration</dt>
+                    <dt class="text-csc-ink-subtle">Duration</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">
                         {{ program.duration_days }} day{{ program.duration_days === 1 ? '' : 's' }}
                     </dd>
                 </div>
                 <div v-if="program.level_label">
-                    <dt class="text-csc-ink/60">Level</dt>
+                    <dt class="text-csc-ink-subtle">Level</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ program.level_label }}</dd>
                 </div>
                 <div v-if="program.registration_opens_at">
-                    <dt class="text-csc-ink/60">Registration opens</dt>
+                    <dt class="text-csc-ink-subtle">Registration opens</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ program.registration_opens_at }}</dd>
                 </div>
                 <div v-if="program.registration_closes_at">
-                    <dt class="text-csc-ink/60">Registration closes</dt>
+                    <dt class="text-csc-ink-subtle">Registration closes</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ program.registration_closes_at }}</dd>
                 </div>
                 <div v-if="program.venue_details" class="sm:col-span-2">
-                    <dt class="text-csc-ink/60">Venue details</dt>
-                    <dd class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink/75">
+                    <dt class="text-csc-ink-subtle">Venue details</dt>
+                    <dd class="mt-0.5 leading-relaxed whitespace-pre-line text-csc-ink-muted">
                         {{ program.venue_details }}
                     </dd>
                 </div>
@@ -136,28 +137,28 @@ const money = (value) =>
 
             <div v-if="program.description" class="mt-6 border-t border-csc-line pt-5">
                 <h3 class="text-sm font-semibold text-csc-blue">Description</h3>
-                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
+                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink-muted">
                     {{ program.description }}
                 </p>
             </div>
 
             <div v-if="program.target_participants" class="mt-6 border-t border-csc-line pt-5">
                 <h3 class="text-sm font-semibold text-csc-blue">Target participants</h3>
-                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
+                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink-muted">
                     {{ program.target_participants }}
                 </p>
             </div>
 
             <div v-if="program.prerequisites" class="mt-6 border-t border-csc-line pt-5">
                 <h3 class="text-sm font-semibold text-csc-blue">Prerequisites</h3>
-                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink/75">
+                <p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-csc-ink-muted">
                     {{ program.prerequisites }}
                 </p>
             </div>
 
             <p
                 v-if="program.is_supervisory"
-                class="mt-6 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink/70"
+                class="mt-6 flex items-start gap-2 rounded-lg bg-csc-blue-tint p-4 text-sm text-csc-ink-muted"
             >
                 <AppIcon name="info" size="sm" class="mt-0.5 shrink-0 text-csc-blue" />
                 This is a Supervisory Development Course. You will be asked to submit an output before
@@ -177,7 +178,7 @@ const money = (value) =>
                 -->
                 <p
                     v-else
-                    class="rounded-lg bg-csc-blue-tint px-4 py-3 text-center text-sm font-medium text-csc-ink/75"
+                    class="rounded-lg bg-csc-blue-tint px-4 py-3 text-center text-sm font-medium text-csc-ink-muted"
                 >
                     {{ callToAction.label }}
                 </p>

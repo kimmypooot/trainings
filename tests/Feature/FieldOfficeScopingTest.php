@@ -10,10 +10,13 @@ use App\Models\FieldOffice;
 use App\Models\Payment;
 use App\Models\Profile;
 use App\Models\Registration;
+use App\Models\RegistrationOutput;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -266,5 +269,54 @@ class FieldOfficeScopingTest extends TestCase
             ->assertNotFound();
 
         $this->assertSame(PaymentStatus::Pending, $theirs->fresh()->status);
+    }
+
+    /**
+     * The proof route is reachable by any collecting officer, not just through
+     * the scoped queue above — route model binding resolves by id alone, so an
+     * officer who can never see another office's payment in a list must not be
+     * able to open its proof image either by guessing the id in the URL.
+     */
+    public function test_an_officer_cannot_open_another_offices_payment_proof(): void
+    {
+        Storage::fake('local');
+
+        $theirs = $this->paymentIn($this->samar, 'samar@example.com');
+        $theirs->update([
+            'proof_path' => UploadedFile::fake()->create('proof.pdf')->store('payment-proofs', 'local'),
+        ]);
+
+        $this->actingAs($this->collectingOfficerIn($this->leyte))
+            ->get("/payments/{$theirs->id}/proof")
+            ->assertNotFound();
+    }
+
+    /**
+     * Same shape as the payment proof above, for the other participant upload
+     * staff can be asked to open: a post-training output submitted for review.
+     */
+    public function test_an_officer_cannot_download_another_offices_registration_output(): void
+    {
+        Storage::fake('local');
+
+        $participant = $this->participantIn($this->samar, 'samar@example.com');
+        $training = Training::factory()->create();
+        $registration = Registration::factory()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => $training->getKey(),
+            'status' => RegistrationStatus::Approved,
+        ]);
+        $output = RegistrationOutput::create([
+            'registration_id' => $registration->getKey(),
+            'title' => 'Action plan',
+            'file_path' => UploadedFile::fake()->create('output.pdf')->store('outputs', 'local'),
+            'original_filename' => 'output.pdf',
+            'file_size' => 100,
+            'mime_type' => 'application/pdf',
+        ]);
+
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->get("/outputs/{$output->id}/download")
+            ->assertNotFound();
     }
 }
