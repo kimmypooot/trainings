@@ -117,6 +117,13 @@ const submit = () => {
                     Google sign-up is not configured on this server yet.
                 </p>
 
+                <!-- See Login.vue: same warning, aimed at the same wrong turn. -->
+                <p v-else class="mt-3 text-center text-xs leading-relaxed text-csc-ink-subtle">
+                    Already registered with an email and password?
+                    <Link href="/login" class="font-medium text-csc-blue hover:text-csc-red-ink">Sign in</Link>
+                    instead — you can connect Google to that account afterwards.
+                </p>
+
                 <div class="my-6 flex items-center gap-4" aria-hidden="true">
                     <span class="h-px flex-1 bg-csc-line" />
                     <span class="text-xs font-medium tracking-wide text-csc-ink-subtle uppercase">or</span>

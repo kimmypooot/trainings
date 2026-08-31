@@ -34,6 +34,24 @@ class SmeEvaluationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        /*
+         * Midday, so the run in `scenario()` has actually begun.
+         *
+         * Both the participant's list and the admin index ask only about
+         * trainings that have started (`starts_at <= now()`), and the factory's
+         * startingToday() state opens at 08:00. Left on the wall clock, every
+         * test here that counts an outstanding evaluation passed all afternoon
+         * and failed for anyone running the suite before breakfast — a real
+         * eight-hour window each day, and the kind of failure that gets
+         * re-run rather than read. Same fix DashboardTest already applies.
+         */
+        $this->travelTo(today()->addHours(12));
+    }
+
     private function participant(): User
     {
         $user = User::factory()->create(['profile_completed_at' => now()]);

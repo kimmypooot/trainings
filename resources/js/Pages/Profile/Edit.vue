@@ -432,6 +432,54 @@ const disconnectGoogle = () => {
     );
 };
 
+// --- Email address ----------------------------------------------------------
+//
+// The address is the account: it is what you sign in with and where every
+// certificate and notice is sent. So the change is deliberate — a panel that
+// has to be opened, a password re-entered where there is one, and nothing moves
+// until the link sent to the new address is opened.
+const changingEmail = ref(false);
+
+const emailForm = useForm({
+    email: '',
+    current_password: '',
+});
+
+const openEmailChange = () => {
+    emailForm.reset();
+    emailForm.clearErrors();
+    changingEmail.value = true;
+};
+
+const closeEmailChange = () => {
+    changingEmail.value = false;
+    emailForm.reset();
+    emailForm.clearErrors();
+};
+
+const submitEmailChange = () => {
+    emailForm.post('/profile/email', {
+        preserveScroll: true,
+        // Only on success: an error has to leave the panel open with the
+        // address still in it, or the participant retypes it to read why.
+        onSuccess: closeEmailChange,
+        onFinish: () => emailForm.reset('current_password'),
+    });
+};
+
+const cancellingEmail = ref(false);
+
+const cancelPendingEmail = () => {
+    cancellingEmail.value = true;
+
+    router.delete('/profile/email', {
+        preserveScroll: true,
+        onFinish: () => {
+            cancellingEmail.value = false;
+        },
+    });
+};
+
 // Unsaved-changes guard. Two layers:
 //  - window.beforeunload catches tab close / refresh with the native dialog.
 //  - the Inertia `before` visit event catches in-app navigation (sidebar,
@@ -455,7 +503,9 @@ const handleBeforeUnload = (event) => {
 };
 
 const handleBeforeVisit = (event) => {
-    if (!isDirty.value || submitting.value || photoBusy.value) return;
+    // allowLeave is the door confirmDiscard opens for the one visit it
+    // re-issues; without it the guard parks its own re-issue right back.
+    if (allowLeave.value || !isDirty.value || submitting.value || photoBusy.value) return;
 
     event.preventDefault();
     pendingVisit = event.detail.visit;
@@ -469,24 +519,32 @@ const confirmDiscard = () => {
     pendingVisit = null;
     if (!visit) return;
 
-    // Re-issue the visit that the guard parked, with the original options
-    // intact so callbacks, method, and data survive the round trip.
-    const params = visit.all();
+    // Re-issue the visit the guard parked. `visit` is Inertia's PendingVisit —
+    // a plain object carrying the already-resolved options — so read them off
+    // it directly (it has no `.all()`; calling one threw here and left the
+    // modal closing without navigating). Its `data` is already transformed: a
+    // GET's query is folded into `url` and `data` left empty, so passing both
+    // is correct either way. The per-visit callbacks are not on this object —
+    // Inertia keeps them beside it — so a parked visit loses onSuccess/onFinish;
+    // the visits that reach this guard are navigations, which carry none.
     allowLeave.value = true;
-    router.visit(params.url, {
-        method: params.method,
-        data: params.method === 'get' ? undefined : params.data,
-        replace: params.replace,
-        preserveScroll: params.preserveScroll,
-        preserveState: params.preserveState,
-        only: params.only,
-        except: params.except,
-        headers: params.headers,
-        onSuccess: params.onSuccess,
-        onError: params.onError,
-        onFinish: params.onFinish,
-    });
-    allowLeave.value = false;
+
+    try {
+        router.visit(visit.url, {
+            method: visit.method,
+            data: visit.data,
+            replace: visit.replace,
+            preserveScroll: visit.preserveScroll,
+            preserveState: visit.preserveState,
+            only: visit.only,
+            except: visit.except,
+            headers: visit.headers,
+        });
+    } finally {
+        // `before` fires synchronously inside visit(), so the door is open for
+        // exactly that call — and closes even if the visit throws.
+        allowLeave.value = false;
+    }
 };
 
 const cancelDiscard = () => {
@@ -555,7 +613,14 @@ onBeforeUnmount(() => {
                             >
                                 <AppIcon :name="user.is_verified ? 'shield' : 'lock'" class="size-3.5" />
                                 {{ user.is_verified ? 'Verified email' : 'Email not yet verified' }}
-                                · Cannot be changed here.
+                                <!--
+                                    This used to end "· Cannot be changed here",
+                                    which stopped being true the moment the
+                                    Email Address card below gained a Change
+                                    button — and a page that contradicts itself
+                                    about who may change a sign-in address is
+                                    worse than one that simply says nothing.
+                                -->
                             </p>
                         </div>
                     </div>
@@ -801,6 +866,128 @@ onBeforeUnmount(() => {
                     </p>
                 </AppCard>
             </div>
+
+            <!--
+                Email address.
+
+                Its own card, full width, below the pair above: this is the one
+                setting on the page that decides both how you sign in and where
+                every certificate and notice is delivered, so it does not belong
+                tucked into a half-column beside the photo picker.
+            -->
+            <AppCard
+                title="Email Address"
+                subtitle="Where the CSC writes to you, and the address you sign in with."
+            >
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-csc-blue-tint">
+                            <AppIcon name="envelope" class="text-csc-blue" />
+                        </span>
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium text-csc-ink">{{ user.email }}</p>
+                            <!-- Status carries an icon and a word, never colour alone. -->
+                            <p
+                                class="mt-0.5 flex items-center gap-1 text-xs"
+                                :class="user.is_verified ? 'text-success' : 'text-warning'"
+                            >
+                                <AppIcon :name="user.is_verified ? 'check' : 'warning'" class="size-3.5" />
+                                {{ user.is_verified ? 'Verified' : 'Not yet verified' }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <AppButton
+                        v-if="!user.pending_email && !changingEmail"
+                        variant="ghost"
+                        icon="settings"
+                        @click="openEmailChange"
+                    >
+                        Change
+                    </AppButton>
+                </div>
+
+                <!--
+                    A change awaiting its link. Shown instead of the form, so
+                    there is only ever one pending move to reason about.
+                -->
+                <div
+                    v-if="user.pending_email"
+                    class="mt-4 rounded-lg border border-info/40 bg-info-soft px-4 py-3"
+                    role="status"
+                >
+                    <div class="flex items-start gap-2">
+                        <AppIcon name="clock" class="mt-0.5 size-4 shrink-0 text-info" />
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-csc-ink">
+                                Waiting for you to confirm {{ user.pending_email }}
+                            </p>
+                            <p class="mt-1 text-xs leading-relaxed text-csc-ink-muted">
+                                We sent a link to that address. Open it to finish the change — until you do, your
+                                account keeps the address above and nothing else changes. The link lasts an hour.
+                            </p>
+                            <button
+                                type="button"
+                                class="mt-2 rounded text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-csc-red-ink hover:underline disabled:opacity-50"
+                                :disabled="cancellingEmail"
+                                @click="cancelPendingEmail"
+                            >
+                                {{ cancellingEmail ? 'Cancelling…' : 'Cancel this change' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <form v-else-if="changingEmail" class="mt-4 space-y-4" novalidate @submit.prevent="submitEmailChange">
+                    <AppInput
+                        v-model="emailForm.email"
+                        label="New email address"
+                        type="email"
+                        autocomplete="email"
+                        placeholder="juan.delacruz@example.com"
+                        :error="emailForm.errors.email"
+                        hint="Use an address you can open — we send a confirmation link there before anything changes."
+                        required
+                        autofocus
+                    />
+
+                    <!--
+                        Google-only accounts have no password to re-enter, and
+                        they are the ones most likely to need this — asking for
+                        a password they were never issued would make the feature
+                        a dead end for exactly them. The server decides; this
+                        only renders what it was told.
+                    -->
+                    <AppInput
+                        v-if="user.confirms_with_password"
+                        v-model="emailForm.current_password"
+                        label="Current password"
+                        type="password"
+                        autocomplete="current-password"
+                        placeholder="••••••••"
+                        :error="emailForm.errors.current_password"
+                        hint="Confirms it is really you making the change."
+                        required
+                    />
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <AppButton type="submit" :loading="emailForm.processing" icon="arrow-right">
+                            {{ emailForm.processing ? 'Sending link…' : 'Send confirmation link' }}
+                        </AppButton>
+                        <AppButton variant="ghost" :disabled="emailForm.processing" @click="closeEmailChange">
+                            Cancel
+                        </AppButton>
+                    </div>
+                </form>
+
+                <p v-else class="mt-4 flex items-start gap-1.5 text-xs leading-relaxed text-csc-ink-subtle">
+                    <AppIcon name="info" class="mt-0.5 size-3.5 shrink-0" />
+                    <span>
+                        Moving to a new agency? Change this rather than registering again — it keeps your
+                        certificates, attendance, and payment history on one account.
+                    </span>
+                </p>
+            </AppCard>
 
             <!-- Read-only summary: the default view of the profile -->
             <template v-if="viewing">

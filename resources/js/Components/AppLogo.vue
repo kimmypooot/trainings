@@ -23,11 +23,47 @@ const light = computed(() => props.variant === 'light');
 const markSize = computed(() => ({ sm: 'h-8', md: 'h-10', lg: 'h-14' })[props.size]);
 const titleSize = computed(() => ({ sm: 'text-sm', md: 'text-base', lg: 'text-xl' })[props.size]);
 const subSize = computed(() => ({ sm: 'text-[10px]', md: 'text-2xs', lg: 'text-xs' })[props.size]);
+
+/*
+ * The white plate, for the blue-background variant only.
+ *
+ * Same reasoning the sidebar rail already carries: the seal is a blue-and-red
+ * wordmark on transparency, so on --color-csc-blue the letterforms sit on their
+ * own colour and all but vanish. The plate is what makes it legible — it is not
+ * decoration. On a light background the bare seal is already legible and a white
+ * plate would be invisible, so `dark` keeps the plain mark.
+ *
+ * Sized a little larger than the mark it holds, since the padding has to come
+ * from somewhere and the seal should not shrink to pay for it.
+ */
+const plateSize = computed(
+    () =>
+        ({
+            sm: 'size-9 rounded-lg p-1',
+            md: 'size-11 rounded-xl p-1.5',
+            lg: 'size-14 rounded-2xl p-2',
+        })[props.size]
+);
 </script>
 
 <template>
     <span class="inline-flex items-center gap-3">
+        <!-- On blue: the seal on its white plate, matching the sidebar rail. -->
+        <span
+            v-if="light"
+            :class="plateSize"
+            class="flex shrink-0 items-center justify-center bg-white shadow-sm ring-1 ring-white/20"
+        >
+            <img
+                src="/images/csc-logo-256.png"
+                alt=""
+                class="h-full w-full object-contain"
+                aria-hidden="true"
+            />
+        </span>
+
         <img
+            v-else
             src="/images/csc-logo-256.png"
             alt=""
             :class="markSize"

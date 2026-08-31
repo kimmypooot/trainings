@@ -35,9 +35,20 @@ class EnsureSiteIsAvailable
         // button on /login cannot be broken for the staff who use it.
         'auth.google', 'auth.google.callback',
 
+        // The first-account question that sits in the middle of that flow. It
+        // is exempt for the same reason as the callback: a sign-in already
+        // under way must be able to finish, and stranding it here would leave
+        // the participant on a screen whose only two buttons are closed.
+        'auth.google.new', 'auth.google.new.store', 'auth.google.new.cancel',
+
         // Participants responding to an emailed verification link — the link is
         // signed and expires, and cannot be re-sent by the participant.
         'verification.verify', 'verification.resend',
+
+        // The emailed link that finishes a change of address. Same argument as
+        // the verification link above: it is signed, it expires in an hour, and
+        // the participant cannot ask for another one from behind the notice.
+        'profile.email.confirm',
 
         // Public certificate verification, used at venue entrances to check a
         // printed document is genuine while a training is actually running.

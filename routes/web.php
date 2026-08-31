@@ -27,6 +27,7 @@ use App\Http\Controllers\Admin\UndoController as AdminUndoController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\AgencyRequestController;
 use App\Http\Controllers\Auth\ChangePasswordController;
+use App\Http\Controllers\Auth\EmailChangeController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\LoginController;
@@ -259,8 +260,53 @@ Route::post('/email/resend', [EmailVerificationController::class, 'resend'])
     ->middleware('throttle:3,1')
     ->name('verification.resend');
 
+/*
+ * Changing the address the account lives at.
+ *
+ * Outside the completeness and verification gates, like the photo and password
+ * routes: a participant whose agency inbox has died cannot verify the address
+ * they are trying to leave, and gating the fix behind it would be a locked door
+ * whose key is inside the room.
+ *
+ * `confirm` is a signed GET open to guests — it is opened from whichever
+ * browser has the new mailbox, which is rarely the one holding the session —
+ * and it is throttled because an unauthenticated route that reads a user id is
+ * worth rate-limiting even when it discloses nothing.
+ */
+Route::get('/profile/email/confirm/{id}/{hash}', [EmailChangeController::class, 'confirm'])
+    ->middleware(['signed', 'throttle:10,1'])
+    ->name('profile.email.confirm');
+
+Route::middleware('auth')->group(function () {
+    Route::post('/profile/email', [EmailChangeController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('profile.email.store');
+    Route::delete('/profile/email', [EmailChangeController::class, 'destroy'])->name('profile.email.destroy');
+});
+
 Route::get('/auth/google', [GoogleController::class, 'redirect'])->name('auth.google');
 Route::get('/auth/google/callback', [GoogleController::class, 'callback'])->name('auth.google.callback');
+
+/*
+ * The stop between "Google says who you are" and "you now have an account".
+ *
+ * A Google sign-in that matches no identity and no address used to create an
+ * account on the spot, which is how one participant with an office address and
+ * a personal Gmail quietly became two participants. These three routes are the
+ * question asked in between — see GoogleController::PENDING_SIGNUP for why it
+ * is asked of everyone rather than only of the people we suspect.
+ *
+ * Unauthenticated by definition: the account does not exist yet. What
+ * authorises them is the verified Google payload parked in the session, which
+ * is also the only thing the account is ever built from — so `create` and
+ * `cancel` are POSTs carrying nothing but a CSRF token.
+ */
+Route::get('/auth/google/new', [GoogleController::class, 'confirmNew'])->name('auth.google.new');
+Route::post('/auth/google/new', [GoogleController::class, 'storeNew'])
+    ->middleware('throttle:10,1')
+    ->name('auth.google.new.store');
+Route::post('/auth/google/new/cancel', [GoogleController::class, 'cancelNew'])
+    ->name('auth.google.new.cancel');
 
 /*
  * Connecting Google to an account that already exists — the path for a

@@ -489,6 +489,61 @@ class PublicPagesTest extends TestCase
         $this->assertGuest();
     }
 
+    /**
+     * A participant who first arrived through Google has no password to
+     * remember and no reason to expect they are already registered. The bare
+     * uniqueness message left them on the form retrying; this one points at the
+     * button that would sign them in.
+     */
+    public function test_a_google_only_account_is_told_to_sign_in_with_google(): void
+    {
+        User::factory()->create([
+            'email' => 'juan@gmail.com',
+            'password' => null,
+            'google_id' => 'google-123',
+        ]);
+
+        $this->from('/register')
+            ->post('/register', [
+                'email' => 'juan@gmail.com',
+                'password' => 'sikreto123',
+                'password_confirmation' => 'sikreto123',
+                'consent' => true,
+            ])
+            ->assertSessionHasErrorsIn('default', [
+                'email' => 'You already have an account with this email address. Use the '.
+                    '"Continue with Google" button above to sign in.',
+            ]);
+
+        $this->assertGuest();
+    }
+
+    /**
+     * An account that has a password is told to sign in, not to use Google —
+     * pointing at Google here would send them somewhere that does not work.
+     */
+    public function test_an_account_with_a_password_is_told_to_sign_in(): void
+    {
+        User::factory()->create([
+            'email' => 'juan@deped.gov.ph',
+            'google_id' => 'google-123',
+        ]);
+
+        $this->from('/register')
+            ->post('/register', [
+                'email' => 'juan@deped.gov.ph',
+                'password' => 'sikreto123',
+                'password_confirmation' => 'sikreto123',
+                'consent' => true,
+            ])
+            ->assertSessionHasErrorsIn('default', [
+                'email' => 'An account with this email address already exists. Sign in instead, or use '.
+                    '"Forgot password" if you cannot remember it.',
+            ]);
+
+        $this->assertGuest();
+    }
+
     public function test_visitor_count_is_shared_and_counted_once_per_session(): void
     {
         $this->get('/')

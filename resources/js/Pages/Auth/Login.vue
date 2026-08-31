@@ -233,6 +233,21 @@ const submit = () => {
                     Google sign-in is not configured on this server yet.
                 </p>
 
+                <!--
+                    The button above is the one that quietly created second
+                    accounts: a participant registered with an office address
+                    and a password, came back, clicked Google with a personal
+                    Gmail, and was handed a fresh empty account that looked like
+                    a successful sign-in. GoogleController now stops and asks
+                    before creating one — but the cheaper fix is telling people
+                    the right move here, next to the button, rather than leaving
+                    "Connect" to be discovered on the profile page.
+                -->
+                <p v-else class="mt-3 text-center text-xs leading-relaxed text-csc-ink-subtle">
+                    Registered with an email and password? Sign in below first, then connect Google from your profile —
+                    that keeps all your trainings on one account.
+                </p>
+
                 <div class="my-6 flex items-center gap-4" aria-hidden="true">
                     <span class="h-px flex-1 bg-csc-line" />
                     <span class="text-xs font-medium tracking-wide text-csc-ink-subtle uppercase">or</span>

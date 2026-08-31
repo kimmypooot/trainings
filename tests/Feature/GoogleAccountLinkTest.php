@@ -141,15 +141,19 @@ class GoogleAccountLinkTest extends TestCase
     /**
      * The sign-up path: a participant who has never used TIMS signs in with
      * Google and gets an account with their Google photo already on it.
+     *
+     * Two requests now, not one — the confirmation screen sits in between.
      */
     public function test_a_brand_new_google_sign_in_imports_the_photo(): void
     {
         $this->fakeGoogleUser('google-new', 'newcomer@gmail.com', 'https://lh3.googleusercontent.com/a/photo');
 
+        $this->get('/auth/google/callback')->assertRedirect(route('auth.google.new'));
+
         // Not the login screen: a fresh account is active, and reading an unset
         // `is_active` as false once turned every first-time Google sign-up away
         // as deactivated.
-        $this->get('/auth/google/callback')->assertRedirect(route('profile.complete'));
+        $this->post('/auth/google/new')->assertRedirect(route('profile.complete'));
 
         $user = User::where('email', 'newcomer@gmail.com')->firstOrFail();
 
@@ -160,6 +164,172 @@ class GoogleAccountLinkTest extends TestCase
             ImportGoogleAvatar::class,
             fn (ImportGoogleAvatar $job) => $job->userId === $user->getKey()
         );
+    }
+
+    /*
+     * ── The first-account question ────────────────────────────────────────
+     *
+     * The path that used to manufacture duplicates: an office address with a
+     * password, plus a personal Gmail on the Google button, matching neither
+     * the identity nor the address. It now stops and asks.
+     */
+
+    public function test_an_unrecognised_google_account_asks_before_creating_one(): void
+    {
+        $this->fakeGoogleUser('google-new', 'juan.delacruz@gmail.com');
+
+        $this->get('/auth/google/callback')->assertRedirect(route('auth.google.new'));
+
+        // The question is asked, and nothing has been written.
+        $this->assertGuest();
+        $this->assertDatabaseMissing('users', ['email' => 'juan.delacruz@gmail.com']);
+    }
+
+    public function test_the_question_names_the_google_address_and_nothing_else(): void
+    {
+        // Somebody who *does* already have an account, under another address.
+        $this->participant(['email' => 'juan.delacruz@deped.gov.ph']);
+
+        $this->fakeGoogleUser('google-new', 'juan.delacruz@gmail.com');
+        $this->get('/auth/google/callback');
+
+        $this->get('/auth/google/new')
+            ->assertInertia(
+                fn ($page) => $page
+                    ->component('Auth/GoogleNewAccount')
+                    // Their own address, which they just authenticated with.
+                    ->where('googleEmail', 'juan.delacruz@gmail.com')
+                    // Deliberately no lookup: the screen must not disclose that
+                    // the CSC knows this person under a different address.
+                    ->missing('existingAccount')
+            );
+    }
+
+    public function test_answering_yes_i_am_new_creates_the_account(): void
+    {
+        $this->fakeGoogleUser('google-new', 'newcomer@gmail.com');
+        $this->get('/auth/google/callback');
+
+        $this->post('/auth/google/new')->assertRedirect(route('profile.complete'));
+
+        $user = User::where('email', 'newcomer@gmail.com')->firstOrFail();
+
+        $this->assertSame('google-new', $user->google_id);
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_answering_i_already_have_an_account_creates_nothing(): void
+    {
+        $this->fakeGoogleUser('google-new', 'juan.delacruz@gmail.com');
+        $this->get('/auth/google/callback');
+
+        $this->post('/auth/google/new/cancel')
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('status');
+
+        $this->assertGuest();
+        $this->assertDatabaseMissing('users', ['email' => 'juan.delacruz@gmail.com']);
+    }
+
+    /**
+     * The grant is spent on the way out, not left to rot. It is the one thing
+     * in the session that can create an account.
+     */
+    public function test_declining_spends_the_grant(): void
+    {
+        $this->fakeGoogleUser('google-new', 'juan.delacruz@gmail.com');
+        $this->get('/auth/google/callback');
+        $this->post('/auth/google/new/cancel');
+
+        // Coming back to it — a stale tab, the back button — creates nothing.
+        $this->post('/auth/google/new')->assertRedirect(route('login'));
+
+        $this->assertGuest();
+        $this->assertDatabaseMissing('users', ['email' => 'juan.delacruz@gmail.com']);
+    }
+
+    public function test_the_grant_is_spent_by_the_account_it_creates(): void
+    {
+        $this->fakeGoogleUser('google-new', 'newcomer@gmail.com');
+        $this->get('/auth/google/callback');
+        $this->post('/auth/google/new');
+
+        // A second submission must not make a second account.
+        $this->post('/auth/google/new');
+
+        $this->assertSame(1, User::where('email', 'newcomer@gmail.com')->count());
+    }
+
+    /**
+     * Exactly the scenario the screen exists to prevent: the participant takes
+     * the "I already have an account" door, signs in, and something replays the
+     * create. Signed in is signed in — no second account.
+     */
+    public function test_the_create_route_refuses_while_signed_in(): void
+    {
+        $user = $this->participant(['email' => 'juan.delacruz@deped.gov.ph']);
+
+        $this->fakeGoogleUser('google-new', 'juan.delacruz@gmail.com');
+        $this->get('/auth/google/callback');
+
+        $this->actingAs($user)->post('/auth/google/new')->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseMissing('users', ['email' => 'juan.delacruz@gmail.com']);
+    }
+
+    public function test_an_expired_question_cannot_be_answered(): void
+    {
+        $this->fakeGoogleUser('google-new', 'newcomer@gmail.com');
+        $this->get('/auth/google/callback');
+
+        $this->travel(16)->minutes();
+
+        $this->post('/auth/google/new')
+            ->assertRedirect(route('login'))
+            ->assertSessionHasErrors('form');
+
+        $this->assertGuest();
+        $this->assertDatabaseMissing('users', ['email' => 'newcomer@gmail.com']);
+    }
+
+    public function test_the_question_page_needs_a_live_grant(): void
+    {
+        $this->get('/auth/google/new')->assertRedirect(route('login'));
+    }
+
+    /**
+     * The address was claimed while the question sat on screen. Both columns
+     * are unique, so without this the answer would fail at the database.
+     */
+    public function test_an_address_taken_meanwhile_sends_the_visitor_to_sign_in(): void
+    {
+        $this->fakeGoogleUser('google-new', 'newcomer@gmail.com');
+        $this->get('/auth/google/callback');
+
+        $this->participant(['email' => 'newcomer@gmail.com']);
+
+        $this->post('/auth/google/new')
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('status');
+
+        $this->assertGuest();
+        $this->assertSame(1, User::where('email', 'newcomer@gmail.com')->count());
+    }
+
+    /**
+     * A returning participant is not asked anything — the address matches, so
+     * the identity is attached to the account they already have.
+     */
+    public function test_a_matching_address_still_links_without_the_question(): void
+    {
+        $user = $this->participant(['email' => 'juan@example.com']);
+
+        $this->fakeGoogleUser('google-new', 'juan@example.com');
+
+        $this->get('/auth/google/callback')->assertRedirect(route('dashboard'));
+
+        $this->assertSame('google-new', $user->refresh()->google_id);
+        $this->assertAuthenticatedAs($user);
     }
 
     public function test_a_google_account_with_no_photo_queues_nothing(): void

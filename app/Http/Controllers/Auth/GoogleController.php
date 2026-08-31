@@ -9,6 +9,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Inertia\Inertia;
+use Inertia\Response;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
 use Throwable;
@@ -28,6 +30,28 @@ class GoogleController extends Controller
 
     /** How long a started connect flow stays valid. */
     private const LINK_INTENT_TTL_MINUTES = 10;
+
+    /**
+     * Session key holding a verified Google identity that has no account yet.
+     *
+     * The one path that silently manufactured duplicate accounts. A participant
+     * who registered with an office address and a password, then later clicked
+     * "Continue with Google" with a personal Gmail, matched nothing here — not
+     * the identity, not the address — and got a second, empty account. Nothing
+     * about that reads as a mistake: it looks like a successful sign-in, so the
+     * two sets of training records only surface later, usually when somebody
+     * notices the same person twice on a roster.
+     *
+     * So the identity waits here while we ask (see `confirmNew`), instead of
+     * the account being created on the spot. Server-side because it is a grant:
+     * whatever comes back from the confirmation screen, the account is created
+     * from *this* — the payload Socialite verified — and never from anything
+     * the browser hands us.
+     */
+    private const PENDING_SIGNUP = 'google.pending_signup';
+
+    /** How long an unanswered "is this your first account?" stays spendable. */
+    private const PENDING_SIGNUP_TTL_MINUTES = 15;
 
     /**
      * Marks that a sign-in has already been restarted once after a lost state.
@@ -175,15 +199,17 @@ class GoogleController extends Controller
         // restart, turning an otherwise recoverable failure into an error.
         $request->session()->forget(self::STATE_RETRY);
 
+        $identity = self::identityFrom($googleUser);
+
         if ($intent) {
-            return $this->completeLink($request, $intent, $googleUser);
+            return $this->completeLink($request, $intent, $identity);
         }
 
         // A known Google identity is matched on `google_id` alone. That linkage
         // was established deliberately — by a connect flow, or by an earlier
         // sign-in that passed the check below — and the id is stable, so no
         // further proof is needed to honour it.
-        $user = User::where('google_id', $googleUser->getId())->first();
+        $user = User::where('google_id', $identity['google_id'])->first();
 
         if (! $user) {
             // No known identity, so the *email address* is about to decide
@@ -191,9 +217,9 @@ class GoogleController extends Controller
             // Google says it confirmed the address. Without this check,
             // controlling any Google account that merely claims a TIMS user's
             // address is enough to sign in as them, with no password.
-            if (! self::googleConfirmedTheEmail($googleUser)) {
+            if (! $identity['email_confirmed']) {
                 Log::warning('Google sign-in refused: unconfirmed email claim', [
-                    'google_id' => $googleUser->getId(),
+                    'google_id' => $identity['google_id'],
                 ]);
 
                 return redirect()->route('login')->withErrors([
@@ -202,27 +228,160 @@ class GoogleController extends Controller
                 ]);
             }
 
-            $user = User::where('email', $googleUser->getEmail())->first() ?? new User;
+            $user = User::where('email', $identity['email'])->first();
+
+            // Nothing matched, so this would be a brand-new account. Park the
+            // identity and ask before making one — see PENDING_SIGNUP.
+            if (! $user) {
+                $request->session()->put(self::PENDING_SIGNUP, [
+                    ...$identity,
+                    'expires_at' => now()->addMinutes(self::PENDING_SIGNUP_TTL_MINUTES)->timestamp,
+                ]);
+
+                return redirect()->route('auth.google.new');
+            }
         }
 
+        return $this->attachAndSignIn($request, $user, $identity);
+    }
+
+    /**
+     * Ask whether this really is a first account, before one is created.
+     *
+     * Deliberately asked of *everybody*, with no lookup against what is already
+     * registered. The tempting version of this screen says "we think you
+     * already have an account" — but that would confirm to whoever holds this
+     * Google account that a particular person is registered with the CSC, which
+     * is not ours to disclose. One question put the same way to everyone leaks
+     * nothing and costs a genuine newcomer a single click.
+     */
+    public function confirmNew(Request $request): Response|RedirectResponse
+    {
+        $pending = self::pendingSignup($request);
+
+        if (! $pending) {
+            return redirect()->route('login');
+        }
+
+        return Inertia::render('Auth/GoogleNewAccount', [
+            // Their own address, which they have just authenticated with — this
+            // tells them which Google account they arrived on, which is the
+            // thing most likely to jog the memory of an earlier registration.
+            'googleEmail' => $pending['email'],
+        ]);
+    }
+
+    /**
+     * Create the account the confirmation screen just asked about.
+     *
+     * Everything is re-checked rather than trusted from the grant: it has been
+     * sitting in the session for up to a quarter of an hour, and the world may
+     * have moved underneath it.
+     */
+    public function storeNew(Request $request): RedirectResponse
+    {
+        // Never while signed in. Somebody who took the "I already have an
+        // account" door, signed in, and then met this route again (a back
+        // button, a stale tab) would otherwise create the very duplicate this
+        // screen exists to prevent.
+        if (Auth::check()) {
+            $request->session()->forget(self::PENDING_SIGNUP);
+
+            return redirect()->route('dashboard');
+        }
+
+        $pending = self::pendingSignup($request);
+
+        if (! $pending) {
+            return redirect()->route('login')->withErrors([
+                'form' => 'That sign-in took too long to confirm. Please try again.',
+            ]);
+        }
+
+        // Spent either way — a grant that creates an account is used once.
+        $request->session()->forget(self::PENDING_SIGNUP);
+
+        // The account may have appeared while the question was on screen. Both
+        // are unique columns, so this is also what keeps the insert below from
+        // failing at the database instead of at a message.
+        $taken = User::where('google_id', $pending['google_id'])
+            ->orWhere('email', $pending['email'])
+            ->exists();
+
+        if ($taken) {
+            return redirect()->route('login')->with(
+                'status',
+                'An account using that address already exists. Sign in, then connect Google from your profile.'
+            );
+        }
+
+        return $this->attachAndSignIn($request, new User, $pending);
+    }
+
+    /**
+     * "I already have an account" — discard the grant and send them to sign in.
+     *
+     * The grant is spent here rather than left to expire: it is the one thing
+     * in the session that can create an account, and the participant has just
+     * said they do not want one.
+     */
+    public function cancelNew(Request $request): RedirectResponse
+    {
+        $request->session()->forget(self::PENDING_SIGNUP);
+
+        return redirect()->route('login')->with(
+            'status',
+            'Sign in with your email and password. Once you are in, open your profile and use '.
+            'Connect under Linked Accounts — after that, the Google button will bring you '.
+            'straight to this same account.'
+        );
+    }
+
+    /**
+     * Read the parked identity, if there is a live one.
+     *
+     * @return array{google_id: string, email: string, name: ?string, avatar: ?string, email_confirmed: bool}|null
+     */
+    private static function pendingSignup(Request $request): ?array
+    {
+        $pending = $request->session()->get(self::PENDING_SIGNUP);
+
+        if (! is_array($pending) || ($pending['expires_at'] ?? 0) < now()->timestamp) {
+            return null;
+        }
+
+        return $pending;
+    }
+
+    /**
+     * Attach the identity to the account, sign in, and hand off to the app.
+     *
+     * Shared by every door that ends in a Google sign-in — the ordinary one and
+     * the confirmed-new-account one — so a new account cannot end up on a
+     * different set of rules from a returning participant.
+     *
+     * @param  array{google_id: string, email: string, name: ?string, avatar: ?string, email_confirmed: bool}  $identity
+     */
+    private function attachAndSignIn(Request $request, User $user, array $identity): RedirectResponse
+    {
         // Captured before the fill, while `google_id` still says whether this
         // identity was already attached. The photo is imported only on the
         // first attach — see ImportGoogleAvatar.
         $isFirstAttach = blank($user->google_id);
 
         $user->forceFill([
-            'name' => $user->name ?: ($googleUser->getName() ?: $googleUser->getNickname()),
-            'email' => $user->email ?: $googleUser->getEmail(),
-            'google_id' => $googleUser->getId(),
-            'google_email' => $googleUser->getEmail(),
-            'google_avatar_url' => $googleUser->getAvatar(),
+            'name' => $user->name ?: $identity['name'],
+            'email' => $user->email ?: $identity['email'],
+            'google_id' => $identity['google_id'],
+            'google_email' => $identity['email'],
+            'google_avatar_url' => $identity['avatar'],
             // Same rule as the connect flow: a Google account only vouches for
             // the TIMS address when it carries that address *and* Google says
             // it confirmed it. A participant signing in with a personal Gmail
             // against an agency registration still owes us the verification
             // email.
             'email_verified_at' => $user->email_verified_at
-                ?? (self::googleVouchesFor($googleUser, $user->email ?: $googleUser->getEmail()) ? now() : null),
+                ?? (self::googleVouchesFor($identity, $user->email ?: $identity['email']) ? now() : null),
         ])->save();
 
         if (! $user->is_active) {
@@ -232,7 +391,7 @@ class GoogleController extends Controller
         }
 
         if ($isFirstAttach) {
-            self::importAvatar($user, $googleUser->getAvatar());
+            self::importAvatar($user, $identity['avatar']);
         }
 
         Auth::login($user, remember: true);
@@ -274,8 +433,9 @@ class GoogleController extends Controller
      * a failure here is an error message on the profile page, not a login.
      *
      * @param  array{user_id: int, expires_at: int}  $intent
+     * @param  array{google_id: string, email: string, name: ?string, avatar: ?string, email_confirmed: bool}  $identity
      */
-    private function completeLink(Request $request, array $intent, mixed $googleUser): RedirectResponse
+    private function completeLink(Request $request, array $intent, array $identity): RedirectResponse
     {
         $failed = fn (string $message) => redirect()->route('profile.edit')->with('error', $message);
 
@@ -293,7 +453,7 @@ class GoogleController extends Controller
         // One Google identity, one TIMS account. Without this a participant
         // could attach their Google account to a second registration and end
         // up with two sets of training records reachable by one sign-in.
-        $taken = User::where('google_id', $googleUser->getId())
+        $taken = User::where('google_id', $identity['google_id'])
             ->whereKeyNot($user->getKey())
             ->exists();
 
@@ -310,24 +470,24 @@ class GoogleController extends Controller
         // TIMS address is never touched here, so the account keeps the identity
         // the office knows it by and only gains a second way to sign in.
         $user->forceFill([
-            'google_id' => $googleUser->getId(),
-            'google_email' => $googleUser->getEmail(),
-            'google_avatar_url' => $googleUser->getAvatar(),
+            'google_id' => $identity['google_id'],
+            'google_email' => $identity['email'],
+            'google_avatar_url' => $identity['avatar'],
             // Only a Google account carrying the *same* address, confirmed by
             // Google, proves control of that address. Connecting a personal
             // Gmail proves control of the Gmail and says nothing about the
             // agency inbox, so it must not stand in for the verification email.
             'email_verified_at' => $user->email_verified_at
-                ?? (self::googleVouchesFor($googleUser, $user->email) ? now() : null),
+                ?? (self::googleVouchesFor($identity, $user->email) ? now() : null),
         ])->save();
 
         // Connecting is always a first attach — `link()` refuses an account
         // that already has an identity.
-        self::importAvatar($user, $googleUser->getAvatar());
+        self::importAvatar($user, $identity['avatar']);
 
         return redirect()->route('profile.edit')->with(
             'success',
-            'Connected to '.$googleUser->getEmail().'. You can sign in with Google from now on.'
+            'Connected to '.$identity['email'].'. You can sign in with Google from now on.'
         );
     }
 
@@ -344,6 +504,27 @@ class GoogleController extends Controller
         }
 
         ImportGoogleAvatar::dispatch($user->getKey(), $avatarUrl);
+    }
+
+    /**
+     * Flatten Socialite's response into the few fields this controller uses.
+     *
+     * Everything downstream reads this array rather than the Socialite object,
+     * which is what lets the identity be parked in the session and picked up
+     * again minutes later by `storeNew` — a mock of Google's user object is not
+     * something that survives serialisation, and should not have to.
+     *
+     * @return array{google_id: string, email: string, name: ?string, avatar: ?string, email_confirmed: bool}
+     */
+    private static function identityFrom(mixed $googleUser): array
+    {
+        return [
+            'google_id' => (string) $googleUser->getId(),
+            'email' => (string) $googleUser->getEmail(),
+            'name' => $googleUser->getName() ?: $googleUser->getNickname(),
+            'avatar' => $googleUser->getAvatar(),
+            'email_confirmed' => self::googleConfirmedTheEmail($googleUser),
+        ];
     }
 
     /**
@@ -374,16 +555,18 @@ class GoogleController extends Controller
      * Both halves are required: the addresses must be the same one, and Google
      * must have confirmed it. Used wherever a Google sign-in would otherwise
      * substitute for the verification email.
+     *
+     * @param  array{google_id: string, email: string, name: ?string, avatar: ?string, email_confirmed: bool}  $identity
      */
-    private static function googleVouchesFor(mixed $googleUser, ?string $email): bool
+    private static function googleVouchesFor(array $identity, ?string $email): bool
     {
-        if (blank($email) || ! self::googleConfirmedTheEmail($googleUser)) {
+        if (blank($email) || ! $identity['email_confirmed']) {
             return false;
         }
 
         return hash_equals(
             mb_strtolower($email),
-            mb_strtolower((string) $googleUser->getEmail())
+            mb_strtolower($identity['email'])
         );
     }
 }

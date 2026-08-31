@@ -858,8 +858,28 @@ class TrainingRegistrationTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page->where('month.is_current', true));
     }
 
+    /**
+     * Stand mid-month, so "a few days from now" is still the month on screen.
+     *
+     * The calendar shows one month and scopes its `trainings` list to it, which
+     * is correct — but it means a fixture placed a few days out lands in *next*
+     * month whenever the suite runs near the end of one, and the list comes back
+     * empty. The two tests below then failed every 29th to 31st while proving
+     * nothing was wrong, and the absence test below passed for the wrong reason
+     * on exactly those days: an empty calendar is not evidence that a draft was
+     * excluded from it.
+     *
+     * The 10th is arbitrary and only has to be far from both edges.
+     */
+    private function travelToMidMonth(): void
+    {
+        $this->travelTo(today()->startOfMonth()->addDays(9)->addHours(9));
+    }
+
     public function test_the_calendar_marks_the_participants_own_registrations(): void
     {
+        $this->travelToMidMonth();
+
         $participant = $this->participant();
         $training = Training::factory()->create([
             'status' => TrainingStatus::Published,
@@ -884,6 +904,10 @@ class TrainingRegistrationTest extends TestCase
 
     public function test_an_unpublished_training_never_reaches_the_calendar(): void
     {
+        // Without this the draft can fall outside the rendered month, and the
+        // assertion below passes without ever exercising the visibility scope.
+        $this->travelToMidMonth();
+
         Training::factory()->create([
             'title' => 'Draft Course',
             'status' => TrainingStatus::Draft,
