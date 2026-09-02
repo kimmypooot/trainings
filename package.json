@@ -20,9 +20,6 @@
         "vitest": "^4.1.11",
         "vue-tsc": "^3.3.11"
     },
-    "optionalDependencies": {
-        "@laravel/multiplex": "^0.4.1"
-    },
     "dependencies": {
         "@inertiajs/vue3": "^3.6.1",
         "@vitejs/plugin-vue": "^6.0.8",
