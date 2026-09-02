@@ -8,6 +8,7 @@ use App\Enums\RequestStatus;
 use App\Enums\Role;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\CancellationRequest;
 use App\Models\Profile;
 use App\Models\Registration;
@@ -267,7 +268,17 @@ class TrainingRegistrationTest extends TestCase
                 'X-Inertia' => 'true',
                 'X-Inertia-Partial-Data' => 'details',
                 'X-Inertia-Partial-Component' => 'Trainings/Index',
-                'X-Inertia-Version' => hash_file('xxh128', public_path('build/manifest.json')),
+                // Ask the middleware for the version rather than hashing the
+                // manifest here: that is the value a real client holds, and it
+                // still resolves when there is no build on disk — which is
+                // every CI run, since the PHP job never builds assets.
+                //
+                // The (string) cast is the load-bearing part. With no manifest
+                // version() is null, and passing null as a header value sends
+                // the header present-but-null; Inertia compares it against
+                // (string) $this->version(), so null !== '' and the visit gets
+                // a 409 asset-version bounce instead of the payload.
+                'X-Inertia-Version' => (string) app(HandleInertiaRequests::class)->version(request()),
             ])
             ->assertOk()
             ->assertJsonPath('component', 'Trainings/Index')

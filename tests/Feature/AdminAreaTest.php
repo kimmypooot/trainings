@@ -165,7 +165,12 @@ class AdminAreaTest extends TestCase
 
         // A partial visit carrying the wrong asset version gets a 409, so ask
         // the middleware for the same value the real client would be holding.
-        $version = app(HandleInertiaRequests::class)->version(request());
+        //
+        // Cast it: with no build on disk — every CI run, since the PHP job
+        // never builds assets — version() is null, and a null header value is
+        // sent present-but-null. Inertia compares against (string) $version,
+        // so null !== '' and the visit bounces with a 409.
+        $version = (string) app(HandleInertiaRequests::class)->version(request());
 
         // A partial visit answers with JSON rather than the root view, which
         // assertInertia cannot read — so assert on the payload directly.

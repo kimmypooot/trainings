@@ -106,8 +106,22 @@ jobs:
           node-version: '22'
           cache: npm
 
+      # --omit=optional, and it is load-bearing rather than a speed-up. The one
+      # optional dependency is @laravel/multiplex, the terminal multiplexer
+      # behind `php artisan dev`, and it declares os: [darwin, linux]. Generate
+      # the lockfile on Windows — which is where this repo is developed — and
+      # npm resolves that package for the host platform, finds it unusable, and
+      # writes no entry for its own dependency on react. On an ubuntu runner
+      # the package *is* applicable, so `npm ci` computes a tree needing
+      # react@19 and aborts: "Missing: react@19.2.8 from lock file". The lock
+      # is not stale and `npm install` does not repair it; it simply cannot
+      # describe a platform it was not generated on.
+      #
+      # Nothing in this job needs a dev multiplexer, so omitting optional
+      # dependencies sidesteps the platform-shaped hole entirely and keeps the
+      # lockfile committable from a Windows machine.
       - name: Install JS dependencies
-        run: npm ci
+        run: npm ci --omit=optional
 
       # Type checking across the Inertia boundary. Currently this only reads
       # files that opt in (.ts, or <script setup lang="ts">), which is what makes

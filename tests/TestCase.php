@@ -17,6 +17,24 @@ abstract class TestCase extends BaseTestCase
         $this->ensureTestDatabaseExists();
 
         parent::setUp();
+
+        /*
+         * Nothing in this suite asserts an asset URL, but almost everything in
+         * it renders app.blade.php, and that template's @vite() throws
+         * ViteManifestNotFoundException when public/build/manifest.json is
+         * absent. Locally the manifest is always there because somebody has
+         * run `npm run build`; in CI the PHP job never builds the frontend, so
+         * every Inertia page render 500s and the suite reports 241 failures
+         * saying "Not a valid Inertia response" — one missing file wearing 241
+         * disguises, and none of them naming it.
+         *
+         * Building assets in the PHP job would also fix it, at the cost of
+         * doubling that job to check something the JS job already checks:
+         * `npm run build` is that job's Vue-template correctness gate, and is
+         * commented there as exactly that. So the PHP suite stubs the tag out
+         * instead and stays a test of server behaviour.
+         */
+        $this->withoutVite();
     }
 
     private function ensureTestDatabaseExists(): void
