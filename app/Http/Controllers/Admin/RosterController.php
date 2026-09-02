@@ -118,6 +118,16 @@ class RosterController extends Controller
                 'record_payment' => $request->user()->collectsPayments(),
                 // The roster is read by roles that may not reschedule from it.
                 'reschedule' => $request->user()->role->managesTrainings(),
+                /*
+                 * Reading a roster and deciding on it are different jobs. A
+                 * field office runs its own sessions and marks its own
+                 * attendance, but approving, completing, cancelling, moving a
+                 * registration and issuing a certificate are HRD's — see the
+                 * `admin|superadmin` group in routes/web.php. Without this the
+                 * page drew those buttons for everyone and the server answered
+                 * a click with 403, which is a dead end rather than an answer.
+                 */
+                'manage_roster' => $request->user()->role->managesTrainings(),
             ],
             // Whether this run has already been rescheduled, so the roster can
             // point at the affected list rather than offering to start again.
@@ -127,12 +137,25 @@ class RosterController extends Controller
                 fn (array $option) => $training->accepts_promissory
                     || $option['value'] !== PaymentMethod::Promissory->value
             )),
-            // Everyone designated to collect, whatever their role — which is
-            // the point of the designation: a field office's own officer is a
-            // field-office user, and is exactly who gets named on the receipt.
+            /*
+             * Everyone designated to collect, whatever their role — which is
+             * the point of the designation: a field office's own officer is a
+             * field-office user, and is exactly who gets named on the receipt.
+             *
+             * Scoped like every other list on this page. A field office naming
+             * who took the money is naming one of its own — an officer three
+             * provinces away never handled that cash — and the unscoped list
+             * was the one control here that read across the whole region,
+             * which made it a roster of other offices' staff names for anyone
+             * who opened the dropdown.
+             *
+             * HRD entering money on a field office's behalf still sees every
+             * officer, which is the case the field exists for.
+             */
             'collectingOfficers' => User::query()
                 ->where('is_collecting_officer', true)
                 ->where('is_active', true)
+                ->when($officeId !== null, fn ($query) => $query->where('field_office_id', $officeId))
                 ->orderBy('name')
                 ->get()
                 ->map(fn (User $officer) => ['value' => $officer->id, 'label' => $officer->name])
@@ -161,6 +184,21 @@ class RosterController extends Controller
                     'last_used_at' => $link->last_used_at?->diffForHumans(),
                 ])
                 ->all(),
+            /*
+             * The evaluation posters, one row per day of the run.
+             *
+             * Every day, not just the ones that collect a form: a four-day
+             * course showing a single code has to say why the other three are
+             * absent, or the reader goes looking for a bug that is not there.
+             *
+             * Only HRD can act on these, and the panel is withheld entirely
+             * from everyone else rather than shown disabled — the roster is
+             * read by four roles and a card full of buttons none of them can
+             * press is noise on a page that is already dense.
+             */
+            'evaluationCodes' => $request->user()->role->managesTrainings()
+                ? $this->evaluationCodes($training)
+                : null,
             'registrations' => $registrations->map(fn (Registration $registration) => [
                 'id' => $registration->id,
                 'status' => $registration->status->value,
@@ -268,11 +306,14 @@ class RosterController extends Controller
              * v1's per-training "geo breakdown": who is coming, by field
              * office, and how much of the fee each office still owes. The
              * office that recruited the participants is the one HRD chases for
-             * an outstanding balance, so the split is what makes the chasing
+             * an unpaid balance, so the split is what makes the chasing
              * possible — the flat roster buries it.
              *
-             * Cancelled registrations are left out: they hold no slot and owe
-             * nothing, so counting them would overstate every row.
+             * A cancelled registration is counted in its own column rather than
+             * dropped. It holds no slot and owes nothing, so it must stay out of
+             * every other figure — but an office with six withdrawals is telling
+             * HRD something, and leaving it out of the grouping made that
+             * invisible.
              */
             /*
              * What this run actually earned, and what it forgave.
@@ -288,27 +329,56 @@ class RosterController extends Controller
              */
             'revenue' => $this->revenueFor($registrations),
             'officeBreakdown' => $registrations
-                ->reject(fn (Registration $r) => $r->status === RegistrationStatus::Cancelled)
                 ->groupBy(fn (Registration $r) => $r->user->profile?->fieldOffice?->name ?? 'Unassigned')
-                ->map(function ($group, $office) {
-                    // Three buckets, as v1's geo breakdown had them: paid,
-                    // promised, and neither. hasSettledFee() is the wrong
-                    // question here — it treats a promissory note as settled,
-                    // which is right for letting someone through the door and
-                    // wrong for a column headed Outstanding. An office whose
-                    // participants had all merely promised showed nothing
-                    // owing, which is the opposite of what HRD needs to see.
-                    $cleared = $group->filter(fn (Registration $r) => $r->hasClearedFee());
-                    $promised = $group
-                        ->reject(fn (Registration $r) => $r->hasClearedFee())
-                        ->filter(fn (Registration $r) => $r->hasSettledFee());
+                ->map(function ($group, $office) use ($training) {
+                    $cancelled = $group->where('status', RegistrationStatus::Cancelled);
+                    // Everyone still on the run. Every money figure below is
+                    // taken from this, never from the whole group: a withdrawn
+                    // participant owes nothing and would read as an office
+                    // that had not paid.
+                    $active = $group->reject(fn (Registration $r) => $r->status === RegistrationStatus::Cancelled);
+
+                    /*
+                     * On a run with no fee there is nothing to pay, nothing
+                     * promised and nothing owing — but hasClearedFee() answers
+                     * true for exactly that reason, so the naive arithmetic
+                     * filed every participant of a free course under Paid and
+                     * the office looked like it had settled a bill it was never
+                     * sent. Free is its own column, and the three money columns
+                     * are empty beside it.
+                     */
+                    $free = $training->payment_required ? collect() : $active;
+
+                    /*
+                     * Then the three buckets v1's geo breakdown had: paid,
+                     * promised, and neither. hasSettledFee() is the wrong
+                     * question here — it treats a promissory note as settled,
+                     * which is right for letting someone through the door and
+                     * wrong for a column of what is still owed. An office whose
+                     * participants had all merely promised showed nothing
+                     * owing, which is the opposite of what HRD needs to see.
+                     */
+                    $cleared = $training->payment_required
+                        ? $active->filter(fn (Registration $r) => $r->hasClearedFee())
+                        : collect();
+                    $promised = $training->payment_required
+                        ? $active
+                            ->reject(fn (Registration $r) => $r->hasClearedFee())
+                            ->filter(fn (Registration $r) => $r->hasSettledFee())
+                        : collect();
 
                     return [
                         'label' => $office,
-                        'count' => $group->count(),
+                        'count' => $active->count(),
+                        'pending' => $group->where('status', RegistrationStatus::Pending)->count(),
+                        'cancelled' => $cancelled->count(),
+                        'free' => $free->count(),
                         'settled' => $cleared->count(),
                         'promissory' => $promised->count(),
-                        'outstanding' => $group->count() - $cleared->count() - $promised->count(),
+                        'unpaid' => $active->count()
+                            - $free->count()
+                            - $cleared->count()
+                            - $promised->count(),
                     ];
                 })
                 ->sortByDesc('count')
@@ -469,6 +539,55 @@ class RosterController extends Controller
      *
      * Only verified payments count — a pending upload is a claim, not money.
      *
+     * The evaluation posters for this run, one row per training day.
+     *
+     * The board comes from SmeEvaluationService so the panel, the printable
+     * sheet and the scan itself all read the same answer to "does this day
+     * collect a form"; the codes are merged onto it here because whether a
+     * poster has been cut yet is a fact about paper, not about the domain.
+     *
+     * @return array<string, mixed>
+     */
+    private function evaluationCodes(Training $training): array
+    {
+        $codes = $training->evaluationDayCodes()->get()->keyBy('day_number');
+
+        $days = array_map(function (array $day) use ($codes) {
+            $code = $codes->get($day['day']);
+
+            return [
+                'day' => $day['day'],
+                'date' => $day['date']->format('d M Y'),
+                'collects' => $day['collects'],
+                // Set only when the day is carried over, and it is the whole
+                // explanation for why this row has no code of its own.
+                'rated_on' => $day['rated_on'],
+                'experts' => $day['experts']->map(fn ($expert) => $expert->displayName())->all(),
+                'submitted' => $day['submitted'],
+                'expected' => $day['expected'],
+                'code' => $code === null ? null : [
+                    'id' => $code->id,
+                    'url' => $code->url(),
+                    'image_url' => route('admin.evaluation-codes.image', $code),
+                    'active' => $code->isActive(),
+                    'scan_count' => $code->scan_count,
+                    'last_scanned_at' => $code->last_scanned_at?->diffForHumans(),
+                ],
+            ];
+        }, SmeEvaluationService::codeBoard($training));
+
+        return [
+            'days' => $days,
+            // Whether there is anything to cut at all. A run with no panel
+            // assigned collects nothing, and the panel says that rather than
+            // offering a button that would fail.
+            'collects' => $training->evaluationDays() !== [],
+            'generateUrl' => route('admin.evaluation-codes.store', $training),
+            'printUrl' => route('admin.evaluation-codes.print', $training),
+        ];
+    }
+
+    /**
      * @param  Collection<int, Registration>  $registrations
      * @return array<string, mixed>
      */

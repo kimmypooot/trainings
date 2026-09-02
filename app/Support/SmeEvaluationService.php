@@ -4,9 +4,11 @@ namespace App\Support;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\EvaluationRating;
+use App\Enums\EvaluationScanOutcome;
 use App\Enums\RegistrationStatus;
 use App\Enums\TrainingStatus;
 use App\Models\Attendance;
+use App\Models\EvaluationDayCode;
 use App\Models\EvaluationInvitation;
 use App\Models\Registration;
 use App\Models\SmeEvaluation;
@@ -15,6 +17,7 @@ use App\Models\Training;
 use App\Models\TrainingDayEvaluation;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -42,6 +45,12 @@ use Illuminate\Validation\ValidationException;
  */
 class SmeEvaluationService
 {
+    /**
+     * SQLSTATE for "you broke a constraint" — the class of error a lost
+     * insert race reports as, on both MySQL and SQLite.
+     */
+    private const SQLSTATE_INTEGRITY_VIOLATION = '23000';
+
     /**
      * The training days this registration may evaluate, with what is known
      * about each: the experts on that day, and the submission if one exists.
@@ -327,6 +336,158 @@ class SmeEvaluationService
     }
 
     /**
+     * Every day of a run, and what a code for it would be worth.
+     *
+     * Built for the admin panel and the printable sheet, which must agree — one
+     * of them saying a day collects a form while the other omits it is how a
+     * poster ends up on a wall for a session nobody is being asked about.
+     *
+     * Lists *all* days, including the ones that collect nothing, and says why.
+     * Omitting them would be the more obvious design and the wrong one: an
+     * admin looking at a four-day course with one code cannot tell whether the
+     * other three are missing or unnecessary, and the difference decides
+     * whether they go looking for a bug.
+     *
+     * @return array<int, array{
+     *     day: int, date: CarbonImmutable, collects: bool, rated_on: ?int,
+     *     experts: Collection<int, SubjectMatterExpert>, submitted: int, expected: int
+     * }>
+     */
+    public static function codeBoard(Training $training): array
+    {
+        $training->loadMissing('subjectMatterExperts');
+
+        // One query for the whole run rather than one per day.
+        $submitted = TrainingDayEvaluation::query()
+            ->where('training_id', $training->getKey())
+            ->toBase()
+            ->selectRaw('day_number, count(*) as total')
+            ->groupBy('day_number')
+            ->pluck('total', 'day_number')
+            ->all();
+
+        // The same denominator resultsFor() uses: everyone holding a slot.
+        $expected = $training->registrations()
+            ->whereIn('status', RegistrationStatus::occupying())
+            ->count();
+
+        return array_map(function (array $day) use ($training, $submitted, $expected) {
+            $experts = $training->expertsEvaluatedOnDay($day['day']);
+            $carrying = $training->expertsForDay($day['day']);
+
+            /*
+             * Where this day's feedback actually gets collected. Null when the
+             * day genuinely asks nothing — no panel on it at all — which reads
+             * differently from "asked later" and is fixed differently too.
+             */
+            $ratedOn = $experts->isNotEmpty() || $carrying->isEmpty()
+                ? null
+                : $carrying
+                    ->map(fn (SubjectMatterExpert $expert) => $training->evaluationDayForExpert($expert, $day['day']))
+                    ->filter()
+                    ->min();
+
+            return [
+                'day' => $day['day'],
+                'date' => $day['date'],
+                'collects' => $experts->isNotEmpty(),
+                'rated_on' => $ratedOn,
+                'experts' => $experts,
+                'submitted' => (int) ($submitted[$day['day']] ?? 0),
+                'expected' => $expected,
+            ];
+        }, $training->trainingDays());
+    }
+
+    /**
+     * Who scanned a day's code, and what should happen to them.
+     *
+     * The second door onto this workflow. The first is the emailed invitation,
+     * which arrives addressed to one registration and therefore needs to decide
+     * nothing; a code on a wall is scanned by a whole room, including people who
+     * are on a different course, people who wandered in, and people whose phone
+     * was still logged in as their colleague's. So the identifying is done here.
+     *
+     * It lives in the service rather than the controller for the reason
+     * ScanStationService gives about its own two doors: the moment a second
+     * entrance derives eligibility for itself, the two answers start drifting,
+     * and the drift is invisible until somebody is refused at one door and
+     * admitted at the other. `daysFor()` remains the only thing that decides
+     * whether a day is answerable, and this reads its verdict.
+     *
+     * Nothing about the code's own state is trusted beyond "is it revoked". In
+     * particular, whether the day it names still collects a form is asked fresh:
+     * the panel can be edited, and the run shortened, long after the poster went
+     * on the wall.
+     *
+     * @return array{
+     *     outcome: EvaluationScanOutcome, registration: ?Registration,
+     *     day: ?int, reason: ?string
+     * }
+     */
+    public static function resolveScan(User $user, EvaluationDayCode $code): array
+    {
+        $refuse = fn (EvaluationScanOutcome $outcome, ?string $reason = null) => [
+            'outcome' => $outcome,
+            'registration' => null,
+            'day' => null,
+            'reason' => $reason,
+        ];
+
+        if (! $code->isActive()) {
+            return $refuse(EvaluationScanOutcome::Revoked);
+        }
+
+        /*
+         * The roster is the identity check, and an occupying status is what
+         * counts as being on it — the same set that may evaluate at all. A
+         * withdrawn or rejected registration is treated as not registered
+         * rather than as blocked, because "you cancelled this booking" is a
+         * different sentence from "the form is not open yet", and conflating
+         * them sends somebody to look for a form that will never appear.
+         */
+        $registration = Registration::with(['training.subjectMatterExperts', 'dayEvaluations', 'attendances'])
+            ->where('user_id', $user->getKey())
+            ->where('training_id', $code->training_id)
+            ->whereIn('status', RegistrationStatus::occupying())
+            ->first();
+
+        if ($registration === null) {
+            return $refuse(EvaluationScanOutcome::NotRegistered);
+        }
+
+        $day = collect(self::daysFor($registration))->firstWhere('day', $code->day_number);
+
+        if ($day === null) {
+            return $refuse(EvaluationScanOutcome::NoLongerScheduled);
+        }
+
+        $found = fn (EvaluationScanOutcome $outcome, ?string $reason = null) => [
+            'outcome' => $outcome,
+            'registration' => $registration,
+            'day' => $day['day'],
+            'reason' => $reason,
+        ];
+
+        /*
+         * Answered wins over blocked, matching EvaluationController::show():
+         * a participant marked absent after they had already filed their form
+         * can still open it, and being shown "you were marked absent" over the
+         * top of words they have already written would read as those words
+         * having been thrown away.
+         */
+        if ($day['evaluation'] !== null) {
+            return $found(EvaluationScanOutcome::Submitted);
+        }
+
+        if (! $day['open']) {
+            return $found(EvaluationScanOutcome::Blocked, $day['reason']);
+        }
+
+        return $found(EvaluationScanOutcome::Open);
+    }
+
+    /**
      * File (or amend) one participant's evaluation of one training day.
      *
      * Ratings arrive keyed by expert id. Experts not up for evaluation on the
@@ -370,7 +531,7 @@ class SmeEvaluationService
             ]);
         }
 
-        $evaluation = DB::transaction(function () use ($registration, $day, $data, $ratings) {
+        $persist = function () use ($registration, $day, $data, $ratings) {
             /*
              * updateOrCreate against the (registration, day) unique index, so
              * a participant who reopens the form corrects their answers instead
@@ -409,7 +570,35 @@ class SmeEvaluationService
             }
 
             return $evaluation;
-        });
+        };
+
+        /*
+         * Retried once on a duplicate key, and only on a duplicate key.
+         *
+         * updateOrCreate is read-then-write: two requests that both find no row
+         * both try to insert one, and the (registration, day_number) unique
+         * index — correctly — refuses the second. That used to surface as a 500
+         * on a form the participant had filled in properly. It is not
+         * hypothetical now that a code on a wall invites a whole room to open
+         * the same form at once, and the same person double-tapping Submit on a
+         * slow venue connection is the likeliest version of it.
+         *
+         * The retry is safe precisely because the operation is idempotent: the
+         * second attempt finds the row the first one lost the race to and
+         * updates it, which is what the participant asked for either way. Any
+         * other database error is rethrown untouched — a retry loop that
+         * swallows the difference between "somebody beat me to it" and "the
+         * column is the wrong type" is how a schema bug becomes a silent one.
+         */
+        try {
+            $evaluation = DB::transaction($persist);
+        } catch (QueryException $exception) {
+            if ($exception->getCode() !== self::SQLSTATE_INTEGRITY_VIOLATION) {
+                throw $exception;
+            }
+
+            $evaluation = DB::transaction($persist);
+        }
 
         /*
          * Logged without the ratings themselves. The audit trail answers "did

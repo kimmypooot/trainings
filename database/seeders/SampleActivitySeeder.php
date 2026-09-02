@@ -468,7 +468,7 @@ class SampleActivitySeeder extends Seeder
                 'training_id' => $training->getKey(),
                 'amount' => $training->payment_amount,
                 'payment_method' => $method,
-                'reference_number' => $method->requiresReference() ? fake()->numerify('REF#########') : null,
+                'reference_number' => $method->collectsReference() ? fake()->numerify('REF#########') : null,
                 'payment_date' => $paidOn->toDateString(),
                 // No attachment: proof is uploaded by the participant, and
                 // there is no file to point at here.

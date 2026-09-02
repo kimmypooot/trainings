@@ -149,6 +149,115 @@ class FieldOfficeScopingTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page->has('registrations', 2));
     }
 
+    public function test_the_trainings_list_counts_only_the_offices_own_people(): void
+    {
+        // A paying run, so the head count lands in the buckets that make up
+        // Registered. On a free training all three are zero by definition and
+        // the assertion would pass without proving anything.
+        $training = Training::factory()->paid(1500)->create();
+
+        RegistrationService::register($this->participantIn($this->leyte, 'leyte@example.com'), $training);
+        RegistrationService::register($this->participantIn($this->samar, 'samar1@example.com'), $training);
+        RegistrationService::register($this->participantIn($this->samar, 'samar2@example.com'), $training);
+
+        /*
+         * The run is regional, so it stays on the list for both readers — but
+         * the head count is each reader's own. Told "3 registered" and then
+         * shown a roster of one, a field office reads the difference as data
+         * gone missing rather than as two questions with two answers.
+         */
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->get('/admin/trainings')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('trainings.data', 1)
+                ->where('trainings.data.0.registered', 1)
+                ->where('trainings.data.0.pending', 1)
+                ->where('scopedTo', 'CSC Field Office - Leyte I')
+            );
+
+        $this->actingAs(User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]))
+            ->get('/admin/trainings')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('trainings.data.0.registered', 3)
+                ->where('trainings.data.0.pending', 3)
+                // HRD is not scoped, and the page says so by saying nothing.
+                ->where('scopedTo', null)
+            );
+    }
+
+    public function test_the_trainings_list_counts_nobody_for_unassigned_staff(): void
+    {
+        $training = Training::factory()->paid(1500)->create();
+        RegistrationService::register($this->participantIn($this->leyte, 'leyte@example.com'), $training);
+
+        // scopedFieldOfficeId() resolves to 0 with no office assigned, which
+        // matches nothing — the count fails closed rather than falling back to
+        // the region.
+        $this->actingAs($this->fieldOfficeStaff(null))
+            ->get('/admin/trainings')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('trainings.data', 1)
+                ->where('trainings.data.0.registered', 0)
+                ->where('trainings.data.0.pending', 0)
+            );
+    }
+
+    public function test_the_roster_names_only_the_offices_own_collecting_officers(): void
+    {
+        $training = Training::factory()->create(['payment_required' => true, 'payment_amount' => 1500]);
+
+        $mine = User::factory()->create([
+            'name' => 'OURS',
+            'role' => Role::FieldOffice,
+            'field_office_id' => $this->leyte->id,
+            'is_collecting_officer' => true,
+            'profile_completed_at' => now(),
+        ]);
+
+        $theirs = User::factory()->create([
+            'name' => 'THEIRS',
+            'role' => Role::FieldOffice,
+            'field_office_id' => $this->samar->id,
+            'is_collecting_officer' => true,
+            'profile_completed_at' => now(),
+        ]);
+
+        /*
+         * Who took the money is a question about this office. An officer three
+         * provinces away never handled that cash, and listing them turned the
+         * dropdown into a directory of other offices' staff — the one control
+         * on the roster that read across the whole region.
+         */
+        $this->actingAs($mine)
+            ->get("/admin/trainings/{$training->id}/roster")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->has('collectingOfficers', 1)
+                ->where('collectingOfficers.0.label', 'OURS')
+            );
+
+        // HRD enters money on a field office's behalf, which is the case the
+        // field exists for, so it still sees every officer.
+        $labels = collect(
+            $this->actingAs(User::factory()->create([
+                'role' => Role::Admin,
+                'profile_completed_at' => now(),
+            ]))
+                ->get("/admin/trainings/{$training->id}/roster")
+                ->viewData('page')['props']['collectingOfficers']
+        )->pluck('label');
+
+        $this->assertTrue($labels->contains('OURS'));
+        $this->assertTrue($labels->contains('THEIRS'));
+
+        // And the officer named on the receipt is unaffected by any of this:
+        // the designation grants the till, the office still bounds the reach.
+        $this->assertTrue($theirs->collectsPayments());
+    }
+
     public function test_dashboard_counts_are_scoped(): void
     {
         $training = Training::factory()->create();

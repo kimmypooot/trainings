@@ -335,7 +335,7 @@ const submitReject = () =>
                 <AppTextarea
                     v-model="requirementsForm.requirements_text"
                     label="What the agency must provide"
-                    rows="5"
+                    :rows="5"
                     hint="Shown to the agency and included in the notification they receive."
                     :error="requirementsForm.errors.requirements_text"
                     required

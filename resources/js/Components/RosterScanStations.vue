@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
+import AppBadge from '@/Components/AppBadge.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 
 /**
@@ -213,7 +214,7 @@ async function copyField(field, value) {
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-medium text-csc-ink">
                         {{ link.label ?? 'Unlabelled station' }}
-                        <AppBadge v-if="link.is_test" tone="warning" class="ml-1">Practice</AppBadge>
+                        <AppBadge v-if="link.is_test" status="practice" class="ml-1" />
                     </p>
                     <p class="truncate text-xs text-csc-ink-subtle">
                         Expires {{ link.expires_at }} ·

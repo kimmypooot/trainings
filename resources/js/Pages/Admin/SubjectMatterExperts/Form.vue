@@ -89,20 +89,20 @@ const submit = () => {
                         <AppTextarea
                             v-model="form.expertise"
                             label="Areas of Expertise"
-                            rows="2"
+                            :rows="2"
                             hint="What this expert is usually invited to deliver. Shown on the directory."
                             :error="form.errors.expertise"
                         />
                         <AppTextarea
                             v-model="form.bio"
                             label="Short Biography"
-                            rows="4"
+                            :rows="4"
                             :error="form.errors.bio"
                         />
                         <AppTextarea
                             v-model="form.remarks"
                             label="Internal Remarks"
-                            rows="2"
+                            :rows="2"
                             hint="Scheduling notes, availability, honorarium arrangements."
                             :error="form.errors.remarks"
                         />

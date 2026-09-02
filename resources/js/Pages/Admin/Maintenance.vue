@@ -94,7 +94,7 @@ const confirmEnable = () => {
                         label="Message shown on the maintenance page"
                         hint="Optional. What visitors will read while the site is down."
                         placeholder="We are carrying out scheduled maintenance. Please check back shortly."
-                        rows="3"
+                        :rows="3"
                         maxlength="500"
                         :error="form.errors.message"
                     />

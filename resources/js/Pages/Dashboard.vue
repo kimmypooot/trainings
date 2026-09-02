@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
@@ -9,6 +9,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppStat from '@/Components/AppStat.vue';
+import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
     summary: { type: Object, required: true },
@@ -28,6 +29,30 @@ const peso = new Intl.NumberFormat('en-PH', {
 
 const money = (value) => peso.format(Number(value));
 
+/*
+ * The third line of an attention row: the fee, the training's dates, and
+ * whatever else that queue has to add.
+ *
+ * The dates are the half that identifies the training. A title on its own does
+ * not — this office runs the same programme several times a year, so "Records
+ * Management Seminar" names four things and the schedule is what picks one
+ * out. Paired through dateRange.ts rather than by hand, so a multi-day run
+ * reads here exactly as it does in the catalogue and on the roster.
+ *
+ * The amount goes through the same peso formatter as the hero card's fee; two
+ * formatters would eventually print one amount two ways on a single screen.
+ * Any part may be absent, and a row with none prints no line rather than an
+ * empty one.
+ */
+const itemMeta = (item) =>
+    [
+        item.amount === null || item.amount === undefined ? null : money(item.amount),
+        item.starts_at ? formatDateRange(item.starts_at, item.ends_at) : null,
+        item.detail,
+    ]
+        .filter(Boolean)
+        .join(' · ');
+
 // Fixed at mount, deliberately: a dashboard left open overnight will still say
 // "Good evening" in the morning, which is a smaller cost than a timer running
 // for the life of every session to correct a greeting nobody re-reads.
@@ -39,6 +64,64 @@ const greeting = computed(() => {
     return 'Good evening';
 });
 
+/*
+ * The countdown to the next training, kept honest.
+ *
+ * The greeting above is allowed to go stale — nobody re-reads it, and a timer
+ * running for the life of the session to fix a word is a bad trade. "Starts in
+ * 2 days" is the opposite case: it is the one line here a participant plans
+ * around, and a dashboard left open on a second monitor is exactly how it ends
+ * up reading two days late.
+ *
+ * So it ticks — but only once a minute, only while the tab is visible, and only
+ * when there is a next training to count down to. Coming back to a hidden tab
+ * refreshes it immediately, which is when a stale figure would have been read.
+ */
+const now = ref(Date.now());
+let ticker = null;
+
+const syncClock = () => {
+    if (!document.hidden) now.value = Date.now();
+};
+
+onMounted(() => {
+    if (!props.nextTraining) return;
+
+    ticker = window.setInterval(syncClock, 60_000);
+    document.addEventListener('visibilitychange', syncClock);
+});
+
+onBeforeUnmount(() => {
+    if (ticker) window.clearInterval(ticker);
+    document.removeEventListener('visibilitychange', syncClock);
+});
+
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+// Largest unit first: the first one the gap clears is the one it reads in.
+const units = [
+    ['year', 31536000000],
+    ['month', 2592000000],
+    ['week', 604800000],
+    ['day', 86400000],
+    ['hour', 3600000],
+    ['minute', 60000],
+];
+
+const schedule = computed(() => {
+    if (!props.nextTraining) return null;
+
+    const gap = new Date(props.nextTraining.starts_at).getTime() - now.value;
+
+    if (Number.isNaN(gap)) return null;
+
+    for (const [unit, size] of units) {
+        if (Math.abs(gap) >= size) return `Starts ${relative.format(Math.round(gap / size), unit)}`;
+    }
+
+    return 'Starting now';
+});
+
 const firstName = computed(() => props.profile.first_name ?? '');
 
 // Greet by name when we have one; "Good morning," trailing a comma into nothing
@@ -48,7 +131,7 @@ const greetingLine = computed(() =>
 );
 
 const statusLine = computed(() => {
-    const { pending, registered, certificates } = props.summary;
+    const { pending, registered, completed, certificates } = props.summary;
 
     // Pending counts as upcoming here because it counts as upcoming in the hero
     // card — the backend treats a pending registration as the next training, so
@@ -56,7 +139,16 @@ const statusLine = computed(() => {
     const upcoming = pending + registered;
 
     if (!upcoming && !certificates) {
-        return 'You have no upcoming trainings yet. Browse the catalogue to get started.';
+        /*
+         * Nothing ahead, nothing to collect — but that is two different people.
+         * The "get started" line was going to the participant with eleven
+         * completed trainings and no certificate released yet, which reads as
+         * the app having forgotten them. Only somebody with no history at all
+         * is actually starting.
+         */
+        return completed
+            ? `You have nothing upcoming. ${completed} completed training${completed === 1 ? '' : 's'} so far — browse the catalogue for what is next.`
+            : 'You have no upcoming trainings yet. Browse the catalogue to get started.';
     }
 
     const parts = [];
@@ -147,24 +239,20 @@ const tone = (kind) => activityTones[kind] ?? activityTones.default;
  *
  * Each carries the status it counts through to the list, so a number lands on
  * the rows it was counting rather than on an undifferentiated page the reader
- * then has to scan for them. Pending earns a tile whenever there is one to
- * show — it is the status a participant may actually need to chase — and
- * yields to Certificates when there is nothing waiting.
+ * then has to scan for them.
+ *
+ * All four, always. Pending used to take Certificates' slot whenever there was
+ * one to chase, which meant the row changed shape between visits and the
+ * participant most likely to hold certificates — an active one, mid-cycle — was
+ * the one who lost the link to them. A tile reading zero still says something
+ * true, and a row that stays put can be aimed at without reading it first.
  */
-const stats = computed(() => {
-    const tiles = [
-        { label: 'Approved', value: props.summary.registered, href: '/my/registrations?status=approved' },
-        { label: 'Completed', value: props.summary.completed, href: '/my/registrations?status=completed' },
-    ];
-
-    tiles.push(
-        props.summary.pending
-            ? { label: 'Pending', value: props.summary.pending, href: '/my/registrations?status=pending' }
-            : { label: 'Certificates', value: props.summary.certificates, href: '/my/certificates' }
-    );
-
-    return tiles;
-});
+const stats = computed(() => [
+    { label: 'Pending', value: props.summary.pending, href: '/my/registrations?status=pending' },
+    { label: 'Approved', value: props.summary.registered, href: '/my/registrations?status=approved' },
+    { label: 'Completed', value: props.summary.completed, href: '/my/registrations?status=completed' },
+    { label: 'Certificates', value: props.summary.certificates, href: '/my/certificates' },
+]);
 </script>
 
 <template>
@@ -205,16 +293,41 @@ const stats = computed(() => {
                     <li v-for="item in attention" :key="item.key">
                         <Link
                             :href="item.href"
-                            class="group flex items-center gap-3 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 transition-colors duration-150 hover:border-warning/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            class="group flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 transition-colors duration-150 hover:border-warning/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         >
-                            <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-warning">
+                            <span
+                                class="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-warning"
+                            >
                                 <AppIcon :name="item.icon" size="sm" />
                             </span>
-                            <span class="flex-1 text-sm font-medium text-csc-ink">{{ item.label }}</span>
+
+                            <!--
+                                Three lines, in the order the question is asked:
+                                what is needed, what it is about, and the figures
+                                that decide whether it can be dealt with now.
+                                The subject is titled and truncated — a training
+                                name is exactly the sort of string that runs long,
+                                and wrapping it to three lines would bury the next
+                                row.
+                            -->
+                            <span class="min-w-0 flex-1">
+                                <span class="block text-sm font-medium text-csc-ink">{{ item.label }}</span>
+                                <span
+                                    v-if="item.subject"
+                                    :title="item.subject"
+                                    class="mt-0.5 block truncate text-sm text-csc-ink-muted"
+                                >
+                                    {{ item.subject }}
+                                </span>
+                                <span v-if="itemMeta(item)" class="mt-0.5 block text-xs text-csc-ink-subtle">
+                                    {{ itemMeta(item) }}
+                                </span>
+                            </span>
+
                             <AppIcon
                                 name="chevron-right"
                                 size="sm"
-                                class="shrink-0 text-csc-ink-subtle transition-colors group-hover:text-csc-blue"
+                                class="mt-1.5 shrink-0 text-csc-ink-subtle transition-colors group-hover:text-csc-blue"
                             />
                         </Link>
                     </li>
@@ -222,7 +335,7 @@ const stats = computed(() => {
             </AppCard>
 
             <!-- 3. Next training — the hero -->
-            <AppCard v-if="nextTraining" tone="brand" :title="nextTraining.title" :subtitle="nextTraining.schedule">
+            <AppCard v-if="nextTraining" tone="brand" :title="nextTraining.title" :subtitle="schedule">
                 <template #action>
                     <AppBadge :status="nextTraining.status" />
                 </template>
@@ -248,7 +361,14 @@ const stats = computed(() => {
                     </div>
                     <div>
                         <dt class="text-white/60">Date</dt>
-                        <dd class="mt-0.5 font-medium text-white">{{ nextTraining.date }}</dd>
+                        <!--
+                            The countdown in the subtitle is prose and cannot
+                            carry a machine-readable value, so the instant it
+                            was computed from is published here instead.
+                        -->
+                        <dd class="mt-0.5 font-medium text-white">
+                            <time :datetime="nextTraining.starts_at">{{ nextTraining.date }}</time>
+                        </dd>
                         <dd v-if="nextTraining.ends_at" class="mt-0.5 text-xs text-white/60">
                             Ends {{ nextTraining.ends_at }}
                         </dd>
@@ -272,7 +392,7 @@ const stats = computed(() => {
                 </dl>
 
                 <template #footer>
-                    <div class="flex flex-col gap-2 sm:flex-row">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <AppButton :href="nextTraining.url" size="sm" on-dark icon="arrow-right">View Details</AppButton>
                         <!--
                             Withheld on a pending registration: a QR the scanner
@@ -290,6 +410,17 @@ const stats = computed(() => {
                             Add to Calendar
                         </AppButton>
                     </div>
+
+                    <!--
+                        Said rather than merely omitted. Quick Actions below links
+                        to the same code unconditionally — it is the participant's
+                        standing code, not this training's — so silence here only
+                        routes them around the guard and leaves them to find out
+                        at the door. The sentence is the part that was missing.
+                    -->
+                    <p v-if="!nextTraining.can_check_in" class="mt-3 text-xs text-white/70">
+                        Your check-in code opens this training once the registration is approved.
+                    </p>
                 </template>
             </AppCard>
 
@@ -305,26 +436,39 @@ const stats = computed(() => {
                 </AppEmptyState>
             </AppCard>
 
-            <!-- 4. Quick actions -->
-            <div>
-                <h3 class="mb-3 text-sm font-semibold tracking-wide text-csc-ink-subtle uppercase">Quick Actions</h3>
-                <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <Link
-                        v-for="action in quickActions"
-                        :key="action.href"
-                        :href="action.href"
-                        class="flex min-h-24 flex-col justify-between rounded-xl border border-csc-line bg-white p-4 transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    >
-                        <span class="inline-flex size-9 items-center justify-center rounded-lg bg-csc-blue-tint text-csc-blue">
-                            <AppIcon :name="action.icon" />
-                        </span>
-                        <span class="mt-3 block">
-                            <span class="block text-sm font-semibold text-csc-ink">{{ action.label }}</span>
-                            <span class="mt-0.5 block text-xs text-csc-ink-subtle">{{ action.description }}</span>
-                        </span>
-                    </Link>
-                </div>
-            </div>
+            <!--
+                4. Quick actions
+
+                A section with an h2, like the cards above and below it: these are
+                peers in the page, and the heading was an h3 sitting between two
+                h2s — a level the outline skips over. The tiles are a list for the
+                same reason the attention queue and the activity feed are: a
+                screen reader gets "4 items" before it starts reading them.
+            -->
+            <section aria-labelledby="quick-actions-heading">
+                <h2
+                    id="quick-actions-heading"
+                    class="mb-3 text-sm font-semibold tracking-wide text-csc-ink-subtle uppercase"
+                >
+                    Quick Actions
+                </h2>
+                <ul class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <li v-for="action in quickActions" :key="action.href">
+                        <Link
+                            :href="action.href"
+                            class="flex h-full min-h-24 flex-col justify-between rounded-xl border border-csc-line bg-white p-4 transition-colors duration-150 hover:border-csc-blue/40 hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        >
+                            <span class="inline-flex size-9 items-center justify-center rounded-lg bg-csc-blue-tint text-csc-blue">
+                                <AppIcon :name="action.icon" />
+                            </span>
+                            <span class="mt-3 block">
+                                <span class="block text-sm font-semibold text-csc-ink">{{ action.label }}</span>
+                                <span class="mt-0.5 block text-xs text-csc-ink-subtle">{{ action.description }}</span>
+                            </span>
+                        </Link>
+                    </li>
+                </ul>
+            </section>
 
             <!-- 5. Recent activity -->
             <AppCard title="Recent Activity" :padded="recentActivity.length > 0">
@@ -400,11 +544,13 @@ const stats = computed(() => {
 
             <!-- 6. Summary counts — navigational, deliberately last -->
             <!--
-                Three abreast only once the row can hold three. Below ~26rem
-                these are ~90px columns carrying a text-3xl figure and a label,
-                and the label is what breaks first.
+                Two abreast on a phone, four once there is a row for them —
+                the same rhythm as Quick Actions directly above, which is four
+                tiles of the same size making the same promise. Below ~26rem
+                even two are ~90px columns carrying a text-3xl figure and a
+                label, and the label is what breaks first, so they stack.
             -->
-            <div class="grid grid-cols-1 gap-3 min-[26rem]:grid-cols-3">
+            <div class="grid grid-cols-1 gap-3 min-[26rem]:grid-cols-2 lg:grid-cols-4">
                 <AppStat
                     v-for="stat in stats"
                     :key="stat.label"

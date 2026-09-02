@@ -25,7 +25,13 @@ const registration = (overrides = {}) => ({
     ...overrides,
 });
 
-const mountWith = (props) => mount(RosterActions, { props: { registration: registration(), ...props } });
+/*
+ * `canManage` defaults closed in the component — a reader nobody vouched for
+ * gets the read-only rendering — so most cases here opt in to the HRD view and
+ * the field-office cases below turn it back off explicitly.
+ */
+const mountWith = (props) =>
+    mount(RosterActions, { props: { registration: registration(), canManage: true, ...props } });
 
 /** Every action this rendering offers, by its visible label. */
 const actions = (wrapper) =>
@@ -69,6 +75,15 @@ describe('RosterActions — the two layouts stay in step', () => {
             registration: registration({ status: 'pending' }),
             canRecordPayment: true,
             cancellable: true,
+        }],
+        ['a completed row seen by a reader who may not issue certificates', {
+            registration: registration({ status: 'completed' }),
+            canManage: false,
+        }],
+        ['a pending row seen by a field-office collecting officer', {
+            registration: registration({ status: 'pending' }),
+            canManage: false,
+            canRecordPayment: true,
         }],
     ];
 
@@ -156,6 +171,55 @@ describe('RosterActions — the actions themselves', () => {
         });
 
         expect(actions(wrapper)).toContain('Cancel');
+    });
+
+    /*
+     * Issuing a certificate, and every other roster decision, posts to an
+     * `admin|superadmin` route. A field office reading the roster of a session
+     * it ran was shown the buttons anyway, and clicking Issue Certificate got
+     * an error page instead of a certificate.
+     */
+    it('offers no roster decisions to a reader who may not make them', () => {
+        const completed = mountWith({
+            registration: registration({ status: 'completed' }),
+            canManage: false,
+            layout: 'row',
+        });
+        const pending = mountWith({
+            registration: registration({ status: 'pending' }),
+            canManage: false,
+            layout: 'row',
+        });
+        const approved = mountWith({
+            registration: registration({ status: 'approved' }),
+            canManage: false,
+            layout: 'row',
+        });
+
+        expect(actions(completed)).toEqual([]);
+        expect(actions(pending)).toEqual([]);
+        expect(actions(approved)).toEqual([]);
+    });
+
+    it('still shows what was already decided, so the row is read-only and not blank', () => {
+        const wrapper = mountWith({
+            registration: registration({ status: 'completed', certificate_number: 'CSC-1' }),
+            canManage: false,
+            layout: 'row',
+        });
+
+        expect(wrapper.text()).toContain('CSC-1');
+    });
+
+    it('keeps Record Payment for a collecting officer who may not decide the roster', () => {
+        const wrapper = mountWith({
+            registration: registration({ status: 'approved' }),
+            canManage: false,
+            canRecordPayment: true,
+            layout: 'card',
+        });
+
+        expect(actions(wrapper)).toEqual(['Record Payment']);
     });
 
     it('separates actions with hairlines in a table row and not on a card', () => {

@@ -2,11 +2,9 @@
 
 namespace App\Support;
 
-use App\Enums\AgencyRequestStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\PhysicalOrRequestStatus;
 use App\Enums\RefundStatus;
-use App\Enums\RegistrationStatus;
 use App\Enums\RequestStatus;
 use App\Enums\Role;
 use App\Models\AgencyRequest;
@@ -14,7 +12,6 @@ use App\Models\CancellationRequest;
 use App\Models\Payment;
 use App\Models\PhysicalOrRequest;
 use App\Models\RefundRequest;
-use App\Models\Registration;
 use App\Models\RegistrationOutput;
 use App\Models\TrainingRequest;
 use App\Models\User;
@@ -30,67 +27,70 @@ use App\Models\User;
  */
 class PendingActionCounter
 {
+    /** Where the per-request memo lives on the Request. */
+    private const MEMO_KEY = 'pending_action_counts';
+
     /**
      * @return array<string, int> Nav item key => items awaiting a decision.
      */
     public static function for(User $user): array
     {
-        return $user->role->isStaff()
+        /*
+         * Computed at most once per user per request.
+         *
+         * Two callers ask for the same numbers on a single page load: the
+         * sidebar badges in HandleInertiaRequests::share(), and any screen that
+         * repeats those queues in its own body — the participant dashboard's
+         * "needs your attention" block, the admin dashboard's requests tile.
+         * The second call is a whole second round of queries plus another
+         * SmeEvaluationService::pendingFor() pass, for an answer that cannot
+         * have changed since the first.
+         *
+         * The memo hangs off the Request rather than a static because a static
+         * outlives the request in the two places that matter: a test method
+         * making several requests through one application instance, and Octane.
+         * Both would then serve counts from before the state change under test.
+         * Request attributes die with the request, so the cache can never be
+         * older than the page it is printed on.
+         */
+        $request = request();
+        $key = (int) $user->getKey();
+        $memo = $request->attributes->get(self::MEMO_KEY, []);
+
+        if (isset($memo[$key])) {
+            return $memo[$key];
+        }
+
+        $counts = $user->role->isStaff()
             ? self::staff($user)
             : self::participant($user);
+
+        $memo[$key] = $counts;
+        $request->attributes->set(self::MEMO_KEY, $memo);
+
+        return $counts;
     }
 
     /**
+     * The participant's own queues.
+     *
+     * Counted off ParticipantAttention's rows rather than re-derived here.
+     * The dashboard's "needs your attention" block and this badge used to be
+     * two statements of the same rules, and two statements of one rule drift.
+     * The failure mode is specific and nasty: a badge showing work the screen
+     * behind it does not list, which the participant cannot clear and so learns
+     * to ignore. There is one statement now, in ParticipantAttention, and this
+     * counts it — including the evaluations queue, whose "is this day open?"
+     * question remains SmeEvaluationService's to answer.
+     *
      * @return array<string, int>
      */
     private static function participant(User $user): array
     {
-        $counts = [];
-
-        // Two kinds of "pending" on the participant's own Payments screen:
-        // proof still being checked, and a fee still owed on an active slot.
-        $counts['payments'] = Payment::where('user_id', $user->getKey())
-            ->where('status', PaymentStatus::Pending)
-            ->count();
-
-        $counts['payments'] += Registration::where('user_id', $user->getKey())
-            ->whereIn('status', RegistrationStatus::occupying())
-            ->whereHas('training', fn ($query) => $query->where('payment_required', true))
-            ->whereDoesntHave('payments')
-            ->count();
-
-        // Agency requests where the next move is theirs: a confirmation form to
-        // return, or post-training documents still outstanding. A request
-        // sitting with HRD is not work for the agency and must not be badged.
-        $counts['agency-requests'] = AgencyRequest::where('requested_by', $user->getKey())
-            ->where(fn ($query) => $query
-                ->where('status', AgencyRequestStatus::RequirementsSent)
-                ->orWhere(fn ($inner) => $inner
-                    ->where('status', AgencyRequestStatus::Confirmed)
-                    ->whereNull('completion_submitted_at')
-                )
-            )
-            ->count();
-
-        // A physical-OR request waiting on the participant's GCash proof — the
-        // one participant move in that workflow that is genuinely outstanding.
-        $counts['physical-or'] = PhysicalOrRequest::where('user_id', $user->getKey())
-            ->where('status', PhysicalOrRequestStatus::RequestSubmitted)
-            ->count();
-
-        /*
-         * Training days the participant has attended but not yet evaluated.
-         *
-         * The one badge here that decays on its own: it clears as the forms are
-         * filled, and a run that is over with nothing outstanding contributes
-         * nothing. Computed rather than queried in one shot because whether a
-         * day is evaluable depends on the expert assignment and the attendance
-         * record, which is the service's rule to apply — see
-         * SmeEvaluationService::pendingFor().
-         */
-        $counts['evaluations'] = SmeEvaluationService::pendingFor($user)->count();
-
-        return $counts;
+        return array_map(
+            fn (array $items) => count($items),
+            ParticipantAttention::for($user),
+        );
     }
 
     /**

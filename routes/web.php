@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AttendanceController as AdminAttendanceController
 use App\Http\Controllers\Admin\CertificateController as AdminCertificateController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\EmailController as AdminEmailController;
+use App\Http\Controllers\Admin\EvaluationCodeController;
 use App\Http\Controllers\Admin\EvaluationController as AdminEvaluationController;
 use App\Http\Controllers\Admin\ExportController as AdminExportController;
 use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeController;
@@ -37,6 +38,7 @@ use App\Http\Controllers\CertificateController;
 use App\Http\Controllers\CertificateVerificationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\EvaluationScanController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
@@ -653,6 +655,33 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
         });
 
         /*
+         * The scannable evaluation posters.
+         *
+         * HRD only, and narrower than the group above on purpose: management
+         * reads results, but cutting and withdrawing a code decides what the
+         * room is asked, which belongs with whoever owns the training. Narrower
+         * too than the scan-links group next door — a station link authorises a
+         * door and a field office genuinely staffs doors, whereas the panel a
+         * poster asks about is HRD's to configure.
+         *
+         * The printable sheet sits alongside rather than under /evaluations
+         * because it is a property of the run, not of its results, and is
+         * wanted before a single response exists.
+         */
+        Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
+            Route::post('/trainings/{training}/evaluation-codes', [EvaluationCodeController::class, 'store'])
+                ->name('evaluation-codes.store');
+            Route::get('/trainings/{training}/evaluation-codes/print', [EvaluationCodeController::class, 'print'])
+                ->name('evaluation-codes.print');
+            Route::post('/evaluation-codes/{evaluationDayCode}/regenerate', [EvaluationCodeController::class, 'regenerate'])
+                ->name('evaluation-codes.regenerate');
+            Route::delete('/evaluation-codes/{evaluationDayCode}', [EvaluationCodeController::class, 'destroy'])
+                ->name('evaluation-codes.destroy');
+            Route::get('/evaluation-codes/{evaluationDayCode}.png', [EvaluationCodeController::class, 'image'])
+                ->name('evaluation-codes.image');
+        });
+
+        /*
          * Review queues. The queue itself is visible to every staff role
          * (scoped by office) because knowing what is outstanding is oversight
          * as much as it is work. Deciding an item is the work, so management
@@ -895,6 +924,31 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
     Route::post('/my/evaluations/{registration}/days/{day}', [EvaluationController::class, 'store'])
         ->whereNumber('day')
         ->name('evaluations.store');
+
+    /*
+     * The scanned way in to the same form.
+     *
+     * A code on the wall at the end of a session, one per evaluation day. It
+     * cannot address the route above directly, because that route names a
+     * *registration* — one participant's — while a poster is read by the whole
+     * room. So the token names the day, and the controller works out who is
+     * holding the phone before redirecting them into their own form.
+     *
+     * Inside the authenticated group on purpose, and that is the whole trick of
+     * the logged-out case: Laravel's own auth middleware stores the intended URL
+     * and every sign-in path in this app ends in redirect()->intended(), so a
+     * participant who scans while signed out is walked through login — and
+     * through profile completion and email verification if those are owed — and
+     * arrives back here without ever seeing the URL.
+     *
+     * Not /scan/{token}: that is the participant's own check-in code, and a
+     * camera pointed at the wrong poster should not silently do the other thing.
+     * Throttled like /verify/{code}, which is the app's other public-ish lookup
+     * by opaque string.
+     */
+    Route::get('/evaluate/{token}', EvaluationScanController::class)
+        ->middleware('throttle:30,1')
+        ->name('evaluations.scan');
 
     Route::get('/my/certificates', [CertificateController::class, 'index'])->name('certificates.index');
     Route::get('/my/certificates/{certificate}/download', [CertificateController::class, 'download'])

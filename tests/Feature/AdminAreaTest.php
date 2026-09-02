@@ -737,9 +737,22 @@ class AdminAreaTest extends TestCase
                 ->has('officeBreakdown', 1)
                 ->where('officeBreakdown.0.label', $office->name)
                 // A cancelled registration holds no slot and owes nothing, so
-                // counting it would overstate what the office is chasing.
+                // counting it in the total would overstate what the office is
+                // chasing — it gets its own column instead of disappearing.
                 ->where('officeBreakdown.0.count', 2)
-                ->where('officeBreakdown.0.outstanding', 0)
+                ->where('officeBreakdown.0.cancelled', 1)
+                // A free run registers straight to approved, so nothing is
+                // waiting on a decision.
+                ->where('officeBreakdown.0.pending', 0)
+                /*
+                 * And nobody owes anything, because nobody was billed. Free is
+                 * its own column for exactly this: hasClearedFee() answers true
+                 * on a run with no fee, so the arithmetic that produced Paid
+                 * once filed the whole office under it.
+                 */
+                ->where('officeBreakdown.0.free', 2)
+                ->where('officeBreakdown.0.settled', 0)
+                ->where('officeBreakdown.0.unpaid', 0)
             );
     }
 
@@ -777,7 +790,10 @@ class AdminAreaTest extends TestCase
                 // that had collected nothing as owing nothing.
                 ->where('officeBreakdown.0.settled', 1)
                 ->where('officeBreakdown.0.promissory', 1)
-                ->where('officeBreakdown.0.outstanding', 1)
+                ->where('officeBreakdown.0.unpaid', 1)
+                // Nothing is free on a run that charges, whatever has been
+                // paid against it.
+                ->where('officeBreakdown.0.free', 0)
                 ->etc()
             );
     }

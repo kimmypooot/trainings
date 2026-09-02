@@ -1145,6 +1145,68 @@ class PaymentTest extends TestCase
         $this->assertSame(1, Payment::where('registration_id', $registration->getKey())->count());
     }
 
+    /**
+     * At the counter the OR number has its own field, so the receipt number is
+     * not also asked for as a reference: the modal was putting two boxes for
+     * one number in front of the officer, and the server was requiring the one
+     * finance does not reconcile on.
+     *
+     * The participant's own form is the other way round and stays that way —
+     * see test_an_official_receipt_payment_requires_the_or_number, which
+     * demands `reference_number` there because that door has no OR field.
+     */
+    public function test_a_counter_official_receipt_needs_no_reference_number(): void
+    {
+        $registration = $this->paidRegistration($this->participant());
+
+        $this->actingAs($this->officer(Role::Admin))
+            ->post("/admin/registrations/{$registration->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::OfficialReceipt->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-000900',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $payment = Payment::sole();
+        $this->assertSame('OR-000900', $payment->or_number);
+        $this->assertNull($payment->reference_number);
+    }
+
+    /**
+     * And where the field *is* offered — a cheque, a transfer — it is offered,
+     * not demanded. The OR is this door's receipt; the reference is finance's
+     * cross-reference and is often still on a document held by the agency while
+     * the money is already in the till.
+     */
+    public function test_a_counter_reference_number_is_optional_but_kept(): void
+    {
+        $officer = $this->officer(Role::Admin);
+
+        $this->actingAs($officer)
+            ->post("/admin/registrations/{$this->paidRegistration($this->participant())->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Check->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-000901',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(Payment::where('or_number', 'OR-000901')->sole()->reference_number);
+
+        $this->actingAs($officer)
+            ->post("/admin/registrations/{$this->paidRegistration($this->participant())->id}/payment", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Check->value,
+                'payment_date' => now()->toDateString(),
+                'or_number' => 'OR-000902',
+                'reference_number' => 'CHQ-77120',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('CHQ-77120', Payment::where('or_number', 'OR-000902')->sole()->reference_number);
+    }
+
     public function test_a_settlement_payment_must_carry_an_official_receipt(): void
     {
         $registration = $this->paidRegistration($this->participant());

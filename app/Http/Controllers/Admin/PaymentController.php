@@ -406,10 +406,16 @@ class PaymentController extends Controller
                 PaymentMethod::rule($registration->training->accepts_promissory),
             ],
             'payment_date' => ['required', 'date', 'before_or_equal:today'],
-            'reference_number' => [
-                'nullable', 'string', 'max:64',
-                Rule::requiredIf(fn () => $method?->requiresReference() ?? false),
-            ],
+            /*
+             * Recorded when the officer has it, never demanded. The OR below is
+             * this door's receipt; the transfer or cheque number is finance's
+             * cross-reference, and it is often still on a document sitting with
+             * the agency when the money is already in the till. Blocking the
+             * entry on it would hold up a payment that has demonstrably
+             * happened — see PaymentMethod::collectsReference(), which decides
+             * whether the form offers the field at all.
+             */
+            'reference_number' => ['nullable', 'string', 'max:64'],
             // The receipt is the whole point of recording it here, so unlike a
             // reviewed upload the OR is mandatory — except for a promissory
             // note, where no receipt has been issued because no money arrived.

@@ -255,7 +255,7 @@ const submit = () => {
                         <AppTextarea
                             v-model="form.description"
                             label="Description"
-                            rows="4"
+                            :rows="4"
                             placeholder="Describe the training content and expected outcomes…"
                             :error="form.errors.description"
                         />
@@ -333,7 +333,7 @@ const submit = () => {
                         <AppTextarea
                             v-model="form.venue_details"
                             label="Venue Details"
-                            rows="3"
+                            :rows="3"
                             placeholder="Room number, directions, parking, what to bring…"
                             :error="form.errors.venue_details"
                         />
@@ -475,14 +475,14 @@ const submit = () => {
                         <AppTextarea
                             v-model="form.target_participants"
                             label="Target Participants"
-                            rows="2"
+                            :rows="2"
                             placeholder="e.g. Second-level personnel of national and local government agencies."
                             :error="form.errors.target_participants"
                         />
                         <AppTextarea
                             v-model="form.prerequisites"
                             label="Prerequisites"
-                            rows="3"
+                            :rows="3"
                             :error="form.errors.prerequisites"
                         />
 

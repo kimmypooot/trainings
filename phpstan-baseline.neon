@@ -91,12 +91,6 @@ parameters:
 			path: app/Http/Controllers/Admin/AnalyticsController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/AnalyticsController.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$profile\.$#'
 			identifier: property.notFound
 			count: 4
@@ -207,7 +201,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
-			count: 4
+			count: 3
 			path: app/Http/Controllers/Admin/CertificateController.php
 
 		-
@@ -225,12 +219,6 @@ parameters:
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:notify\(\)\.$#'
 			identifier: method.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/CertificateController.php
-
-		-
-			message: '#^Call to function in_array\(\) with arguments string, array\{App\\Enums\\Role\:\:Admin, App\\Enums\\Role\:\:SuperAdmin, App\\Enums\\Role\:\:FieldOffice\} and true will always evaluate to false\.$#'
-			identifier: function.impossibleType
 			count: 1
 			path: app/Http/Controllers/Admin/CertificateController.php
 
@@ -291,7 +279,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Http/Controllers/Admin/DashboardController.php
 
 		-
@@ -343,6 +331,24 @@ parameters:
 			path: app/Http/Controllers/Admin/EmailController.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isActive\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/EvaluationCodeController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:url\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Http/Controllers/Admin/EvaluationCodeController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,array\<string, Carbon\\CarbonImmutable\|Illuminate\\Support\\Collection\<int, App\\Models\\SubjectMatterExpert\>\|int\|true\|null\>\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/EvaluationCodeController.php
+
+		-
 			message: '#^Access to an undefined property App\\Models\\Training\:\:\$expected_count\.$#'
 			identifier: property.notFound
 			count: 1
@@ -369,12 +375,6 @@ parameters:
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:displayName\(\)\.$#'
 			identifier: method.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/EvaluationController.php
-
-		-
-			message: '#^Call to function in_array\(\) with arguments string, array\{App\\Enums\\Role\:\:Admin, App\\Enums\\Role\:\:SuperAdmin\} and true will always evaluate to false\.$#'
-			identifier: function.impossibleType
 			count: 1
 			path: app/Http/Controllers/Admin/EvaluationController.php
 
@@ -411,12 +411,6 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$expert of method App\\Models\\Training\:\:evaluationDaysForExpert\(\) expects App\\Models\\SubjectMatterExpert, Illuminate\\Database\\Eloquent\\Model given\.$#'
 			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/Admin/EvaluationController.php
-
-		-
-			message: '#^Ternary operator condition is always false\.$#'
-			identifier: ternary.alwaysFalse
 			count: 1
 			path: app/Http/Controllers/Admin/EvaluationController.php
 
@@ -601,12 +595,6 @@ parameters:
 			path: app/Http/Controllers/Admin/ExportController.php
 
 		-
-			message: '#^Call to function abort_unless\(\) with false and 404 will always evaluate to false\.$#'
-			identifier: function.impossibleType
-			count: 1
-			path: app/Http/Controllers/Admin/ExportController.php
-
-		-
 			message: '#^Cannot call method isSettlement\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 2
@@ -621,12 +609,6 @@ parameters:
 		-
 			message: '#^Parameter \#2 \$target of static method App\\Support\\RescheduleService\:\:affected\(\) expects App\\Models\\Training\|null, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
 			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/Admin/ExportController.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:Participant will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
 			count: 1
 			path: app/Http/Controllers/Admin/ExportController.php
 
@@ -763,12 +745,6 @@ parameters:
 			path: app/Http/Controllers/Admin/ParticipantController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/ParticipantController.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$organization_address\.$#'
 			identifier: property.notFound
 			count: 1
@@ -859,18 +835,6 @@ parameters:
 			path: app/Http/Controllers/Admin/ParticipantController.php
 
 		-
-			message: '#^Call to function abort_unless\(\) with false and 404 will always evaluate to false\.$#'
-			identifier: function.impossibleType
-			count: 1
-			path: app/Http/Controllers/Admin/ParticipantController.php
-
-		-
-			message: '#^Call to function in_array\(\) with arguments string, array\{App\\Enums\\Role\:\:Admin, App\\Enums\\Role\:\:SuperAdmin, App\\Enums\\Role\:\:FieldOffice\} and true will always evaluate to false\.$#'
-			identifier: function.impossibleType
-			count: 1
-			path: app/Http/Controllers/Admin/ParticipantController.php
-
-		-
 			message: '#^Cannot access property \$value on string\.$#'
 			identifier: property.nonObject
 			count: 1
@@ -897,12 +861,6 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:through\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: int, name\: mixed, email\: string, mobile\: mixed, organization\: mixed, position\: mixed, salary_grade\: mixed, sector\: mixed, region\: mixed, field_office\: mixed, registrations\: mixed, active_registrations\: mixed, settled_registrations\: mixed, is_active\: bool, email_verified\: bool, profile_complete\: bool, url\: string\}, Closure\(App\\Models\\User\)\: array\{id\: int, name\: mixed, email\: string, mobile\: mixed, organization\: mixed, position\: mixed, salary_grade\: mixed, sector\: mixed, region\: mixed, field_office\: mixed, registrations\: mixed, active_registrations\: mixed, settled_registrations\: mixed, is_active\: bool, email_verified\: bool, profile_complete\: bool, url\: string\} given\.$#'
 			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/Admin/ParticipantController.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:Participant will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
 			count: 1
 			path: app/Http/Controllers/Admin/ParticipantController.php
 
@@ -1143,7 +1101,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Http/Controllers/Admin/RequestQueueController.php
 
 		-
@@ -1237,9 +1195,21 @@ parameters:
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/RosterController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$last_scanned_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/RosterController.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
-			count: 6
+			count: 5
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
@@ -1262,6 +1232,12 @@ parameters:
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$remarks\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/RosterController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$scan_count\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Controllers/Admin/RosterController.php
@@ -1297,7 +1273,19 @@ parameters:
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isActive\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/RosterController.php
+
+		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isReleased\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/Admin/RosterController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:url\(\)\.$#'
 			identifier: method.notFound
 			count: 1
 			path: app/Http/Controllers/Admin/RosterController.php
@@ -1348,12 +1336,6 @@ parameters:
 			message: '#^Cannot call method label\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 3
-			path: app/Http/Controllers/Admin/RosterController.php
-
-		-
-			message: '#^Cannot call method managesTrainings\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
@@ -1459,18 +1441,6 @@ parameters:
 			path: app/Http/Controllers/Admin/ScanLinkController.php
 
 		-
-			message: '#^Strict comparison using \!\=\= between string and App\\Enums\\Role\:\:SuperAdmin will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: app/Http/Controllers/Admin/ScanLinkController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/Admin/ScannerController.php
-
-		-
 			message: '#^Cannot call method format\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 2
@@ -1479,18 +1449,6 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Training\>\:\:map\(\) contains unresolvable type\.$#'
 			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/Admin/ScannerController.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between string and App\\Enums\\Role\:\:SuperAdmin will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: app/Http/Controllers/Admin/ScannerController.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:SuperAdmin will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
 			count: 1
 			path: app/Http/Controllers/Admin/ScannerController.php
 
@@ -1561,12 +1519,6 @@ parameters:
 			path: app/Http/Controllers/Admin/TrainingController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/TrainingController.php
-
-		-
 			message: '#^Cannot access property \$value on string\.$#'
 			identifier: property.nonObject
 			count: 5
@@ -1627,74 +1579,14 @@ parameters:
 			path: app/Http/Controllers/Admin/TrainingController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Cannot access property \$value on string\.$#'
-			identifier: property.nonObject
-			count: 3
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
 			message: '#^Cannot call method format\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1
 			path: app/Http/Controllers/Admin/UserController.php
 
 		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 3
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Cannot call method label\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Left side of && is always false\.$#'
-			identifier: booleanAnd.leftAlwaysFalse
-			count: 1
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,App\\Models\\User\>\:\:through\(\) contains unresolvable type\.$#'
 			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Property App\\Models\\User\:\:\$role \(string\) does not accept App\\Enums\\Role\.$#'
-			identifier: assign.propertyType
-			count: 2
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Result of && is always false\.$#'
-			identifier: booleanAnd.alwaysFalse
-			count: 1
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:CollectingOfficer will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:SuperAdmin will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 2
-			path: app/Http/Controllers/Admin/UserController.php
-
-		-
-			message: '#^Ternary operator condition is always false\.$#'
-			identifier: ternary.alwaysFalse
 			count: 1
 			path: app/Http/Controllers/Admin/UserController.php
 
@@ -1747,12 +1639,6 @@ parameters:
 			path: app/Http/Controllers/AgencyRequestController.php
 
 		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/AgencyRequestController.php
-
-		-
 			message: '#^Cannot call method label\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 2
@@ -1789,12 +1675,6 @@ parameters:
 			path: app/Http/Controllers/AgencyRequestController.php
 
 		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/Auth/GoogleController.php
-
-		-
 			message: '#^Method App\\Http\\Controllers\\Auth\\GoogleController\:\:link\(\) should return Illuminate\\Http\\RedirectResponse but returns Symfony\\Component\\HttpFoundation\\RedirectResponse\.$#'
 			identifier: return.type
 			count: 1
@@ -1817,12 +1697,6 @@ parameters:
 			identifier: nullCoalesce.offset
 			count: 1
 			path: app/Http/Controllers/Auth/GoogleController.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/Auth/LoginController.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$certificate_number\.$#'
@@ -1977,7 +1851,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$starts_at\.$#'
 			identifier: property.notFound
-			count: 4
+			count: 2
 			path: app/Http/Controllers/DashboardController.php
 
 		-
@@ -2001,12 +1875,6 @@ parameters:
 		-
 			message: '#^Cannot access property \$value on string\.$#'
 			identifier: property.nonObject
-			count: 1
-			path: app/Http/Controllers/DashboardController.php
-
-		-
-			message: '#^Cannot call method occupiesSlot\(\) on string\.$#'
-			identifier: method.nonObject
 			count: 1
 			path: app/Http/Controllers/DashboardController.php
 
@@ -2135,6 +2003,18 @@ parameters:
 			identifier: argument.unresolvableType
 			count: 1
 			path: app/Http/Controllers/EvaluationController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/EvaluationScanController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:dateRange\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/EvaluationScanController.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$accepts_promissory\.$#'
@@ -2317,12 +2197,6 @@ parameters:
 			path: app/Http/Controllers/PhysicalOrRequestController.php
 
 		-
-			message: '#^Cannot call method handlesPhysicalOrRequests\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/PhysicalOrRequestController.php
-
-		-
 			message: '#^Cannot call method label\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -2363,18 +2237,6 @@ parameters:
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Controllers/ProfileController.php
-
-		-
-			message: '#^Cannot call method label\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/ProfileController.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/ProfilePhotoController.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$duration_days\.$#'
@@ -2439,12 +2301,6 @@ parameters:
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isRunningToday\(\)\.$#'
 			identifier: method.notFound
-			count: 1
-			path: app/Http/Controllers/QrCodeController.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
 			count: 1
 			path: app/Http/Controllers/QrCodeController.php
 
@@ -2641,12 +2497,6 @@ parameters:
 			path: app/Http/Controllers/RegistrationController.php
 
 		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/RegistrationController.php
-
-		-
 			message: '#^Cannot call method label\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -2679,12 +2529,6 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$user_id\.$#'
 			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/RegistrationOutputController.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
 			count: 1
 			path: app/Http/Controllers/RegistrationOutputController.php
 
@@ -2851,52 +2695,10 @@ parameters:
 			path: app/Http/Controllers/TrainingRequestController.php
 
 		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Middleware/EnsureEmailIsVerified.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Middleware/EnsureProfileIsComplete.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Middleware/EnsureSiteIsAvailable.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Middleware/EnsureUserCollectsPayments.php
-
-		-
-			message: '#^Cannot access property \$value on string\.$#'
-			identifier: property.nonObject
+			message: '#^Call to function abort_unless\(\) with bool and 403 will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
 			count: 1
 			path: app/Http/Middleware/EnsureUserIsStaff.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Middleware/EnsureUserIsStaff.php
-
-		-
-			message: '#^Cannot access property \$value on string\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: app/Http/Middleware/HandleInertiaRequests.php
-
-		-
-			message: '#^Cannot call method label\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Middleware/HandleInertiaRequests.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$training\.$#'
@@ -3113,30 +2915,6 @@ parameters:
 			identifier: identical.alwaysFalse
 			count: 2
 			path: app/Models/Training.php
-
-		-
-			message: '#^Call to function in_array\(\) with arguments string, array\<int, App\\Enums\\Role\> and true will always evaluate to false\.$#'
-			identifier: function.impossibleType
-			count: 1
-			path: app/Models/User.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:FieldOffice will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: app/Models/User.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:Participant will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: app/Models/User.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\Role\:\:SuperAdmin will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 1
-			path: app/Models/User.php
 
 		-
 			message: '#^Cannot call method requesterMessage\(\) on string\.$#'
@@ -3787,6 +3565,72 @@ parameters:
 			path: app/Support/GlobalSearch.php
 
 		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$payment_amount\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$starts_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$training\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Cannot call method format\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 4
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Left side of \|\| is always false\.$#'
+			identifier: booleanOr.leftAlwaysFalse
+			count: 1
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\AgencyRequest\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Parameter \#1 \$training of static method App\\Support\\ParticipantAttention\:\:schedule\(\) expects App\\Models\\Training\|null, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
+			identifier: argument.type
+			count: 3
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\AgencyRequestStatus\:\:RequirementsSent will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Ternary operator condition is always false\.$#'
+			identifier: ternary.alwaysFalse
+			count: 2
+			path: app/Support/ParticipantAttention.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type string\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Support/ParticipantAttention.php
+
+		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$payment_required\.$#'
 			identifier: property.notFound
 			count: 2
@@ -3839,24 +3683,6 @@ parameters:
 			identifier: identical.alwaysFalse
 			count: 1
 			path: app/Support/PaymentService.php
-
-		-
-			message: '#^Call to function in_array\(\) with arguments string, array\{App\\Enums\\Role\:\:Admin, App\\Enums\\Role\:\:SuperAdmin\} and true will always evaluate to false\.$#'
-			identifier: function.impossibleType
-			count: 1
-			path: app/Support/PendingActionCounter.php
-
-		-
-			message: '#^Cannot call method handlesPhysicalOrRequests\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Support/PendingActionCounter.php
-
-		-
-			message: '#^Cannot call method isStaff\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Support/PendingActionCounter.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$user\.$#'

@@ -44,6 +44,7 @@ const props = defineProps({
                 // The supervisory-course supporting document. The classification
                 // of the training itself, and the stages of its proof.
                 'supervisory',
+                'practice',
                 'document_required',
                 'document_submitted',
                 'document_verified',
@@ -186,6 +187,21 @@ const variants = {
         classes: 'bg-csc-blue-tint text-csc-blue',
         icon: 'M12 3l2.5 5.5 6 .5-4.5 4 1.5 6-5.5-3-5.5 3 1.5-6-4.5-4 6-.5z',
         label: 'Supervisory Development',
+    },
+    /*
+     * A rehearsal scanning station: reaches real verdicts against a real roster
+     * and writes nothing.
+     *
+     * Warning treatment rather than the brand tint `supervisory` wears, even
+     * though both are facts rather than workflow stages. The distinction is
+     * what happens if the reader misses it: mistaking a supervisory course for
+     * an ordinary one costs nothing on that screen, while mistaking a practice
+     * door for a live one means a day of attendance that was never recorded.
+     */
+    practice: {
+        classes: 'bg-warning-soft text-warning',
+        icon: 'M9 3h6M10 3v6l-5 9a2 2 0 001.7 3h10.6a2 2 0 001.7-3l-5-9V3',
+        label: 'Practice',
     },
     document_required: {
         classes: 'bg-warning-soft text-warning',

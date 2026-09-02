@@ -5,6 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppBadge from '@/Components/AppBadge.vue';
+import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import { spansMultipleDays } from '@/dateRange';
@@ -14,6 +15,10 @@ const props = defineProps({
     trainings: { type: Object, required: true },
     filters: { type: Object, required: true },
     tabs: { type: Array, required: true },
+    /** `manage` is the pen: create and edit. Reading a roster needs neither. */
+    can: { type: Object, default: () => ({}) },
+    /** The office every head on this page belongs to, or null for the region. */
+    scopedTo: { type: String, default: null },
 });
 
 const search = ref(props.filters.search ?? '');
@@ -73,8 +78,20 @@ const totals = computed(() => {
                     class="w-full rounded-lg border border-csc-line bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue sm:max-w-xs"
                 />
 
-                <AppButton href="/admin/trainings/create" icon="plus">New Training</AppButton>
+                <AppButton v-if="can.manage" href="/admin/trainings/create" icon="plus">New Training</AppButton>
             </div>
+
+            <!--
+                Same notice the roster carries, for the same reason: every head
+                counted below is one of this office's, and a scoped figure that
+                does not say so is indistinguishable from a wrong one. The runs
+                themselves are the whole region's — a training with none of this
+                office's people still belongs on the list, at zero.
+            -->
+            <AppAlert v-if="scopedTo" tone="info">
+                Participant counts are for <strong>{{ scopedTo }}</strong> only. Every training in the region is
+                listed.
+            </AppAlert>
 
             <div class="flex flex-wrap gap-2" role="tablist" aria-label="Filter trainings by status">
                 <button
@@ -112,10 +129,14 @@ const totals = computed(() => {
                 <AppCard v-if="!trainings.data.length" :padded="false">
                     <AppEmptyState
                         title="No trainings found"
-                        description="Create one, or clear the filters if you were searching."
+                        :description="
+                            can.manage
+                                ? 'Create one, or clear the filters if you were searching.'
+                                : 'Clear the filters if you were searching.'
+                        "
                         icon="calendar"
                     >
-                        <template #action>
+                        <template v-if="can.manage" #action>
                             <AppButton href="/admin/trainings/create" icon="plus">Create Training</AppButton>
                         </template>
                     </AppEmptyState>
@@ -171,16 +192,19 @@ const totals = computed(() => {
                                         <Link :href="training.roster_url" class="text-xs font-semibold text-csc-blue hover:underline">
                                             Roster
                                         </Link>
-                                        <span class="px-2 text-csc-line">|</span>
-                                        <Link :href="training.edit_url" class="text-xs font-semibold text-csc-blue hover:underline">
-                                            Edit
-                                        </Link>
+                                        <template v-if="can.manage">
+                                            <span class="px-2 text-csc-line">|</span>
+                                            <Link :href="training.edit_url" class="text-xs font-semibold text-csc-blue hover:underline">
+                                                Edit
+                                            </Link>
+                                        </template>
                                     </td>
                                 </tr>
                             </tbody>
                             <!-- The footer spans the label columns, then one cell per
                                  payment bucket so a glance at the page gives the
-                                 regional totals without opening any roster. -->
+                                 totals without opening any roster — the region's,
+                                 or this office's where the rows are scoped. -->
                             <tfoot class="border-t border-csc-line bg-csc-blue-tint/60">
                                 <tr>
                                     <td colspan="2" class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-csc-ink-muted">
@@ -252,7 +276,13 @@ const totals = computed(() => {
                             <div class="mt-3 flex items-center justify-between border-t border-csc-line pt-3">
                                 <span class="flex gap-3">
                                     <Link :href="training.roster_url" class="text-xs font-semibold text-csc-blue">Roster</Link>
-                                    <Link :href="training.edit_url" class="text-xs font-semibold text-csc-blue">Edit</Link>
+                                    <Link
+                                        v-if="can.manage"
+                                        :href="training.edit_url"
+                                        class="text-xs font-semibold text-csc-blue"
+                                    >
+                                        Edit
+                                    </Link>
                                 </span>
                             </div>
                         </li>

@@ -102,11 +102,24 @@ const navGroups = [
                 roles: ['participant'],
                 icon: 'calendar',
             },
+            /*
+             * Every staff role, because that is who the route already lets in.
+             * `/admin/trainings` and the rosters under it sit in the outer
+             * staff group in routes/web.php — "field offices and management get
+             * the roster but not the pen" — but this item listed admin and
+             * superadmin only, so a field office had the page and no way to
+             * reach it except by typing the URL. The list that decides what a
+             * role can *do* is routes/web.php; this one decides what it can
+             * see, and the two disagreeing is how a screen goes missing.
+             *
+             * The pen is withheld on the page itself (`can.manage`), not here:
+             * hiding the whole list would take the roster with it.
+             */
             {
                 key: 'admin-trainings',
                 label: 'Manage Trainings',
                 href: '/admin/trainings',
-                roles: ['admin', 'superadmin'],
+                roles: STAFF_ROLES,
                 icon: 'calendar',
             },
             {

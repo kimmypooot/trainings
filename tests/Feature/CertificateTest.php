@@ -520,6 +520,28 @@ class CertificateTest extends TestCase
         $this->assertSame(0, Certificate::count());
     }
 
+    /*
+     * The other half of the rule above. The roster is open to every staff role,
+     * so a field office ran a session, saw "Issue Certificate" beside its own
+     * completed participants, clicked it and got an error page — the button was
+     * a 403 with a click on it. The page is told who may decide, and draws the
+     * roster read-only for everyone else.
+     */
+    public function test_the_roster_offers_certificate_issuing_only_to_hrd(): void
+    {
+        $registration = $this->completedRegistration();
+
+        $this->actingAs($this->staff(Role::FieldOffice))
+            ->get("/admin/trainings/{$registration->training_id}/roster")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('can.manage_roster', false));
+
+        $this->actingAs($this->staff())
+            ->get("/admin/trainings/{$registration->training_id}/roster")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('can.manage_roster', true));
+    }
+
     public function test_certificate_numbers_are_sequential_within_a_year(): void
     {
         $training = Training::factory()->create(['starts_at' => now()->addWeek()]);

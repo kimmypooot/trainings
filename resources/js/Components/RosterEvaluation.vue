@@ -31,12 +31,14 @@ defineProps({
             {{ evaluation.submitted }} of {{ evaluation.expected }}
         </p>
         <!--
-            Naming the days is the point: "day 2 outstanding" is what an office
-            can act on, where a bare 1/3 only says something is missing.
+            Naming the days is the point: "day 2 not submitted" is what an
+            office can act on, where a bare 1/3 only says something is missing.
+            The prop keeps the name `outstanding` because that is the service's
+            word for the days still owed; the reader gets the plain one.
         -->
         <p v-if="evaluation.outstanding.length" class="mt-0.5 text-2xs text-csc-ink-subtle">
             Day{{ evaluation.outstanding.length === 1 ? '' : 's' }}
-            {{ evaluation.outstanding.join(', ') }} outstanding
+            {{ evaluation.outstanding.join(', ') }} not submitted
         </p>
     </template>
 

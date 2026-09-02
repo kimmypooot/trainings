@@ -308,6 +308,21 @@ class UserManagementTest extends TestCase
             User::where('email', 'fieldoffice@csc.gov.ph')->value('field_office_id'),
             'The field office account must be scoped to an office.'
         );
+
+        /*
+         * And it collects. A participant pays at the field office nearest them,
+         * so the demo account has to be able to demonstrate the combination the
+         * designation exists for: scoped to one office and holding the till.
+         */
+        $officer = User::where('email', 'fieldoffice@csc.gov.ph')->firstOrFail();
+
+        $this->assertTrue($officer->collectsPayments());
+        $this->assertTrue($officer->isScopedToFieldOffice());
+
+        // Management is oversight, and must not pick the designation up.
+        $this->assertFalse(
+            User::where('email', 'management@csc.gov.ph')->firstOrFail()->collectsPayments()
+        );
     }
 
     public function test_a_participant_account_cannot_be_edited_here(): void

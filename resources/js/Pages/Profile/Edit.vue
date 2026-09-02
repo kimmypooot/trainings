@@ -1340,7 +1340,7 @@ onBeforeUnmount(() => {
                                 <AppTextarea
                                     v-model="form.organization_address"
                                     label="Agency / Company / Organization Address"
-                                    rows="3"
+                                    :rows="3"
                                     maxlength="500"
                                     placeholder="e.g. GOVERNMENT CENTER, PALO, LEYTE"
                                     uppercase

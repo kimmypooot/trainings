@@ -61,6 +61,18 @@ class Training extends Model
     }
 
     /**
+     * The scannable posters for this run's evaluation days.
+     *
+     * At most one per day — see the unique index — and only for days that
+     * collect a form, which is `evaluationDays()` and usually fewer than there
+     * are days in the run.
+     */
+    public function evaluationDayCodes(): HasMany
+    {
+        return $this->hasMany(EvaluationDayCode::class);
+    }
+
+    /**
      * The resource persons delivering this run, in the order HRD arranged them.
      *
      * The pivot's `days` narrows an expert to particular training days; null

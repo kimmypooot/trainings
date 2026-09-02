@@ -74,6 +74,17 @@ export const evaluationRatingValues = [
 
 export type EvaluationRating = (typeof evaluationRatingValues)[number];
 
+export const evaluationScanOutcomeValues = [
+    'open',
+    'submitted',
+    'blocked',
+    'not_registered',
+    'no_longer_scheduled',
+    'revoked',
+] as const;
+
+export type EvaluationScanOutcome = (typeof evaluationScanOutcomeValues)[number];
+
 export const paymentMethodValues = [
     'cash',
     'check',

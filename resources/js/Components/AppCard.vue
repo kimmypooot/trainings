@@ -93,9 +93,18 @@ const bodyId = useId();
         class="overflow-hidden rounded-xl border"
         :class="tone === 'brand' ? 'border-csc-blue/20 bg-csc-blue text-white' : 'border-csc-line bg-white'"
     >
+        <!--
+            A folded card is the header and nothing else, so the header has to
+            close the box itself: with only `pt-` on it the title sat hard
+            against the bottom border, which is the one bit of an accordion
+            everybody sees and nobody can unsee. The padding it gains when
+            folded is the same figure the body would have given it when open,
+            so the card does not change height around the text as it opens.
+        -->
         <header
             v-if="title || $slots.header || $slots.action"
             class="flex items-start justify-between gap-4 px-5 pt-5 sm:px-6 sm:pt-6"
+            :class="collapsible && title && !open ? 'pb-5 sm:pb-6' : ''"
         >
             <!--
                 Collapsible cards put the heading inside the control, so the

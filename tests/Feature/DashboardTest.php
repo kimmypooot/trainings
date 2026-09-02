@@ -8,8 +8,11 @@ use App\Models\Certificate;
 use App\Models\Profile;
 use App\Models\Training;
 use App\Models\User;
+use App\Support\AgencyRequestService;
 use App\Support\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -58,11 +61,75 @@ class DashboardTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page->where('attention', []));
     }
 
-    public function test_an_unsettled_fee_is_surfaced_as_something_owed(): void
+    /**
+     * An outstanding item says which training it is about.
+     *
+     * The count on its own ("a training fee needs settling") restated the
+     * errand without advancing it — the participant still had to open the
+     * payments screen to find out which fee. The row now carries the training,
+     * the amount and when it starts.
+     */
+    public function test_an_unsettled_fee_is_surfaced_with_the_training_it_belongs_to(): void
     {
         $user = $this->completedUser();
+        $startsAt = now()->addWeeks(2);
+        $endsAt = now()->addWeeks(2)->addDays(2);
 
-        RegistrationService::register($user, Training::factory()->paid()->create());
+        $training = Training::factory()->paid()->create([
+            'title' => 'Public Service Ethics',
+            'payment_amount' => 1500,
+            'starts_at' => $startsAt,
+            'ends_at' => $endsAt,
+        ]);
+
+        RegistrationService::register($user, $training);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) use ($startsAt, $endsAt) {
+                $attention = $page->toArray()['props']['attention'];
+
+                $this->assertCount(1, $attention);
+                $this->assertSame('payments', $attention[0]['queue']);
+                $this->assertSame(route('payments.index'), $attention[0]['href']);
+                $this->assertSame('Public Service Ethics', $attention[0]['subject']);
+                $this->assertSame('1500.00', (string) $attention[0]['amount']);
+
+                // The dates are what tell one run of a repeated programme from
+                // another, so they travel on every row — pre-formatted, because
+                // the page pairs them through dateRange.ts.
+                $this->assertSame($startsAt->format('d M Y'), $attention[0]['starts_at']);
+                $this->assertSame($endsAt->format('d M Y'), $attention[0]['ends_at']);
+
+                // Nothing to add: the training has not begun, and the dates
+                // above already say when it does.
+                $this->assertNull($attention[0]['detail']);
+            });
+    }
+
+    /**
+     * A fee owed on a training already under way says so.
+     *
+     * The dates alone do not: the reader would have to know today's date and
+     * make the comparison themselves, which is the work the row exists to save.
+     */
+    public function test_a_fee_owed_on_a_started_training_is_marked_as_under_way(): void
+    {
+        $user = $this->completedUser();
+        $training = Training::factory()->paid()->create([
+            'starts_at' => now()->addWeek(),
+            'ends_at' => now()->addWeek()->addDay(),
+        ]);
+
+        // Registered while it was still open, then the run began — which is
+        // the only way to arrive at this state, since registration closes once
+        // a training has started.
+        RegistrationService::register($user, $training);
+        $training->forceFill([
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addDay(),
+        ])->save();
 
         $this->actingAs($user)
             ->get('/dashboard')
@@ -70,9 +137,118 @@ class DashboardTest extends TestCase
             ->assertInertia(function (AssertableInertia $page) {
                 $attention = $page->toArray()['props']['attention'];
 
+                $this->assertSame('Already under way', $attention[0]['detail']);
+            });
+    }
+
+    /**
+     * The block and the sidebar badge count the same things.
+     *
+     * They were two statements of one rule and are now one, so this is the
+     * guard on that staying true: a badge showing work the block does not list
+     * is work the participant cannot find, and a number they learn to ignore.
+     */
+    public function test_the_attention_block_and_the_sidebar_badge_agree(): void
+    {
+        $user = $this->completedUser();
+
+        RegistrationService::register($user, Training::factory()->paid()->create());
+        RegistrationService::register($user, Training::factory()->paid()->create());
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $props = $page->toArray()['props'];
+
+                $this->assertSame(2, $props['pendingActions']['payments']);
+                $this->assertCount(2, $props['attention']);
+            });
+    }
+
+    /**
+     * An agency request says which stage it is stuck at, and on what.
+     *
+     * Worth its own test beyond the copy it asserts: the row is chosen by
+     * comparing the model's cast `status` against the enum in PHP, and static
+     * analysis reads that attribute as a plain string and calls the comparison
+     * dead. It is not — the cast makes it an enum at runtime — and this is what
+     * says so, so the baselined warning stays a warning about the stubs rather
+     * than cover for a branch that never runs.
+     */
+    public function test_an_agency_request_names_the_training_and_the_stage(): void
+    {
+        Storage::fake('local');
+
+        $agency = $this->completedUser();
+        $staff = User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]);
+        $pdf = fn (string $name) => UploadedFile::fake()->create($name, 64, 'application/pdf');
+
+        $request = AgencyRequestService::submit($agency, [
+            'agency_name' => 'Municipality of Palo',
+            'training_title' => 'Records Management',
+            'proposed_start' => now()->addMonth()->toDateString(),
+            'proposed_end' => now()->addMonth()->addDays(2)->toDateString(),
+            'proposed_venue' => 'Municipal Hall, Palo',
+            'expected_participants' => 30,
+        ], $pdf('letter.pdf'));
+
+        AgencyRequestService::assign($request, $staff);
+        AgencyRequestService::sendRequirements(
+            $request->fresh(),
+            $staff,
+            'Please return the signed confirmation form.',
+            $pdf('response.pdf'),
+            $pdf('form.pdf'),
+        );
+
+        $this->actingAs($agency)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) use ($request) {
+                $attention = $page->toArray()['props']['attention'];
+
                 $this->assertCount(1, $attention);
-                $this->assertSame('payments', $attention[0]['key']);
-                $this->assertSame('/my/payments', $attention[0]['href']);
+                $this->assertSame('agency-requests', $attention[0]['queue']);
+                $this->assertSame(
+                    'Requirements sent — your confirmation is needed',
+                    $attention[0]['label'],
+                );
+                $this->assertSame('Records Management', $attention[0]['subject']);
+                $this->assertSame($request->request_code, $attention[0]['detail']);
+
+                // No schedule has been agreed at this stage, so the row shows
+                // the dates the agency proposed rather than nothing.
+                $this->assertSame(now()->addMonth()->format('d M Y'), $attention[0]['starts_at']);
+                $this->assertSame(now()->addMonth()->addDays(2)->format('d M Y'), $attention[0]['ends_at']);
+            });
+    }
+
+    /**
+     * A long queue summarises rather than filling the page.
+     *
+     * Detail is the point of the block, but four near-identical rows push the
+     * rest of the dashboard off the screen to say one thing.
+     */
+    public function test_a_long_queue_is_capped_with_an_overflow_row(): void
+    {
+        $user = $this->completedUser();
+
+        foreach (range(1, 5) as $ignored) {
+            RegistrationService::register($user, Training::factory()->paid()->create());
+        }
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $page) {
+                $attention = $page->toArray()['props']['attention'];
+
+                // Three detailed rows, then one standing for the other two.
+                $this->assertCount(4, $attention);
+                $this->assertSame('payments-more', $attention[3]['key']);
+                $this->assertSame('2 more payment matters', $attention[3]['label']);
+                $this->assertSame(route('payments.index'), $attention[3]['href']);
             });
     }
 
@@ -174,6 +350,32 @@ class DashboardTest extends TestCase
                 ->where('recentActivity.0.group', 'Today')
                 ->where('recentActivity.1.kind', 'registered')
                 ->where('recentActivity.1.group', 'Earlier')
+                ->etc()
+            );
+    }
+
+    /**
+     * A future-dated event does not claim to have happened this week.
+     *
+     * Carbon 3 diffs are signed, so a timestamp ahead of now is negative and
+     * slips past any `< 7` window however far out it is. The symptom was a row
+     * reading "2 weeks from now" at the top of a feed of things that had
+     * happened. Seeded demo data carries such rows, and a clock skew or a
+     * backdated import can produce them in earnest.
+     */
+    public function test_a_future_dated_event_is_not_banded_as_this_week(): void
+    {
+        $user = $this->completedUser();
+        $registration = RegistrationService::register($user, Training::factory()->create());
+        $registration->forceFill(['registered_at' => now()->addWeeks(2)])->save();
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('recentActivity.0.kind', 'registered')
+                ->where('recentActivity.0.group', 'Earlier')
+                ->where('recentActivity.0.at_label', now()->addWeeks(2)->format('d M Y'))
                 ->etc()
             );
     }

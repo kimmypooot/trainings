@@ -17,6 +17,16 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 
+/**
+ * @property Role $role
+ *
+ * Larastan reads casts from the `$casts` property, not from the `casts()`
+ * method this model uses, so it falls back to the column type and every
+ * `$user->role->…` call reads as a method call on a string. The column is cast
+ * to the enum on line 55; this says so in the one place the analyser looks.
+ * It is a declaration of what the property is, not a suppression of the check —
+ * a wrong role comparison still fails here.
+ */
 #[Fillable(['name', 'email', 'password', 'google_id', 'google_email'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmailContract
@@ -162,6 +172,18 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $this->role === Role::Participant;
     }
 
+    /**
+     * The office a *staff* account is limited to — not the participant's own
+     * office, which lives on their profile.
+     *
+     * Annotated, unlike its neighbours, because it is read for a name
+     * (`fieldOffice?->name`) rather than just compared or counted. Without the
+     * generic the relation resolves to a bare Model and the read looks like an
+     * undefined property, which is the single biggest line item in the PHPStan
+     * baseline. This is the type the relation has always had, written down.
+     *
+     * @return BelongsTo<FieldOffice, $this>
+     */
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);

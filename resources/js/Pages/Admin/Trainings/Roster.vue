@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
@@ -11,6 +11,7 @@ import AppInput from '@/Components/AppInput.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
+import AppTabs from '@/Components/AppTabs.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 // The roster renders every participant twice — a table on a wide screen,
 // stacked cards on a narrow one. These three hold everything the two layouts
@@ -22,6 +23,7 @@ import RosterEvaluation from '@/Components/RosterEvaluation.vue';
 // Issuing a door owns its own world — a form, a clipboard, and a code that
 // exists for exactly one render — none of which is roster state.
 import RosterScanStations from '@/Components/RosterScanStations.vue';
+import RosterEvaluationCodes from '@/Components/RosterEvaluationCodes.vue';
 import { formatDateRange } from '@/dateRange';
 import { useDownload } from '@/useDownload';
 
@@ -33,6 +35,8 @@ const props = defineProps({
     attendanceStatuses: { type: Array, default: () => [] },
     supervisoryDocumentStatuses: { type: Array, default: () => [] },
     scanLinks: { type: Array, default: () => [] },
+    /** Null for roles that may not cut evaluation codes; the panel is then absent. */
+    evaluationCodes: { type: Object, default: null },
     transferTargets: { type: Array, default: () => [] },
     officeBreakdown: { type: Array, default: () => [] },
     revenue: { type: Object, default: () => ({}) },
@@ -234,9 +238,11 @@ const cancelRegistration = (registration) => {
     });
 };
 
-// Matches RegistrationStatus::isCancellable() — the server refuses the rest.
+// Matches RegistrationStatus::isCancellable() — the server refuses the rest,
+// and cancelling on a participant's behalf is HRD's decision, not every staff
+// role that can read this roster.
 const isCancellable = (registration) =>
-    ['pending', 'approved', 'waitlisted'].includes(registration.status);
+    props.can.manage_roster && ['pending', 'approved', 'waitlisted'].includes(registration.status);
 
 const pendingCount = computed(() => props.registrations.filter((r) => r.status === 'pending').length);
 
@@ -252,6 +258,8 @@ const onlyNotCheckedInToday = ref(false);
 // The supervisory-document filter, meaningful only when the training is
 // supervisory and someone has actually been asked to attach a document.
 const docFilter = ref('all');
+// And the evaluations tab's own filter — see evaluationChips.
+const evalFilter = ref('all');
 
 // The training day that is happening right now, if any. The "not checked in
 // today" view has nothing to say on a day the training is not running.
@@ -315,9 +323,72 @@ const notCheckedInCount = computed(
     () => props.registrations.filter(notCheckedInToday).length
 );
 
-// Chips in display order. Statuses that never occur on this roster simply read
-// as zero, which is easier to reason about than a chip vanishing mid-session.
-const statusChips = ['pending', 'approved', 'completed', 'cancelled', 'waitlisted'];
+/*
+ * Chips in display order. Statuses that never occur on this roster simply read
+ * as zero, which is easier to reason about than a chip vanishing mid-session.
+ *
+ * Each carries its own label rather than printing the enum value: the stored
+ * string is `pending`, but nothing the office reads should be lowercase machine
+ * vocabulary, and the badge in the row beside it already says Pending Approval.
+ * The two now agree.
+ */
+const statusChips = [
+    { value: 'pending', label: 'Pending Approval' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'waitlisted', label: 'Waitlisted' },
+];
+
+/*
+ * Where a participant stands on the evaluations they owe.
+ *
+ * The Evaluations tab needed its own vocabulary. It had been showing the
+ * registration status chips, which is how it came to offer "Pending Approval"
+ * on a list headed Evaluation Responses — a phrase that reads as an evaluation
+ * awaiting a verdict, when it actually meant the person's *registration* had
+ * not been approved yet. Nothing in this app approves an evaluation; a form is
+ * submitted or it is not.
+ *
+ * Three states, and they partition the roster: nothing is expected of this
+ * person, something is expected and still missing, or everything expected has
+ * arrived. `expected` is 0 for anyone holding no slot, which is what makes the
+ * first bucket the honest home for a cancelled or rejected registration rather
+ * than putting it on a chase list nobody can act on.
+ *
+ * The labels say submitted and not submitted, because that is the only thing
+ * that ever happens to one of these forms. "Outstanding" was the word here and
+ * in the office table, meaning an unsubmitted form in one place and an unpaid
+ * fee in the other — a word doing two jobs is a word doing neither.
+ */
+const evaluationState = (registration) => {
+    if (!registration.evaluation?.expected) {
+        return 'not-required';
+    }
+
+    return registration.evaluation.outstanding.length ? 'not-submitted' : 'submitted';
+};
+
+// Not submitted first: it is the only one of the three anybody opens this tab
+// to act on.
+const evaluationChips = [
+    { value: 'not-submitted', label: 'Not Submitted' },
+    // "All", because a two-day run collects two forms and one of them arriving
+    // is not the same as being done.
+    { value: 'submitted', label: 'All Submitted' },
+    { value: 'not-required', label: 'Not Required' },
+];
+
+const evaluationCounts = computed(() => {
+    const counts = { all: props.registrations.length };
+
+    for (const registration of props.registrations) {
+        const state = evaluationState(registration);
+        counts[state] = (counts[state] ?? 0) + 1;
+    }
+
+    return counts;
+});
 
 const sortKey = ref(null);
 const sortDir = ref('asc');
@@ -352,8 +423,10 @@ const filtered = computed(() => {
         const matchesDoc = docFilter.value === 'all'
             || registration.supervisory_document?.status === docFilter.value;
         const matchesToday = !onlyNotCheckedInToday.value || notCheckedInToday(registration);
+        const matchesEvaluation = evalFilter.value === 'all'
+            || evaluationState(registration) === evalFilter.value;
 
-        return matchesQuery && matchesStatus && matchesToday && matchesDoc;
+        return matchesQuery && matchesStatus && matchesToday && matchesDoc && matchesEvaluation;
     });
 
     if (sortKey.value) {
@@ -380,7 +453,8 @@ const hasActiveFilters = computed(
         Boolean(query.value.trim()) ||
         statusFilter.value !== 'all' ||
         onlyNotCheckedInToday.value ||
-        docFilter.value !== 'all'
+        docFilter.value !== 'all' ||
+        evalFilter.value !== 'all'
 );
 
 const clearFilters = () => {
@@ -388,6 +462,7 @@ const clearFilters = () => {
     statusFilter.value = 'all';
     onlyNotCheckedInToday.value = false;
     docFilter.value = 'all';
+    evalFilter.value = 'all';
 };
 
 // Document status chips for a supervisory training, with live counts.
@@ -404,6 +479,156 @@ const docStatusCounts = computed(() => {
 
     return counts;
 });
+
+/* -------------------------------------------------------------------------- */
+/* Tabs                                                                        */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * The roster is four jobs, not one screen.
+ *
+ * It used to be all of them at once: the payment buttons and the attendance
+ * control sat in the same row, the evaluation codes and the office split under
+ * it, and an officer taking money at the desk had a day-picker in front of them
+ * that had nothing to do with the task. Reading the page meant deciding which
+ * half of every row to ignore. So each job gets a tab, and the roster's columns
+ * follow the tab rather than all showing at once.
+ *
+ * The list and the filters stay shared across the tabs — it is the same twelve
+ * people either way, and re-typing a search to go from paying someone to
+ * marking them present would be its own annoyance.
+ *
+ * A tab that would be empty is absent, never disabled: a run with no experts
+ * has no evaluations to chase, and a single-office run has nothing to split.
+ */
+const tabs = computed(() => {
+    const list = [
+        {
+            key: 'participants',
+            label: 'Participants',
+            icon: 'users',
+            count: props.registrations.length,
+        },
+        {
+            key: 'attendance',
+            label: 'Attendance',
+            icon: 'check-circle',
+            count: props.summary.checked_in_today,
+        },
+    ];
+
+    if (props.training.collects_evaluations || props.evaluationCodes) {
+        list.push({
+            key: 'evaluations',
+            label: 'Evaluations',
+            icon: 'clipboard',
+            // The chase list, not the response rate — the same figure the
+            // summary tile above carries.
+            count: props.training.collects_evaluations
+                ? props.summary.evaluations_outstanding
+                : null,
+        });
+    }
+
+    if (props.officeBreakdown.length > 1) {
+        list.push({
+            key: 'offices',
+            label: 'By Field Office',
+            icon: 'building',
+            count: props.officeBreakdown.length,
+        });
+    }
+
+    return list;
+});
+
+/*
+ * The open tab lives in the URL fragment, so a reload, the back button and a
+ * link pasted to a colleague all land on the section that was being worked in.
+ * Validated against the tabs that actually exist — a stale `#offices` on a
+ * one-office run falls back rather than rendering nothing.
+ */
+const tabInHash = () => {
+    const key = window.location.hash.replace('#', '');
+
+    return tabs.value.some((entry) => entry.key === key) ? key : null;
+};
+
+const tab = ref(tabInHash() ?? 'participants');
+
+/*
+ * A fragment can change without the document reloading — someone edits the
+ * address bar, or follows a link to `#attendance` from this same page. Without
+ * this the URL would say one section and the page would show another.
+ */
+const followHash = () => {
+    tab.value = tabInHash() ?? tab.value;
+};
+
+onMounted(() => window.addEventListener('hashchange', followHash));
+onBeforeUnmount(() => window.removeEventListener('hashchange', followHash));
+
+watch(tab, (value) => {
+    window.history.replaceState(null, '', `#${value}`);
+
+    /*
+     * A filter belonging to the tab being left is dropped rather than left
+     * running invisibly. "Not checked in today" hides most of the roster and
+     * its chip only exists on Attendance, so carrying it into Participants
+     * would be a short list with no visible reason for being short.
+     */
+    if (value !== 'attendance') {
+        onlyNotCheckedInToday.value = false;
+    }
+
+    if (value !== 'participants') {
+        docFilter.value = 'all';
+        selected.value = new Set();
+    }
+
+    if (value !== 'evaluations') {
+        evalFilter.value = 'all';
+    }
+});
+
+/*
+ * Which columns this tab is about. Both layouts read this one object, so the
+ * table and the cards cannot end up showing different fields — the drift the
+ * shared Roster* components were pulled out to stop.
+ */
+const shows = computed(() => ({
+    /*
+     * The checkboxes exist for the bulk bar, and every bulk action — approve,
+     * waitlist, reject, complete, move to another run — is HRD's. A reader who
+     * cannot apply one is offered no selection to apply it to.
+     */
+    select: tab.value === 'participants' && props.can.manage_roster,
+    document: props.training.is_supervisory && tab.value === 'participants',
+    attendance: tab.value === 'attendance',
+    evaluation: props.training.collects_evaluations && tab.value === 'evaluations',
+    actions: tab.value === 'participants',
+}));
+
+const rosterCardTitle = computed(() => ({
+    participants: 'Participants',
+    attendance: `Attendance · ${activeDayLabel.value}`,
+    evaluations: 'Evaluation Responses',
+}[tab.value] ?? 'Participants'));
+
+const rosterCardSubtitle = computed(() => ({
+    /*
+     * The subtitle names what is actually in front of *this* reader. Payments
+     * are a designation, not a role — a field office that has not been made a
+     * collecting officer gets no Record Payment button and no Revenue panel, so
+     * promising "and payments" listed a thing that is not on their screen and
+     * sent them looking for it.
+     */
+    participants: props.can.record_payment
+        ? 'Registrations, supporting documents and payments.'
+        : 'Registrations and supporting documents.',
+    attendance: 'Mark the day in front of you. Nothing here changes a payment.',
+    evaluations: 'Who has submitted, and who still owes a form.',
+}[tab.value] ?? null));
 
 /* -------------------------------------------------------------------------- */
 /* Selection                                                                   */
@@ -557,7 +782,6 @@ const PRIME_HRM_RATE = 0.2;
 
 const money = (value) =>
     Number(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 const primeHrm = computed(() => {
     const gross = Number(props.training.payment_amount ?? 0);
     const discount = Math.round(gross * PRIME_HRM_RATE * 100) / 100;
@@ -588,15 +812,28 @@ watch(
     }
 );
 
-// Read off the method list the server sent, not restated here. This was a
-// hardcoded list of values, which meant adding a method left the reference
-// field hidden on a rule that still demanded it — the error then landing on an
-// input that is not on the page.
-const methodNeedsReference = computed(
+// Whether this method has a reference number at all — not whether one is
+// demanded, which nothing at this counter is. Read off the method list the
+// server sent, not restated here: this was a hardcoded list of values, which
+// meant adding a method left the field hidden on a rule that still wanted it.
+const methodCollectsReference = computed(
     () => props.paymentMethods.find((method) => method.value === paymentForm.payment_method)
-        ?.requires_reference ?? false
+        ?.collects_reference ?? false
 );
 const methodIsSettlement = computed(() => paymentForm.payment_method !== 'promissory');
+
+/*
+ * Switching to a method that carries no reference — cash, a promissory note,
+ * an official receipt — takes the field off the form, and anything typed into
+ * it before the switch would otherwise be posted from behind the scenes. A
+ * cheque number filed against a cash payment is not a typo anyone can see.
+ */
+watch(methodCollectsReference, (collects) => {
+    if (!collects) {
+        paymentForm.reference_number = '';
+        paymentForm.clearErrors('reference_number');
+    }
+});
 
 const submitPayment = () => {
     paymentForm.post(`/admin/registrations/${paying.value.id}/payment`, {
@@ -748,7 +985,20 @@ const printedAt = new Date().toLocaleString();
                 </div>
             </AppCard>
 
-            <AppAlert v-if="awaitingCertificates" tone="info" title="Certificates ready to issue" class="print:hidden">
+            <AppTabs
+                v-model="tab"
+                :tabs="tabs"
+                variant="underline"
+                aria-label="Roster sections"
+                class="print:hidden"
+            />
+
+            <AppAlert
+                v-if="tab === 'participants' && awaitingCertificates && can.manage_roster"
+                tone="info"
+                title="Certificates ready to issue"
+                class="print:hidden"
+            >
                 <p>
                     {{ awaitingCertificates }} completed participant(s) have no certificate yet.
                 </p>
@@ -756,7 +1006,12 @@ const printedAt = new Date().toLocaleString();
             </AppAlert>
 
             <!-- Catering needs this as a list, not buried per-row -->
-            <AppAlert v-if="restrictions.length" tone="warning" title="Food restrictions for catering" class="print:hidden">
+            <AppAlert
+                v-if="tab === 'participants' && restrictions.length"
+                tone="warning"
+                title="Food restrictions for catering"
+                class="print:hidden"
+            >
                 <ul class="mt-1 space-y-1">
                     <li v-for="item in restrictions" :key="item.id">
                         <span class="font-medium">{{ item.name }}</span> — {{ item.food_restrictions }}
@@ -764,7 +1019,33 @@ const printedAt = new Date().toLocaleString();
                 </ul>
             </AppAlert>
 
-            <AppCard title="Participants" :padded="registrations.length > 0" class="print:hidden">
+            <!--
+                A door to scan people in belongs with the day it is scanning
+                for, so the station sits at the top of Attendance rather than
+                four screens below a roster nobody scrolled that far down.
+            -->
+            <RosterScanStations v-if="tab === 'attendance'" :training="training" :scan-links="scanLinks" />
+
+            <!--
+                The same argument at the other end of a session: the poster
+                people scan on their way out heads the Evaluations tab.
+                Withheld entirely from roles that cannot cut a code — the prop
+                arrives null for them rather than the card rendering disabled
+                controls.
+            -->
+            <RosterEvaluationCodes
+                v-if="tab === 'evaluations' && evaluationCodes"
+                :training="training"
+                :codes="evaluationCodes"
+            />
+
+            <AppCard
+                v-if="tab !== 'offices' && !(tab === 'evaluations' && !training.collects_evaluations)"
+                :title="rosterCardTitle"
+                :subtitle="rosterCardSubtitle"
+                :padded="registrations.length > 0"
+                class="print:hidden"
+            >
                 <AppEmptyState
                     v-if="!registrations.length"
                     title="No one has registered yet"
@@ -789,30 +1070,39 @@ const printedAt = new Date().toLocaleString();
                         class="w-full rounded-lg border border-csc-ink/20 bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
                     />
 
-                    <div class="flex flex-wrap items-center gap-1.5">
+                    <!--
+                        Every chip row says what it filters. Without the word in
+                        front of it this one was just five bare statuses, and on
+                        the Evaluations tab that read as the state of the *form*
+                        rather than of the registration.
+                    -->
+                    <div v-if="tab !== 'evaluations'" class="flex flex-wrap items-center gap-1.5">
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
+                            Registration
+                        </span>
                         <button
-                            v-for="chip in ['all', ...statusChips]"
-                            :key="chip"
+                            v-for="chip in [{ value: 'all', label: 'All' }, ...statusChips]"
+                            :key="chip.value"
                             type="button"
                             class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                             :class="
-                                statusFilter === chip
+                                statusFilter === chip.value
                                     ? 'bg-csc-blue text-white shadow-sm'
                                     : 'bg-csc-blue-tint/60 text-csc-ink-muted hover:text-csc-ink'
                             "
-                            @click="statusFilter = chip"
+                            @click="statusFilter = chip.value"
                         >
-                            {{ chip === 'all' ? 'All' : chip }}
+                            {{ chip.label }}
                             <span
                                 class="ml-1 text-xs"
-                                :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
+                                :class="statusFilter === chip.value ? 'text-white/80' : 'text-csc-ink-subtle'"
                             >
-                                {{ statusCounts[chip] ?? 0 }}
+                                {{ statusCounts[chip.value] ?? 0 }}
                             </span>
                         </button>
 
                         <button
-                            v-if="todayDay !== null"
+                            v-if="tab === 'attendance' && todayDay !== null"
                             type="button"
                             class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                             :class="
@@ -833,12 +1123,43 @@ const printedAt = new Date().toLocaleString();
                     </div>
 
                     <!--
+                        The Evaluations tab's own vocabulary. A form has been
+                        submitted or it has not; nothing here is awaiting
+                        anyone's approval, and nothing here is about money.
+                    -->
+                    <div v-else class="flex flex-wrap items-center gap-1.5">
+                        <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
+                            Evaluation
+                        </span>
+                        <button
+                            v-for="chip in [{ value: 'all', label: 'All' }, ...evaluationChips]"
+                            :key="chip.value"
+                            type="button"
+                            class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                evalFilter === chip.value
+                                    ? 'bg-csc-blue text-white shadow-sm'
+                                    : 'bg-csc-blue-tint/60 text-csc-ink-muted hover:text-csc-ink'
+                            "
+                            @click="evalFilter = chip.value"
+                        >
+                            {{ chip.label }}
+                            <span
+                                class="ml-1 text-xs"
+                                :class="evalFilter === chip.value ? 'text-white/80' : 'text-csc-ink-subtle'"
+                            >
+                                {{ evaluationCounts[chip.value] ?? 0 }}
+                            </span>
+                        </button>
+                    </div>
+
+                    <!--
                         Which day the attendance column is editing. Only worth
                         showing on a multi-day run — a one-day course has no
                         choice to make.
                     -->
                     <div
-                        v-if="training.days.length > 1"
+                        v-if="tab === 'attendance' && training.days.length > 1"
                         class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3 print:hidden"
                     >
                         <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
@@ -874,30 +1195,30 @@ const printedAt = new Date().toLocaleString();
                         is per-status for the whole page.
                     -->
                     <div
-                        v-if="training.is_supervisory"
+                        v-if="shows.document"
                         class="flex flex-wrap items-center gap-1.5 border-t border-csc-line pt-3"
                     >
                         <span class="mr-1 text-xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                             Document
                         </span>
                         <button
-                            v-for="chip in ['all', ...supervisoryDocumentStatuses.map((s) => s.value)]"
-                            :key="chip"
+                            v-for="chip in [{ value: 'all', label: 'All' }, ...supervisoryDocumentStatuses]"
+                            :key="chip.value"
                             type="button"
                             class="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                             :class="
-                                docFilter === chip
+                                docFilter === chip.value
                                     ? 'bg-csc-blue text-white shadow-sm'
                                     : 'bg-csc-blue-tint/60 text-csc-ink-muted hover:text-csc-ink'
                             "
-                            @click="docFilter = chip"
+                            @click="docFilter = chip.value"
                         >
-                            {{ chip === 'all' ? 'All' : chip }}
+                            {{ chip.label }}
                             <span
                                 class="ml-1 text-xs"
-                                :class="docFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
+                                :class="docFilter === chip.value ? 'text-white/80' : 'text-csc-ink-subtle'"
                             >
-                                {{ docStatusCounts[chip] ?? 0 }}
+                                {{ docStatusCounts[chip.value] ?? 0 }}
                             </span>
                         </button>
                     </div>
@@ -930,7 +1251,7 @@ const printedAt = new Date().toLocaleString();
                     bar is gone and this one can sit flush.
                 -->
                 <div
-                    v-if="selected.size"
+                    v-if="shows.select && selected.size"
                     class="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-(--z-tabbar) -mx-5 flex flex-wrap items-center gap-3 border-t border-csc-line bg-white/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:bottom-0 print:hidden"
                 >
                     <p class="text-sm font-medium text-csc-ink" role="status">
@@ -997,7 +1318,7 @@ const printedAt = new Date().toLocaleString();
                     <table class="w-full min-w-160 text-left text-sm">
                         <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
-                                <th scope="col" class="w-10 py-3 pl-5">
+                                <th v-if="shows.select" scope="col" class="w-10 py-3 pl-5">
                                     <input
                                         type="checkbox"
                                         class="size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1044,7 +1365,7 @@ const printedAt = new Date().toLocaleString();
                                         Status{{ sortIndicator('status') }}
                                     </button>
                                 </th>
-                                <th v-if="training.is_supervisory" scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
+                                <th v-if="shows.document" scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     <button
                                         type="button"
                                         class="inline-flex items-center gap-0.5 uppercase hover:text-csc-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
@@ -1053,7 +1374,7 @@ const printedAt = new Date().toLocaleString();
                                         Document{{ sortIndicator('supervisory_document.status_label') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
+                                <th v-if="shows.attendance" scope="col" class="px-5 py-3 font-semibold text-csc-ink-muted">
                                     Attendance
                                     <span
                                         v-if="training.days.length > 1"
@@ -1069,7 +1390,7 @@ const printedAt = new Date().toLocaleString();
                                     fault rather than as "not applicable".
                                 -->
                                 <th
-                                    v-if="training.collects_evaluations"
+                                    v-if="shows.evaluation"
                                     scope="col"
                                     class="px-5 py-3 font-semibold text-csc-ink-muted"
                                 >
@@ -1081,7 +1402,13 @@ const printedAt = new Date().toLocaleString();
                                         Evaluation{{ sortIndicator('evaluation.submitted') }}
                                     </button>
                                 </th>
-                                <th scope="col" class="px-5 py-3 text-right font-semibold text-csc-ink-muted">Action</th>
+                                <th
+                                    v-if="shows.actions"
+                                    scope="col"
+                                    class="px-5 py-3 text-right font-semibold text-csc-ink-muted"
+                                >
+                                    Action
+                                </th>
                             </tr>
                         </thead>
                         <!--
@@ -1101,7 +1428,7 @@ const printedAt = new Date().toLocaleString();
                                 :key="registration.id"
                                 :class="isSelected(registration.id) ? 'bg-csc-blue-tint/50' : ''"
                             >
-                                <td class="py-3.5 pl-5">
+                                <td v-if="shows.select" class="py-3.5 pl-5">
                                     <input
                                         v-if="['pending', 'approved'].includes(registration.status)"
                                         type="checkbox"
@@ -1133,7 +1460,7 @@ const printedAt = new Date().toLocaleString();
                                         {{ registration.review_remarks }}
                                     </p>
                                 </td>
-                                <td v-if="training.is_supervisory" class="px-5 py-3.5">
+                                <td v-if="shows.document" class="px-5 py-3.5">
                                     <RosterDocument
                                         :document="registration.supervisory_document"
                                         :name="registration.name"
@@ -1141,7 +1468,7 @@ const printedAt = new Date().toLocaleString();
                                         @decide="(decision) => decideDocument(registration, decision)"
                                     />
                                 </td>
-                                <td class="px-5 py-3.5">
+                                <td v-if="shows.attendance" class="px-5 py-3.5">
                                     <template v-if="isMarkable(registration)">
                                         <div
                                             class="inline-flex overflow-hidden rounded-lg border border-csc-line"
@@ -1186,13 +1513,14 @@ const printedAt = new Date().toLocaleString();
 
                                     <span v-else class="text-xs text-csc-ink-subtle">—</span>
                                 </td>
-                                <td v-if="training.collects_evaluations" class="px-5 py-3.5">
+                                <td v-if="shows.evaluation" class="px-5 py-3.5">
                                     <RosterEvaluation :evaluation="registration.evaluation" layout="row" />
                                 </td>
-                                <td class="px-5 py-3.5 text-right">
+                                <td v-if="shows.actions" class="px-5 py-3.5 text-right">
                                     <RosterActions
                                         :registration="registration"
                                         layout="row"
+                                        :can-manage="can.manage_roster"
                                         :can-record-payment="canRecordPayment(registration)"
                                         :cancellable="isCancellable(registration)"
                                         @decide="decide"
@@ -1222,7 +1550,7 @@ const printedAt = new Date().toLocaleString();
                     >
                         <div class="flex items-start gap-3">
                             <input
-                                v-if="['pending', 'approved'].includes(registration.status)"
+                                v-if="shows.select && ['pending', 'approved'].includes(registration.status)"
                                 type="checkbox"
                                 class="mt-0.5 size-4 rounded border-csc-line text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                 :checked="isSelected(registration.id)"
@@ -1243,7 +1571,7 @@ const printedAt = new Date().toLocaleString();
                                     {{ registration.field_office }}
                                 </p>
 
-                                <div v-if="training.is_supervisory && registration.supervisory_document" class="mt-2">
+                                <div v-if="shows.document && registration.supervisory_document" class="mt-2">
                                     <RosterDocument
                                         :document="registration.supervisory_document"
                                         :name="registration.name"
@@ -1256,13 +1584,13 @@ const printedAt = new Date().toLocaleString();
                                     {{ registration.review_remarks }}
                                 </p>
 
-                                <div v-if="training.collects_evaluations" class="mt-2">
+                                <div v-if="shows.evaluation" class="mt-2">
                                     <RosterEvaluation :evaluation="registration.evaluation" layout="card" />
                                 </div>
                             </div>
                         </div>
 
-                        <div v-if="isMarkable(registration)" class="mt-3 border-t border-csc-line pt-3">
+                        <div v-if="shows.attendance && isMarkable(registration)" class="mt-3 border-t border-csc-line pt-3">
                             <p class="mb-1.5 text-2xs font-semibold tracking-wide text-csc-ink-subtle uppercase">
                                 Attendance · {{ activeDayLabel }}
                             </p>
@@ -1299,10 +1627,11 @@ const printedAt = new Date().toLocaleString();
                             </button>
                         </div>
 
-                        <div class="mt-3 border-t border-csc-line pt-3">
+                        <div v-if="shows.actions" class="mt-3 border-t border-csc-line pt-3">
                             <RosterActions
                                 :registration="registration"
                                 layout="card"
+                                :can-manage="can.manage_roster"
                                 :can-record-payment="canRecordPayment(registration)"
                                 :cancellable="isCancellable(registration)"
                                 @decide="decide"
@@ -1319,25 +1648,13 @@ const printedAt = new Date().toLocaleString();
             </AppCard>
 
             <!--
-                 Everything below the roster is reference rather than work.
-                 Preparing a door, reading what the run earned and splitting it
-                 by office are each the reason someone opens this page perhaps
-                 one visit in ten; the participant list is the reason for the
-                 other nine, and it used to sit under all three of them. The
-                 panels keep their own order — you set a station up before the
-                 run, read revenue during and after it, chase offices last.
-            -->
-
-            <RosterScanStations :training="training" :scan-links="scanLinks" />
-
-            <!--
                 What this run earned. Every figure is summed from the payment
                 rows, each of which froze its own gross and discount when it was
                 taken — so repricing the course later cannot restate what was
                 collected.
             -->
             <AppCard
-                v-if="training.payment_required && can.record_payment"
+                v-if="tab === 'participants' && training.payment_required && can.record_payment"
                 title="Revenue"
                 subtitle="Verified payments only. A pending upload is a claim, not money."
                 collapsible
@@ -1429,12 +1746,16 @@ const printedAt = new Date().toLocaleString();
                 office that recruited a participant is the one HRD chases for an
                 outstanding fee, so the split is what makes chasing possible.
             -->
+            <!--
+                Its own tab, because it answers a different question from the
+                roster: not "who is coming" but "which office do we chase". It
+                opens expanded — a tab someone deliberately clicked has nothing
+                left to fold away.
+            -->
             <AppCard
-                v-if="officeBreakdown.length > 1"
+                v-if="tab === 'offices' && officeBreakdown.length > 1"
                 title="By Field Office"
-                subtitle="Excludes cancelled registrations."
-                collapsible
-                remember-as="roster.by-office"
+                subtitle="Participants counts everyone still holding a place; withdrawals have their own column. The office that recruited a participant is the one HRD chases for a fee still owing."
                 class="print:hidden"
             >
                 <div class="overflow-x-auto">
@@ -1445,33 +1766,82 @@ const printedAt = new Date().toLocaleString();
                                 <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
                                     Participants
                                 </th>
-                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">Paid</th>
-                                <!-- Money promised but not received. Kept as its
-                                     own column, as v1 had it: folded into Paid it
-                                     reads as an office that owes nothing. -->
+                                <!-- Where the office's own work is: a decision
+                                     nobody has taken, and the places it gave
+                                     back. -->
                                 <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
-                                    On Note
+                                    Pending
                                 </th>
-                                <th scope="col" class="py-2 text-right font-semibold text-csc-ink-muted">Outstanding</th>
+                                <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
+                                    Cancelled
+                                </th>
+                                <!-- No fee to have paid. Without this column the
+                                     whole office read as Paid on a free run,
+                                     which is a bill it was never sent. -->
+                                <th
+                                    v-if="!training.payment_required"
+                                    scope="col"
+                                    class="py-2 pr-4 text-right font-semibold text-csc-ink-muted"
+                                >
+                                    Free
+                                </th>
+                                <template v-else>
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
+                                        Paid
+                                    </th>
+                                    <!-- Money promised but not received. Kept as
+                                         its own column, as v1 had it: folded into
+                                         Paid it reads as an office that owes
+                                         nothing. -->
+                                    <th scope="col" class="py-2 pr-4 text-right font-semibold text-csc-ink-muted">
+                                        On Note
+                                    </th>
+                                    <!-- Was "Outstanding", which in this office
+                                         also means a pending request. This column
+                                         has only ever been about money. -->
+                                    <th scope="col" class="py-2 text-right font-semibold text-csc-ink-muted">
+                                        Fee Unpaid
+                                    </th>
+                                </template>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-csc-line">
                             <tr v-for="office in officeBreakdown" :key="office.label">
                                 <td class="py-2.5 pr-4 text-csc-ink-muted">{{ office.label }}</td>
                                 <td class="py-2.5 pr-4 text-right font-medium text-csc-ink">{{ office.count }}</td>
-                                <td class="py-2.5 pr-4 text-right text-csc-ink-muted">{{ office.settled }}</td>
                                 <td
                                     class="py-2.5 pr-4 text-right font-medium"
-                                    :class="office.promissory ? 'text-info' : 'text-csc-ink-subtle'"
+                                    :class="office.pending ? 'text-warning' : 'text-csc-ink-subtle'"
                                 >
-                                    {{ office.promissory }}
+                                    {{ office.pending }}
                                 </td>
                                 <td
-                                    class="py-2.5 text-right font-medium"
-                                    :class="office.outstanding ? 'text-warning' : 'text-csc-ink-subtle'"
+                                    class="py-2.5 pr-4 text-right font-medium"
+                                    :class="office.cancelled ? 'text-danger' : 'text-csc-ink-subtle'"
                                 >
-                                    {{ office.outstanding }}
+                                    {{ office.cancelled }}
                                 </td>
+                                <td
+                                    v-if="!training.payment_required"
+                                    class="py-2.5 pr-4 text-right text-csc-ink-muted"
+                                >
+                                    {{ office.free }}
+                                </td>
+                                <template v-else>
+                                    <td class="py-2.5 pr-4 text-right text-csc-ink-muted">{{ office.settled }}</td>
+                                    <td
+                                        class="py-2.5 pr-4 text-right font-medium"
+                                        :class="office.promissory ? 'text-info' : 'text-csc-ink-subtle'"
+                                    >
+                                        {{ office.promissory }}
+                                    </td>
+                                    <td
+                                        class="py-2.5 text-right font-medium"
+                                        :class="office.unpaid ? 'text-warning' : 'text-csc-ink-subtle'"
+                                    >
+                                        {{ office.unpaid }}
+                                    </td>
+                                </template>
                             </tr>
                         </tbody>
                     </table>
@@ -1724,13 +2094,18 @@ const printedAt = new Date().toLocaleString();
                         :error="paymentForm.errors.payment_date"
                         required
                     />
+                    <!--
+                        Optional: the OR beside it is this counter's receipt.
+                        The transfer or cheque number is finance's cross-
+                        reference and is often still on paper held by the
+                        agency, so it is recorded when the officer has it.
+                    -->
                     <AppInput
-                        v-if="methodNeedsReference"
+                        v-if="methodCollectsReference"
                         v-model="paymentForm.reference_number"
-                        label="Reference Number"
-                        hint="The transfer or cheque number — the only proof there is."
+                        label="Reference Number (optional)"
+                        hint="The transfer or cheque number, if you have it."
                         :error="paymentForm.errors.reference_number"
-                        required
                     />
                 </div>
 

@@ -177,7 +177,7 @@ const ratingName = (expertId, key) => `rating-${expertId}-${key}`;
                         <AppTextarea
                             v-model="form.ratings[expert.id].comments"
                             :label="`Comments on the facilitation of ${expert.name}`"
-                            rows="3"
+                            :rows="3"
                             placeholder="Optional."
                         />
                     </div>
@@ -188,25 +188,25 @@ const ratingName = (expertId, key) => `rating-${expertId}-${key}`;
                         <AppTextarea
                             v-model="form.learned"
                             label="What are the things you have learned in this session that are relevant to your line of work?"
-                            rows="3"
+                            :rows="3"
                             :error="form.errors.learned"
                         />
                         <AppTextarea
                             v-model="form.liked_most"
                             label="What parts of the session did you like the most?"
-                            rows="3"
+                            :rows="3"
                             :error="form.errors.liked_most"
                         />
                         <AppTextarea
                             v-model="form.needs_improvement"
                             label="What needs to be improved?"
-                            rows="3"
+                            :rows="3"
                             :error="form.errors.needs_improvement"
                         />
                         <AppTextarea
                             v-model="form.suggestions"
                             label="Other suggestions or recommendations"
-                            rows="3"
+                            :rows="3"
                             :error="form.errors.suggestions"
                         />
                     </div>

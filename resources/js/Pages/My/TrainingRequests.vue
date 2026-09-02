@@ -47,7 +47,7 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
                         v-model="form.justification"
                         label="Justification"
                         hint="Explain the need and who it is for — this is what HRD weighs."
-                        rows="5"
+                        :rows="5"
                         :error="form.errors.justification"
                         required
                     />

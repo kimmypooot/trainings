@@ -116,14 +116,35 @@ enum PaymentMethod: string
     }
 
     /**
-     * Methods where a reference number is the only proof there is.
+     * Methods that carry a reference number worth recording — asked for, never
+     * demanded.
      *
-     * Cash is paid over the counter against a receipt, so it is the one method
-     * that cannot be required to carry one.
+     * A transfer or a cheque has a number on it, and it is what finance matches
+     * against the bank statement later, so the counter form offers the field.
+     * It stays optional because the officer at the desk does not always have
+     * the slip in front of them: the money is in the till and the OR has been
+     * issued, and refusing to record that until somebody reads a number off a
+     * document that is still with the agency stops a payment that has already
+     * happened.
+     *
+     * Cash is paid over the counter against a receipt and has no such number.
+     * An official receipt is excluded for the opposite reason: its proof *is* a
+     * receipt number, and the counter form already has a field for exactly
+     * that. Asking for both put two boxes for one number in front of the
+     * officer — and whichever they filled, the other was either empty or a
+     * copy. The OR number is the one that finance reconciles on and the one
+     * `or_number` holds, so it is the one that is asked for.
+     *
+     * This is the counter's rule only. The participant's own form has no OR
+     * field — the office's receipt book is not theirs to write in — so it
+     * records the number they are holding in `reference_number` and demands it
+     * there, in its own `requiredIf` (see PaymentController::store). That is
+     * the one place a reference is required, and the two doors differ here on
+     * purpose.
      */
-    public function requiresReference(): bool
+    public function collectsReference(): bool
     {
-        return ! in_array($this, [self::Cash, self::Promissory], true);
+        return ! in_array($this, [self::Cash, self::Promissory, self::OfficialReceipt], true);
     }
 
     /**
@@ -157,11 +178,12 @@ enum PaymentMethod: string
     }
 
     /**
-     * The dropdowns. Selectable methods only, each carrying whether it needs a
-     * document — so the form marks the field required from the same source the
-     * server validates against, rather than a second copy of the rule.
+     * The dropdowns. Selectable methods only, each carrying whether a document
+     * is expected with it and whether it has a reference number at all — so a
+     * form shows the fields the method actually has from the same source the
+     * server reads, rather than a second copy of the rule that drifts.
      *
-     * @return array<int, array{value: string, label: string, expects_proof: bool, requires_reference: bool}>
+     * @return array<int, array{value: string, label: string, expects_proof: bool, collects_reference: bool}>
      */
     public static function options(): array
     {
@@ -170,7 +192,7 @@ enum PaymentMethod: string
                 'value' => $method->value,
                 'label' => $method->label(),
                 'expects_proof' => $method->expectsProof(),
-                'requires_reference' => $method->requiresReference(),
+                'collects_reference' => $method->collectsReference(),
             ],
             self::selectable()
         );

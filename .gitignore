@@ -32,3 +32,8 @@ Thumbs.db
 
 # Backup archives — see config/backup.php. Local by default and often large.
 /storage/backups
+
+# Local agent-tooling artifacts (installed skills, session locks)
+/.agents
+/.claude
+/skills-lock.json

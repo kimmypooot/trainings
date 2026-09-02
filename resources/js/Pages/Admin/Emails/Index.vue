@@ -289,7 +289,7 @@ const deleteTemplate = (template) =>
                         <AppTextarea
                             v-model="form.message"
                             label="Message"
-                            rows="6"
+                            :rows="6"
                             :error="form.errors.message"
                             required
                         />
@@ -493,7 +493,7 @@ const deleteTemplate = (template) =>
                 <AppTextarea
                     v-model="templateForm.body"
                     label="Message"
-                    rows="6"
+                    :rows="6"
                     :error="templateForm.errors.body"
                     required
                 />

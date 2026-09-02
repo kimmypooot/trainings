@@ -34,6 +34,19 @@ defineProps({
         default: 'row',
         validator: (value) => ['row', 'card'].includes(value),
     },
+    /*
+     * Whether this viewer may make the roster *decisions* — approve, waitlist,
+     * reject, complete, issue a certificate. Those five all post to HRD-only
+     * routes (`admin|superadmin`), so for a field-office or management reader
+     * the buttons were a 403 with a click on it: the roster invited a field
+     * office to issue a certificate the Commission's HRD alone issues.
+     *
+     * Deliberately separate from `canRecordPayment`: collecting is a
+     * designation, not a role, so a field-office officer keeps Record Payment
+     * on a row whose decisions are not theirs to make. Defaults closed —
+     * a viewer nobody vouched for gets the read-only rendering.
+     */
+    canManage: { type: Boolean, default: false },
     /** Whether this viewer may post a counter-payment against this row. */
     canRecordPayment: { type: Boolean, default: false },
     /** Whether this registration is still in a state that can be given up. */
@@ -53,7 +66,7 @@ const link = 'rounded text-xs font-semibold hover:underline focus-visible:outlin
                 : 'flex flex-wrap items-center justify-end gap-x-3 gap-y-2'
         "
     >
-        <template v-if="registration.status === 'pending'">
+        <template v-if="canManage && registration.status === 'pending'">
             <button type="button" :class="[link, 'text-success']" @click="$emit('decide', registration, 'approved')">
                 Approve
             </button>
@@ -68,7 +81,7 @@ const link = 'rounded text-xs font-semibold hover:underline focus-visible:outlin
         </template>
 
         <AppButton
-            v-else-if="registration.status === 'approved'"
+            v-else-if="canManage && registration.status === 'approved'"
             size="sm"
             variant="ghost"
             @click="$emit('complete', registration)"
@@ -85,10 +98,22 @@ const link = 'rounded text-xs font-semibold hover:underline focus-visible:outlin
                 certificate, so the button is replaced by the reason rather
                 than left to fail.
             -->
-            <span v-else-if="!registration.fee_cleared" class="text-2xs text-warning">Fee outstanding</span>
-            <AppButton v-else size="sm" variant="ghost" @click="$emit('issue', registration.id)">
+            <span v-else-if="canManage && !registration.fee_cleared" class="text-2xs text-warning">
+                Fee outstanding
+            </span>
+            <AppButton
+                v-else-if="canManage"
+                size="sm"
+                variant="ghost"
+                @click="$emit('issue', registration.id)"
+            >
                 Issue Certificate
             </AppButton>
+            <!--
+                Completed, uncertificated, and not this reader's to issue: the
+                cell says so rather than showing a button HRD has to press.
+            -->
+            <span v-else class="text-xs text-csc-ink-subtle">—</span>
         </template>
 
         <span v-else class="text-xs text-csc-ink-subtle">—</span>

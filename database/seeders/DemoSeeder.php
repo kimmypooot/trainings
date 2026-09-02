@@ -46,6 +46,21 @@ class DemoSeeder extends Seeder
                 ->forceFill([
                     'role' => $role,
                     'field_office_id' => $role === Role::FieldOffice ? $leyteI : null,
+                    /*
+                     * The demo field office is a designated collecting officer,
+                     * because that is the arrangement the region actually runs:
+                     * a participant pays at the field office nearest them, and
+                     * the person who takes the money is a field-office user.
+                     *
+                     * Seeding it off made the demo account the one shape the
+                     * app supports but nobody could see — the roster showed no
+                     * Record Payment, no Revenue panel and no Payments queue,
+                     * which reads as "field offices cannot take money" rather
+                     * than "this account has not been designated". Admins and
+                     * superadmins carry the same ability by role and need no
+                     * flag; management is oversight and gets neither.
+                     */
+                    'is_collecting_officer' => $role === Role::FieldOffice,
                     'is_active' => true,
                     'email_verified_at' => now(),
                     'profile_completed_at' => now(),

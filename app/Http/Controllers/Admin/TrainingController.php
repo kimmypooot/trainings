@@ -28,6 +28,27 @@ class TrainingController extends Controller
     public function index(Request $request): Response
     {
         /*
+         * Field-office staff count their own people only.
+         *
+         * The same invariant the roster keeps one screen down: the *training*
+         * stays visible to every office, because a run is regional and hiding
+         * it would hide the roster with it — but every head counted on this
+         * page is a head in the reader's own jurisdiction. Without this the
+         * list told a field office "48 registered" and its roster then showed
+         * six, which reads as data missing rather than as a different question
+         * being answered.
+         *
+         * scopedFieldOfficeId() resolves to 0 for a field-office user with no
+         * office assigned, so an unassigned account counts nobody rather than
+         * everybody — failing closed, exactly as the directory does.
+         */
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        $inJurisdiction = fn ($query) => $query->when($officeId !== null, fn ($registration) => $registration
+            ->whereHas('user.profile', fn ($profile) => $profile->where('field_office_id', $officeId))
+        );
+
+        /*
          * The Registered column is a fee breakdown, and the three payment
          * buckets are a partition of the occupying registrations on *paid*
          * trainings: paid = verified money, promissory = verified note, pending
@@ -38,26 +59,27 @@ class TrainingController extends Controller
          */
         $trainings = Training::query()
             ->withCount([
-                'registrations as paid_count' => fn ($query) => $query
+                'registrations as paid_count' => fn ($query) => $inJurisdiction($query)
                     ->whereIn('status', RegistrationStatus::occupying())
                     ->whereHas('payments', fn ($payment) => $payment
                         ->where('status', PaymentStatus::Verified)
                         ->whereNot('payment_method', PaymentMethod::Promissory)
                     ),
-                'registrations as promissory_count' => fn ($query) => $query
+                'registrations as promissory_count' => fn ($query) => $inJurisdiction($query)
                     ->whereIn('status', RegistrationStatus::occupying())
                     ->whereHas('payments', fn ($payment) => $payment
                         ->where('status', PaymentStatus::Verified)
                         ->where('payment_method', PaymentMethod::Promissory)
                     ),
-                'registrations as pending_count' => fn ($query) => $query
+                'registrations as pending_count' => fn ($query) => $inJurisdiction($query)
                     ->whereIn('status', RegistrationStatus::occupying())
                     ->whereHas('training', fn ($training) => $training->where('payment_required', true))
                     ->whereDoesntHave('payments', fn ($payment) => $payment->where('status', PaymentStatus::Verified)),
-                'registrations as free_count' => fn ($query) => $query
+                'registrations as free_count' => fn ($query) => $inJurisdiction($query)
                     ->whereIn('status', RegistrationStatus::occupying())
                     ->whereHas('training', fn ($training) => $training->where('payment_required', false)),
-                'registrations as cancelled_count' => fn ($query) => $query->where('status', RegistrationStatus::Cancelled),
+                'registrations as cancelled_count' => fn ($query) => $inJurisdiction($query)
+                    ->where('status', RegistrationStatus::Cancelled),
             ])
             ->when($request->string('status')->toString(), fn ($query, $status) => $query->where('status', $status))
             ->when($request->string('search')->toString(), fn ($query, $search) => $query->where(
@@ -91,6 +113,23 @@ class TrainingController extends Controller
                 'status' => $request->string('status')->toString(),
                 'search' => $request->string('search')->toString(),
             ],
+            /*
+             * Whether this viewer holds the pen. Every staff role reads this
+             * list — it is the way to a roster — but creating and editing a run
+             * is HRD work, and the routes for it are narrowed to admin and
+             * superadmin. Without this the page offered a New Training button
+             * and an Edit link to a field office, both of which walked into a
+             * 403: an affordance that lies about what will happen.
+             */
+            'can' => [
+                'manage' => $request->user()->role->managesTrainings(),
+            ],
+            /*
+             * Named on the page for the same reason the roster names it: a
+             * scoped figure that does not say it is scoped is indistinguishable
+             * from a wrong one. Null for everyone who sees the region.
+             */
+            'scopedTo' => $request->user()->fieldOffice?->name,
             // The status tabs, with their live counts. Counts are global (not
             // narrowed by the search box) so the tabs stay a stable map of the
             // catalogue; "All" carries the region-wide total.
