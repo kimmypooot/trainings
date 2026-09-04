@@ -224,6 +224,20 @@ holding.
 was taken with, so an archive predating a migration leaves the application
 running against columns that do not exist.
 
+**The restored database needs the same `APP_KEY`.** Refund payees' bank account
+numbers are encrypted at rest, so they are readable only by an application
+holding the key they were written with. Restoring this database into a
+deployment with a different `APP_KEY` — a rebuilt server where somebody ran
+`key:generate`, a copy stood up for testing — leaves every account number
+permanently unreadable, and nothing will say so until an officer tries to pay a
+refund. Encrypted session and cookie payloads and every outstanding scan-link
+grant have the same dependency, but those expire; the account numbers do not.
+
+So: **back up `APP_KEY` with the archive, and store it separately.** It is the
+one secret that must survive alongside the backup and must not live inside it.
+Rotating the key is not a routine operation on this application — it is a data
+migration, and there is no command for it.
+
 ### Rehearsing it — and this is the part that is still outstanding
 
 A backup nobody has restored is not a backup. `tims:restore` exists so that this

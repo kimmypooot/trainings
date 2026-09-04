@@ -23,6 +23,26 @@ class RefundRequest extends Model
             'status' => RefundStatus::class,
             'reviewed_at' => 'datetime',
             'refunded_at' => 'datetime',
+
+            /*
+             * The participant's own account, given so the office can transfer
+             * money back. Masking it on screen (see maskedAccountNumber, and
+             * User::seesBankDetails) was the only protection it had, which
+             * left every database dump and every nightly backup carrying the
+             * numbers in full.
+             *
+             * Safe to encrypt because nothing queries it: no WHERE, no ORDER
+             * BY, no uniqueness constraint — it is written once and read back
+             * whole. That is the test to apply before adding this cast
+             * anywhere else, since an encrypted column cannot be searched.
+             *
+             * `account_name` and `bank_name` deliberately stay in the clear. A
+             * payee's name is already in `users.name` and a bank's name
+             * identifies nobody, so encrypting them would add key risk for no
+             * protection — and neither is the office's own deposit account in
+             * `payment_settings`, which exists to be published to participants.
+             */
+            'account_number' => 'encrypted',
         ];
     }
 
