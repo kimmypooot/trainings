@@ -813,7 +813,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 3
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
@@ -831,7 +831,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:isReleased\(\)\.$#'
 			identifier: method.notFound
-			count: 1
+			count: 2
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
@@ -871,12 +871,6 @@ parameters:
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Registration\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/Admin/RosterController.php
-
-		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{App\\Models\\Payment, App\\Models\\User\}, Closure\(App\\Models\\Payment\)\: array\{App\\Models\\Payment, App\\Models\\User\} given\.$#'
 			identifier: argument.type
 			count: 1
@@ -885,6 +879,12 @@ parameters:
 		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: int, label\: string\|null, is_test\: bool, url\: string, expires_at\: non\-falsy\-string, last_used_at\: string\|null\}, Closure\(App\\Models\\ScanLink\)\: array\{id\: int, label\: string\|null, is_test\: bool, url\: string, expires_at\: non\-falsy\-string, last_used_at\: string\|null\} given\.$#'
 			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Admin/RosterController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,App\\Models\\Registration\>\:\:through\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
 			count: 1
 			path: app/Http/Controllers/Admin/RosterController.php
 
@@ -2681,6 +2681,12 @@ parameters:
 			identifier: argument.unresolvableType
 			count: 1
 			path: app/Support/RevenueService.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$time_in\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Support/RosterFilter.php
 
 		-
 			message: '#^Cannot access property \$value on string\.$#'

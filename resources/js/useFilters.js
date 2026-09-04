@@ -55,6 +55,12 @@ import { router } from '@inertiajs/vue3';
  * themselves.
  */
 export function useFilters({
+    /*
+     * The path to visit. A function is evaluated per visit, for a page whose
+     * URL is not fixed for the life of the component — the training roster
+     * keeps its open tab in the fragment, and a filtered visit to a bare path
+     * would drop it, so a reload would land the operator back on Participants.
+     */
     url,
     query,
     only = [],
@@ -90,7 +96,7 @@ export function useFilters({
         timer = null;
 
         router.get(
-            url,
+            typeof url === 'function' ? url() : url,
             { ...query(), ...(resetPage ? { page: 1 } : {}) },
             {
                 only: only.length ? only : undefined,

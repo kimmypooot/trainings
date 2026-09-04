@@ -610,9 +610,9 @@ class SmeEvaluationTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('training.collects_evaluations', true)
                 // Day 1 has happened, day 2 has not: one answer is owed, not two.
-                ->where('registrations.0.evaluation.expected', 1)
-                ->where('registrations.0.evaluation.submitted', 0)
-                ->where('registrations.0.evaluation.outstanding', [1])
+                ->where('registrations.data.0.evaluation.expected', 1)
+                ->where('registrations.data.0.evaluation.submitted', 0)
+                ->where('registrations.data.0.evaluation.outstanding', [1])
                 ->where('summary.evaluations_outstanding', 1)
             );
 
@@ -622,8 +622,8 @@ class SmeEvaluationTest extends TestCase
         $this->actingAs($this->staff())
             ->get("/admin/trainings/{$training->getKey()}/roster")
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('registrations.0.evaluation.submitted', 1)
-                ->where('registrations.0.evaluation.outstanding', [])
+                ->where('registrations.data.0.evaluation.submitted', 1)
+                ->where('registrations.data.0.evaluation.outstanding', [])
                 ->where('summary.evaluations_outstanding', 0)
             );
     }

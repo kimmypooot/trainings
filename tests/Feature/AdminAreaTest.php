@@ -371,8 +371,8 @@ class AdminAreaTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Admin/Trainings/Roster')
-                ->has('registrations', 1)
-                ->where('registrations.0.food_restrictions', 'NO PORK')
+                ->has('registrations.data', 1)
+                ->where('registrations.data.0.food_restrictions', 'NO PORK')
                 ->where('summary.with_food_restrictions', 1)
             );
     }
@@ -707,8 +707,8 @@ class AdminAreaTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('can.record_payment', true)
                 ->where('training.payment_amount', 1500)
-                ->where('registrations.0.payment.settled', false)
-                ->where('registrations.0.payment.awaiting_review', false)
+                ->where('registrations.data.0.payment.settled', false)
+                ->where('registrations.data.0.payment.awaiting_review', false)
                 // A run that does not accept promissory notes must not offer
                 // one, or the form proposes what the server would reject.
                 ->where('paymentMethods', fn ($methods) => collect($methods)

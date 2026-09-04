@@ -15,12 +15,14 @@ use App\Models\ScanLink;
 use App\Models\Training;
 use App\Models\User;
 use App\Support\RegistrationService;
+use App\Support\RosterFilter;
 use App\Support\SmeEvaluationService;
 use App\Support\SupervisoryDocumentService;
 use App\Support\TransferTargets;
 use App\Support\UndoService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -70,6 +72,24 @@ class RosterController extends Controller
         // Every row belongs to the training already in hand, so handing it over
         // saves the attendance and fee predicates a query each per participant.
         $registrations->each(fn (Registration $registration) => $registration->setRelation('training', $training));
+
+        $todayDay = $training->dayNumberFor(now());
+        $filters = RosterFilter::fromRequest($request);
+
+        // The rows this request is actually about, in the order it asked for.
+        // Everything below that counts rather than lists keeps reading
+        // `$registrations` — a chip reading "12 cancelled" has to say twelve
+        // whether or not "cancelled" is the filter currently applied.
+        $matching = RosterFilter::apply($registrations, $filters, $todayDay);
+
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $paginator = new LengthAwarePaginator(
+            $matching->forPage($page, RosterFilter::PER_PAGE)->values(),
+            $matching->count(),
+            RosterFilter::PER_PAGE,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
 
         return Inertia::render('Admin/Trainings/Roster', [
             'training' => [
@@ -199,7 +219,87 @@ class RosterController extends Controller
             'evaluationCodes' => $request->user()->role->managesTrainings()
                 ? $this->evaluationCodes($training)
                 : null,
-            'registrations' => $registrations->map(fn (Registration $registration) => [
+            'filters' => $filters,
+            /*
+             * The chip counts, and the three tiles above them.
+             *
+             * Computed over the whole roster rather than the page or even the
+             * filtered set, because that is what a chip is for: "Cancelled 12"
+             * is an offer to go and look at twelve people, and a chip that
+             * counted only the rows already on screen would read zero for every
+             * status except the one selected.
+             */
+            'counts' => [
+                'status' => $registrations
+                    ->countBy(fn (Registration $r) => $r->status->value)
+                    ->put('all', $registrations->count())
+                    ->all(),
+                'evaluation' => $registrations
+                    ->countBy(fn (Registration $r) => RosterFilter::evaluationState($r))
+                    ->put('all', $registrations->count())
+                    ->all(),
+                // Keyed the same way, but counted only over the participants
+                // who were actually asked for a document — "All" on that chip
+                // row means every document, not every participant, or a
+                // supervisory run would show a total nobody could reach by
+                // adding up the chips beside it.
+                'document' => $registrations
+                    ->filter(fn (Registration $r) => $r->supervisory_document_status !== null)
+                    ->countBy(fn (Registration $r) => $r->supervisory_document_status->value)
+                    ->put('all', $registrations
+                        ->filter(fn (Registration $r) => $r->supervisory_document_status !== null)
+                        ->count())
+                    ->all(),
+                'not_checked_in_today' => $registrations
+                    ->filter(fn (Registration $r) => RosterFilter::notCheckedInOn($r, $todayDay))
+                    ->count(),
+                // Completed, with nothing issued yet — what "Release all"
+                // is about to act on, so it has to count the whole roster and
+                // not whatever is being looked at.
+                'awaiting_certificates' => $registrations
+                    ->filter(fn (Registration $r) => $r->status === RegistrationStatus::Completed
+                        && ! ($r->certificate?->isReleased() ?? false))
+                    ->count(),
+                'pending' => $registrations
+                    ->filter(fn (Registration $r) => $r->status === RegistrationStatus::Pending)
+                    ->count(),
+            ],
+            /*
+             * The printed attendance sheet, which is a different document from
+             * the screen: it is every participant the current filters match,
+             * not the twenty-five of them being looked at. It is an optional
+             * prop because it is only ever wanted at the moment somebody
+             * presses Print — carrying six hundred of these rows on every
+             * roster load to serve an action taken once a session is precisely
+             * the weight this change exists to remove. The page asks for it
+             * with a partial reload and prints when it lands.
+             */
+            'printRows' => Inertia::optional(fn () => $matching
+                ->map(fn (Registration $registration) => [
+                    'id' => $registration->id,
+                    'name' => $registration->user->name,
+                    'organization' => $registration->user->profile?->organization_name,
+                    'field_office' => $registration->user->profile?->fieldOffice?->name,
+                    'status_label' => $registration->status->label(),
+                    'attendance' => $registration->attendances
+                        ->keyBy('training_day')
+                        ->map(fn ($attendance) => $attendance->status->label())
+                        ->all(),
+                ])->all()),
+            /*
+             * Everyone with something the caterer needs to know, whatever the
+             * roster is currently filtered to — the kitchen is catering the
+             * session, not the search. Small enough to send whole: a name and a
+             * line of text for the few participants who have one.
+             */
+            'restrictions' => $registrations
+                ->filter(fn (Registration $r) => filled($r->user->profile?->food_restrictions_details))
+                ->map(fn (Registration $r) => [
+                    'id' => $r->id,
+                    'name' => $r->user->name,
+                    'food_restrictions' => $r->user->profile?->food_restrictions_details,
+                ])->values()->all(),
+            'registrations' => $paginator->through(fn (Registration $registration) => [
                 'id' => $registration->id,
                 'status' => $registration->status->value,
                 'status_label' => $registration->status->label(),
@@ -270,7 +370,7 @@ class RosterController extends Controller
                     'awaiting_review' => $registration->payments
                         ->contains(fn (Payment $payment) => $payment->status->isPending()),
                 ],
-            ])->all(),
+            ]),
             'summary' => [
                 'active' => $registrations->filter(fn (Registration $r) => $r->status->occupiesSlot())->count(),
                 'completed' => $registrations->where('status', RegistrationStatus::Completed)->count(),

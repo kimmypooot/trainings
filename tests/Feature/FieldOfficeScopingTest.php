@@ -140,8 +140,8 @@ class FieldOfficeScopingTest extends TestCase
             ->get("/admin/trainings/{$training->id}/roster")
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->has('registrations', 1)
-                ->where('registrations.0.email', $mine->email)
+                ->has('registrations.data', 1)
+                ->where('registrations.data.0.email', $mine->email)
                 ->where('summary.active', 1)
                 ->where('scopedTo', 'CSC Field Office - Leyte I')
             );
@@ -149,7 +149,7 @@ class FieldOfficeScopingTest extends TestCase
         // HRD sees both.
         $this->actingAs(User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]))
             ->get("/admin/trainings/{$training->id}/roster")
-            ->assertInertia(fn (AssertableInertia $page) => $page->has('registrations', 2));
+            ->assertInertia(fn (AssertableInertia $page) => $page->has('registrations.data', 2));
     }
 
     public function test_the_trainings_list_counts_only_the_offices_own_people(): void
