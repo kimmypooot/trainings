@@ -636,6 +636,21 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('field-offices.toggle');
 
             /*
+             * Deleting an office sits one role above managing them.
+             *
+             * Every other action here is reversible — an office deactivated by
+             * mistake is reactivated. This one is not, so it is superadmin's,
+             * the same bar as the maintenance switch and the office's own
+             * identity. The controller refuses outright for any office that
+             * participants or staff are still attached to, whoever asks: both
+             * foreign keys are nullOnDelete, so the database would blank those
+             * links rather than object.
+             */
+            Route::delete('/field-offices/{fieldOffice}', [AdminFieldOfficeController::class, 'destroy'])
+                ->middleware(EnsureUserIsStaff::class.':superadmin')
+                ->name('field-offices.destroy');
+
+            /*
              * Subject matter experts. Reference data in the same sense a field
              * office is — created once, assigned to many runs — and managed by
              * the same roles that own the trainings those assignments appear

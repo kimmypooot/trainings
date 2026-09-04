@@ -323,4 +323,126 @@ class FieldOfficeTest extends TestCase
                 ->where('participant.profile.csc_field_office', 'CSC Field Office - Eastern Samar')
             );
     }
+
+    // --- Deleting an office ----------------------------------------------
+
+    /**
+     * An office nobody is attached to can be removed.
+     *
+     * Deactivate-never-delete is right for a row with history behind it, and it
+     * was applied to every row — so an office created by mistake, or a whole
+     * list belonging to another region, could only ever be hidden. They stayed
+     * in the database for good.
+     */
+    public function test_a_superadmin_can_delete_an_office_nothing_is_attached_to(): void
+    {
+        $office = FieldOffice::create([
+            'code' => 'typo',
+            'name' => 'CSC Field Office - Typo',
+            'type' => 'field_office',
+            'province' => 'Leyte',
+            'jurisdiction' => ['Leyte'],
+        ]);
+
+        $this->actingAs($this->staff(Role::SuperAdmin))
+            ->delete("/admin/field-offices/{$office->id}")
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('field_offices', ['id' => $office->id]);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'field-office.deleted',
+        ]);
+    }
+
+    /**
+     * An office with participants on it is refused, and the refusal is the
+     * point.
+     *
+     * Both foreign keys are `nullOnDelete`, so the database would blank the
+     * links rather than object: participants would silently lose the office on
+     * their profile. Nothing would error, which is exactly the failure this
+     * codebase keeps having to dig out.
+     */
+    public function test_an_office_with_participants_cannot_be_deleted(): void
+    {
+        $office = FieldOffice::where('code', 'bfo')->first();
+        $this->participantIn($office, 'DELA CRUZ, JUAN');
+
+        $this->actingAs($this->staff(Role::SuperAdmin))
+            ->delete("/admin/field-offices/{$office->id}")
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('field_offices', ['id' => $office->id]);
+    }
+
+    /**
+     * And one with staff on it, for a second reason: a field-office account's
+     * whole view is scoped by that assignment, and `scopedFieldOfficeId()`
+     * resolves to 0 when it is missing — so the account keeps working while
+     * showing an empty system.
+     */
+    public function test_an_office_with_staff_cannot_be_deleted(): void
+    {
+        $office = FieldOffice::where('code', 'lfoi')->first();
+
+        User::factory()->create([
+            'role' => Role::FieldOffice,
+            'field_office_id' => $office->id,
+            'profile_completed_at' => now(),
+        ]);
+
+        $this->actingAs($this->staff(Role::SuperAdmin))
+            ->delete("/admin/field-offices/{$office->id}")
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('field_offices', ['id' => $office->id]);
+    }
+
+    /** Creating and editing is administration; removing is not reversible. */
+    public function test_an_admin_cannot_delete_an_office(): void
+    {
+        $office = FieldOffice::create([
+            'code' => 'spare',
+            'name' => 'CSC Field Office - Spare',
+            'type' => 'field_office',
+            'province' => 'Samar',
+            'jurisdiction' => ['Samar'],
+        ]);
+
+        $this->actingAs($this->staff(Role::Admin))
+            ->delete("/admin/field-offices/{$office->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('field_offices', ['id' => $office->id]);
+    }
+
+    /** The screen says which offices can go, so nobody learns it by pressing. */
+    public function test_the_list_says_which_offices_can_be_deleted(): void
+    {
+        $attached = FieldOffice::where('code', 'bfo')->first();
+        $this->participantIn($attached, 'SANTOS, MARIA');
+
+        $this->actingAs($this->staff(Role::SuperAdmin))
+            ->get('/admin/field-offices')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('canDelete', true)
+                ->where(
+                    'offices',
+                    fn ($offices) => collect($offices)->firstWhere('code', 'bfo')['can_delete'] === false
+                        && collect($offices)->firstWhere('code', 'nsfo')['can_delete'] === true
+                )
+            );
+    }
+
+    public function test_an_admin_is_not_offered_the_delete_action(): void
+    {
+        $this->actingAs($this->staff(Role::Admin))
+            ->get('/admin/field-offices')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('canDelete', false));
+    }
 }
