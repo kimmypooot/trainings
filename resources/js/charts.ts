@@ -13,9 +13,35 @@
  * `categorical()` hands them out in sequence and never cycles.
  */
 
+/**
+ * A tally row as every chart in this app consumes one.
+ *
+ * `count` is loose because the rows come from Inertia props, where a MySQL
+ * aggregate arrives as a string often enough that pretending otherwise would
+ * be a lie the compiler defends. Everything here that reads it goes through
+ * `Number()`.
+ */
+export interface ChartRow {
+    label: string;
+    count?: number | string | null;
+    [key: string]: unknown;
+}
+
+/*
+ * The first slot and the darkest ramp step, named separately.
+ *
+ * Not decoration: `noUncheckedIndexedAccess` means an array read is
+ * `string | undefined`, and the two lookups below are index-safe only because
+ * they clamp. These give the clamp somewhere honest to fall back to, so the
+ * functions can promise a colour without a cast asserting something the types
+ * cannot see.
+ */
+const SLOT_FIRST = 'var(--color-chart-1)';
+const RAMP_LAST = 'var(--color-chart-ramp-5)';
+
 /** The six categorical slots, in the order the checks validated. */
-export const SLOTS = [
-    'var(--color-chart-1)',
+export const SLOTS: readonly string[] = [
+    SLOT_FIRST,
     'var(--color-chart-2)',
     'var(--color-chart-3)',
     'var(--color-chart-4)',
@@ -24,12 +50,12 @@ export const SLOTS = [
 ];
 
 /** The one-hue ramp, light → dark, for ordered categories only. */
-export const RAMP = [
+export const RAMP: readonly string[] = [
     'var(--color-chart-ramp-1)',
     'var(--color-chart-ramp-2)',
     'var(--color-chart-ramp-3)',
     'var(--color-chart-ramp-4)',
-    'var(--color-chart-ramp-5)',
+    RAMP_LAST,
 ];
 
 export const GRID = 'var(--color-chart-grid)';
@@ -43,8 +69,8 @@ export const SURFACE = '#ffffff';
  * chart silently starts lying. Components cap their own category count and
  * fold the tail into "Other" — see `foldTail()`.
  */
-export function categorical(index) {
-    return SLOTS[Math.min(index, SLOTS.length - 1)];
+export function categorical(index: number): string {
+    return SLOTS[Math.min(Math.max(index, 0), SLOTS.length - 1)] ?? SLOT_FIRST;
 }
 
 /**
@@ -53,12 +79,12 @@ export function categorical(index) {
  * With five steps and nine age bands, neighbours would otherwise land on the
  * same step; spreading keeps the darkening visible end to end.
  */
-export function ordinal(index, total) {
-    if (total <= 1) return RAMP[RAMP.length - 1];
+export function ordinal(index: number, total: number): string {
+    if (total <= 1) return RAMP_LAST;
 
     const step = Math.round((index / (total - 1)) * (RAMP.length - 1));
 
-    return RAMP[step];
+    return RAMP[step] ?? RAMP_LAST;
 }
 
 /**
@@ -68,7 +94,7 @@ export function ordinal(index, total) {
  * are assumed to arrive largest-first, which every tally in AnalyticsController
  * already guarantees.
  */
-export function foldTail(rows, limit) {
+export function foldTail(rows: ChartRow[], limit: number): ChartRow[] {
     if (rows.length <= limit) return rows;
 
     const head = rows.slice(0, limit - 1);
@@ -78,7 +104,7 @@ export function foldTail(rows, limit) {
         ...head,
         {
             label: `Other (${tail.length})`,
-            count: tail.reduce((sum, row) => sum + Number(row.count ?? 0), 0),
+            count: tail.reduce((sum: number, row) => sum + Number(row.count ?? 0), 0),
         },
     ];
 }
@@ -90,26 +116,26 @@ export function foldTail(rows, limit) {
  * whole point of a tick is that the reader can estimate against it without
  * doing division. Steps are held to 1, 2, 2.5 or 5 × a power of ten.
  */
-export function niceTicks(max, count = 4) {
+export function niceTicks(max: number, count = 4): number[] {
     if (!(max > 0)) return [0, 1];
 
     const rough = max / count;
     const magnitude = 10 ** Math.floor(Math.log10(rough));
     const step = [1, 2, 2.5, 5, 10].map((n) => n * magnitude).find((n) => n >= rough) ?? magnitude * 10;
 
-    const ticks = [];
+    const ticks: number[] = [];
     for (let value = 0; value <= max + step / 2; value += step) ticks.push(value);
 
     return ticks;
 }
 
 /** 1,284 — the plain count format, used for axis ticks and labels. */
-export function formatCount(value) {
+export function formatCount(value: number | string | null | undefined): string {
     return Number(value ?? 0).toLocaleString();
 }
 
 /** 12.9K / 4.2M — for tick labels and tiles where the digits would crowd. */
-export function formatCompact(value) {
+export function formatCompact(value: number | string | null | undefined): string {
     const n = Number(value ?? 0);
 
     if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
@@ -119,7 +145,7 @@ export function formatCompact(value) {
 }
 
 /** ₱1,284.00 — the money format used across the reports. */
-export function formatMoney(value) {
+export function formatMoney(value: number | string | null | undefined): string {
     return `₱${Number(value ?? 0).toLocaleString('en-PH', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
@@ -127,12 +153,12 @@ export function formatMoney(value) {
 }
 
 /** ₱12.9K — money for a tick or a tile, where two decimals would not fit. */
-export function formatMoneyCompact(value) {
+export function formatMoneyCompact(value: number | string | null | undefined): string {
     return `₱${formatCompact(value)}`;
 }
 
 /** Share of a total, as a string, guarding the empty set. */
-export function percent(value, total, digits = 1) {
+export function percent(value: number | string | null | undefined, total: number, digits = 1): string {
     if (!(total > 0)) return '0%';
 
     const share = (Number(value ?? 0) / total) * 100;
@@ -145,6 +171,6 @@ export function percent(value, total, digits = 1) {
 }
 
 /** The total of a `{label, count}` row set. */
-export function sumRows(rows) {
-    return (rows ?? []).reduce((sum, row) => sum + Number(row.count ?? 0), 0);
+export function sumRows(rows: ChartRow[] | null | undefined): number {
+    return (rows ?? []).reduce((sum: number, row) => sum + Number(row.count ?? 0), 0);
 }
