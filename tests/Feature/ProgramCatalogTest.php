@@ -180,6 +180,96 @@ class ProgramCatalogTest extends TestCase
             );
     }
 
+    /**
+     * The hero's "open for registration" line counts only what can be joined.
+     *
+     * Everything the catalogue below shows and says "no" about — full, not yet
+     * open, already running — would make that line's claim false. It is the one
+     * figure on the landing page a visitor acts on, so counting a booked-out run
+     * in it sends someone to a calendar with nothing on it for them.
+     */
+    public function test_the_hero_counts_only_runs_a_visitor_can_join(): void
+    {
+        Training::factory()->create([
+            'title' => 'Joinable',
+            'starts_at' => now()->addDays(30),
+            'registration_closes_at' => now()->addDays(20),
+        ]);
+        Training::factory()->create([
+            'title' => 'Not Open Yet',
+            'starts_at' => now()->addDays(60),
+            'registration_opens_at' => now()->addDays(20),
+        ]);
+        Training::factory()->full()->create([
+            'title' => 'Booked Out',
+            'starts_at' => now()->addDays(40),
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('openProgramCount', 1));
+    }
+
+    /**
+     * The hero's count is not derived from the catalogue below it.
+     *
+     * The two answer different questions — "is there anything open for me at
+     * all" against "show me the ones matching what I typed" — so a filter that
+     * empties the grid must leave the hero saying exactly what it said before,
+     * and page 2 must not report a different number from page 1. Sharing the
+     * list would make a keystroke rewrite the page's headline offer, which is
+     * also why `openProgramCount` is not in Home.vue's `only:` list.
+     */
+    public function test_the_hero_count_ignores_the_catalogue_filters(): void
+    {
+        Training::factory()->create([
+            'title' => 'Joinable',
+            'starts_at' => now()->addDays(30),
+            'registration_closes_at' => now()->addDays(20),
+        ]);
+
+        $props = $this->get('/?search=nothing-matches-this')->viewData('page')['props'];
+
+        $this->assertCount(0, $props['programs']);
+        $this->assertSame(1, $props['openProgramCount']);
+    }
+
+    /**
+     * The count is not capped at what any one screen shows.
+     *
+     * The line reports how much is open, not how much fits — an office with a
+     * full quarter published must not be described by the size of a page.
+     */
+    public function test_the_hero_count_is_not_capped_by_pagination(): void
+    {
+        Training::factory()->count(15)->create([
+            'starts_at' => now()->addDays(30),
+            'registration_closes_at' => now()->addDays(20),
+        ]);
+
+        $props = $this->get('/')->viewData('page')['props'];
+
+        // A page holds twelve; the hero still reports all fifteen.
+        $this->assertCount(12, $props['programs']);
+        $this->assertSame(15, $props['openProgramCount']);
+    }
+
+    /**
+     * Nothing open is an ordinary state for a regional calendar — between
+     * quarters, or after a batch closes. Home.vue withholds the line entirely on
+     * a zero rather than printing "0 programs open for registration" under a
+     * button asking for an account, so the zero has to be what the controller
+     * actually sends.
+     */
+    public function test_the_hero_count_is_zero_when_nothing_is_open(): void
+    {
+        Training::factory()->full()->create(['starts_at' => now()->addDays(40)]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('openProgramCount', 0));
+    }
+
     public function test_the_result_count_reports_what_the_page_shows(): void
     {
         Training::factory()->create([

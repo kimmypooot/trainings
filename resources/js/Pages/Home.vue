@@ -8,11 +8,13 @@ import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
+import HeroPhotoStack from '@/Components/HeroPhotoStack.vue';
 import ProgramCard from '@/Components/ProgramCard.vue';
 import ProgramDetailModal from '@/Components/ProgramDetailModal.vue';
 
 const props = defineProps({
     stats: { type: Array, default: () => [] },
+    openProgramCount: { type: Number, default: 0 },
     programs: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
     filterOptions: { type: Object, default: () => ({ modes: [], categories: [], statuses: [] }) },
@@ -96,6 +98,55 @@ const features = [
  * and an empty band is simply not drawn.
  */
 const hasStats = computed(() => props.stats.length > 0);
+
+/*
+ * The hero's photographs.
+ *
+ * Content, so it lives here beside the seals rather than inside the component
+ * that draws it — swapping a photograph should not mean opening a component
+ * that owns angles and shadows.
+ *
+ * The alt text is written for someone who cannot see the stack, and so
+ * describes what the photograph shows rather than restating "photo of
+ * training". These are decorative in the strict sense — nothing here is
+ * information the page states nowhere else — but a real description costs one
+ * line and an empty alt on three large images tells a screen reader the hero is
+ * emptier than it is.
+ *
+ * The class on each is its place in the stack: position, size, tilt, and
+ * z-order. Later entries sit on top of earlier ones.
+ */
+const heroPhotos = [
+    {
+        src: '/images/training-01.jpg',
+        alt: 'Participants at a Civil Service Commission training session',
+        className: 'top-0 left-0 z-10 w-[60%] aspect-4/3 -rotate-6',
+    },
+    {
+        src: '/images/training-02.jpg',
+        alt: 'A resource speaker addressing a room of government personnel',
+        className: 'top-[16%] right-0 z-20 w-[56%] aspect-3/4 rotate-5',
+    },
+    {
+        src: '/images/training-03.jpg',
+        alt: 'Certificates being awarded at the close of a training program',
+        className: 'bottom-0 left-[10%] z-30 w-[62%] aspect-4/3 -rotate-2',
+    },
+];
+
+/*
+ * Whether the hero has a right-hand column at all.
+ *
+ * The photographs are files an office drops in and swaps around, so "the markup
+ * lists three" and "three exist" are different claims. HeroPhotoStack reports
+ * back when every one of them has failed to load, and the hero then falls back
+ * to the centred single column it was before — the same rule hasStats applies
+ * to the figures band: an absent thing is not drawn, and nothing is arranged
+ * around the space where it would have been. A left-aligned headline with an
+ * empty half beside it reads as a page that failed to load.
+ */
+const photosLoaded = ref(true);
+const showPhotos = computed(() => heroPhotos.length > 0 && photosLoaded.value);
 
 // The figures band sizes its grid to what actually survived the controller,
 // so a withheld figure leaves no gap.
@@ -287,41 +338,110 @@ const pages = computed(() => {
                 the generous top padding that used to sit here pushed the block
                 back toward the middle on short viewports, so it now hugs the
                 upper portion instead.
+
+                It is max-w-7xl in the two-column case, matching every section
+                below it. The hero was the one band on the page with its own
+                width, so the headline started a hundred pixels inboard of
+                "Programs we are offering" — a misalignment invisible on either
+                screen alone but read as drift while scrolling between them. The
+                single-column fallback stays narrower on purpose: centred copy
+                needs a short measure, not a full-width one.
             -->
             <div
-                class="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-start px-4 pt-14 pb-16 text-center sm:px-6 sm:pt-22 sm:pb-16 lg:px-8"
+                class="relative mx-auto flex w-full flex-1 flex-col justify-start px-4 pt-14 pb-16 sm:px-6 sm:pt-22 sm:pb-16 lg:px-8"
+                :class="showPhotos ? 'max-w-7xl' : 'max-w-4xl'"
             >
-                <!-- Official seals -->
-                <div class="mb-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6">
-                    <img
-                        v-for="seal in seals"
-                        :key="seal.src"
-                        :src="seal.src"
-                        :alt="seal.alt"
-                        decoding="async"
-                        class="h-14 w-auto drop-shadow-md sm:h-20"
-                    />
-                </div>
+                <!--
+                    One column or two, decided by whether the photographs are
+                    actually there. The copy only goes left-aligned in the
+                    two-column case: left-aligned text under centred seals with
+                    nothing to its right is just misaligned.
+                -->
+                <div
+                    class="grid items-center gap-10"
+                    :class="showPhotos ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-14' : ''"
+                >
+                    <div :class="showPhotos ? 'text-center lg:text-left' : 'text-center'">
+                        <!-- Official seals -->
+                        <div
+                            class="mb-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6"
+                            :class="showPhotos ? 'lg:justify-start' : ''"
+                        >
+                            <img
+                                v-for="seal in seals"
+                                :key="seal.src"
+                                :src="seal.src"
+                                :alt="seal.alt"
+                                decoding="async"
+                                class="h-14 w-auto drop-shadow-md sm:h-20"
+                            />
+                        </div>
 
-                <h1 class="text-3xl leading-tight font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-                    Training Information
-                    <span class="block font-semibold text-white/85">Management System</span>
-                </h1>
+                        <h1 class="text-3xl leading-tight font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+                            Training Information
+                            <span class="block font-semibold text-white/85">Management System</span>
+                        </h1>
 
-                <p class="mx-auto mt-6 max-w-xl text-base leading-relaxed text-pretty text-white/85 sm:text-lg">
-                    Create your account to register for training programs offered by the Commission, keep your
-                    certificates in one place, and check in to events with your own QR code.
-                </p>
+                        <p
+                            class="mx-auto mt-6 max-w-xl text-base leading-relaxed text-pretty text-white/85 sm:text-lg"
+                            :class="showPhotos ? 'lg:mx-0' : ''"
+                        >
+                            Create your account to register for training programs offered by the Commission, keep
+                            your certificates in one place, and check in to events with your own QR code.
+                        </p>
 
-                <div class="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-                    <AppButton href="/register" size="lg" on-dark>Create your account</AppButton>
+                        <div
+                            class="mt-10 flex flex-col justify-center gap-3 sm:flex-row"
+                            :class="showPhotos ? 'lg:justify-start' : ''"
+                        >
+                            <AppButton href="/register" size="lg" on-dark>Create your account</AppButton>
+                            <!--
+                                Points at #upcoming, not #programs. "Learn More" next to
+                                "Create your account" is asking what is on offer, and
+                                #programs is the feature grid — the anchor used to skip
+                                the actual programs entirely.
+                            -->
+                            <AppButton href="/#upcoming" variant="ghost" size="lg" on-dark>
+                                See our programs
+                            </AppButton>
+                        </div>
+
+                        <!--
+                            The hero's one live fact, and the reason the
+                            photographs are allowed to take the whole right-hand
+                            column: without this line a visitor cannot tell from
+                            the first screen whether there is anything to
+                            register for, and has to scroll a full viewport to
+                            find out. It is withheld rather than shown as a zero
+                            — "0 programs open" under a button saying "create
+                            your account" is an argument against doing so.
+                        -->
+                        <p
+                            v-if="openProgramCount > 0"
+                            class="mt-6 flex items-center justify-center gap-2.5 text-sm text-white/85"
+                            :class="showPhotos ? 'lg:justify-start' : ''"
+                        >
+                            <span class="relative flex size-2.5" aria-hidden="true">
+                                <span class="absolute inline-flex size-full animate-ping rounded-full bg-white/60" />
+                                <span class="relative inline-flex size-2.5 rounded-full bg-white" />
+                            </span>
+                            <Link
+                                href="/#upcoming"
+                                class="font-semibold text-white underline underline-offset-4 hover:text-white/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                            >
+                                {{ openProgramCount }}
+                                {{ openProgramCount === 1 ? 'program' : 'programs' }} open for registration
+                            </Link>
+                        </p>
+                    </div>
+
                     <!--
-                        Points at #upcoming, not #programs. "Learn More" next to
-                        "Create your account" is asking what is on offer, and
-                        #programs is the feature grid — the anchor used to skip
-                        the actual programs entirely.
+                        The photographs come last in the DOM, so on a phone they
+                        sit below the call to action rather than pushing it under
+                        the fold — the stacking order is the accessibility
+                        decision here, not the column order.
                     -->
-                    <AppButton href="/#upcoming" variant="ghost" size="lg" on-dark>See our programs</AppButton>
+                    <HeroPhotoStack v-if="showPhotos" :photos="heroPhotos" @empty="photosLoaded = false" />
                 </div>
             </div>
 

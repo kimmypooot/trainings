@@ -88,6 +88,7 @@ class HomeController extends Controller
 
         return Inertia::render('Home', [
             'stats' => $this->stats(),
+            'openProgramCount' => $this->openProgramCount(),
             'programs' => $cards->all(),
             'filters' => $filters,
             'filterOptions' => [
@@ -114,6 +115,38 @@ class HomeController extends Controller
                 'showing' => $cards->count(),
             ],
         ]);
+    }
+
+    /**
+     * How many runs a visitor could sign up for right now — the hero's one
+     * piece of live information, under the buttons.
+     *
+     * Deliberately *not* derived from `programs`. That list is the filtered,
+     * paginated catalogue below, so sharing it would let a keystroke in the
+     * search box rewrite the hero's headline claim, and page 2 would report a
+     * different number from page 1. The hero answers "is there anything open
+     * for me at all", which no filter the visitor has typed may change. That is
+     * also why it is absent from the `only:` list Home.vue sends when
+     * filtering: nothing on the page can make it stale.
+     *
+     * Counted in PHP rather than in SQL because registrability is not a column
+     * — PublicCatalogService::registrationState weighs a live seat count
+     * against two nullable dates, in a defined order — and expressing that in a
+     * where clause would mean maintaining those precedence rules in a second
+     * language, where they could quietly disagree with the badge the catalogue
+     * below prints for the same run. The query is already bounded to published,
+     * unfinished runs, which at a regional office is a calendar, not a table.
+     *
+     * Uncached, unlike stats(): this is the one figure on the page a visitor
+     * acts on, and an hour-stale "3 programs open" sends them to an empty
+     * calendar.
+     */
+    private function openProgramCount(): int
+    {
+        return PublicCatalogService::query()
+            ->get()
+            ->filter(fn (Training $training) => PublicCatalogService::card($training)['is_registrable'])
+            ->count();
     }
 
     /**
