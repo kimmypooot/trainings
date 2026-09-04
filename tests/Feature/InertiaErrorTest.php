@@ -27,11 +27,28 @@ class InertiaErrorTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * The headers a real Inertia visit carries.
+     *
+     * The `(string)` cast is load-bearing and is the reason this file failed in
+     * CI while passing on every developer machine. `version()` hashes the Vite
+     * manifest, and the PHP job never builds the frontend — that is deliberate,
+     * the JS job is where the build is checked — so in CI it returns null while
+     * locally it returns a hash. Inertia compares
+     * `$request->header('X-Inertia-Version', '')` against `(string) version`,
+     * so an uncast null arrives as a header that does not match the empty
+     * string the server computes, and every request answers 409 (version
+     * changed) instead of the status under test.
+     *
+     * ExportScopingTest::analyticsOverview() already casts for exactly this
+     * reason; this file did not copy it. A local run cannot catch it, because
+     * anyone who has run `npm run build` has a manifest.
+     */
     private function inertia(): array
     {
         return [
             'X-Inertia' => 'true',
-            'X-Inertia-Version' => (new HandleInertiaRequests)->version(request()),
+            'X-Inertia-Version' => (string) (new HandleInertiaRequests)->version(request()),
         ];
     }
 
