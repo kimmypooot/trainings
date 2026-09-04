@@ -26,14 +26,63 @@ use Inertia\Response;
  */
 class RequestQueueController extends Controller
 {
+    /**
+     * How a request in each of the three queues reaches a field office.
+     *
+     * Two shapes: a withdrawal and an output hang off a registration, while a
+     * training request is filed by the participant directly. Named once here
+     * because the listing and the decision must narrow by exactly the same
+     * path — they used not to, and that was the bug: `index()` scoped all three
+     * queues while the three POSTs that act on them scoped none, so a field
+     * office could approve another office's withdrawal (freeing a seat and
+     * starting a refund) by posting its id.
+     */
+    private const OFFICE_PATHS = [
+        CancellationRequest::class => 'registration.user.profile',
+        RegistrationOutput::class => 'registration.user.profile',
+        TrainingRequest::class => 'requester.profile',
+    ];
+
+    /**
+     * Re-resolve a route-bound queue item against the actor's field office.
+     *
+     * The same move `ManagesRosterDecisions::scopedRegistration` makes, and for
+     * the same reason: route-model binding knows nothing about scoping, so an
+     * action that trusted the bound model would act on whatever id was posted.
+     *
+     * 404 rather than 403, matching the roster and the participant directory —
+     * whether another office's request exists is not this actor's to learn.
+     *
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  TModel  $item
+     * @return TModel
+     */
+    private function scoped(Request $request, $item)
+    {
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        if ($officeId === null) {
+            return $item;
+        }
+
+        $path = self::OFFICE_PATHS[$item::class];
+
+        return $item::query()
+            ->whereKey($item->getKey())
+            ->whereHas($path, fn ($profile) => $profile->where('field_office_id', $officeId))
+            ->firstOr(fn () => abort(404));
+    }
+
     public function index(Request $request): Response
     {
         $officeId = $request->user()->scopedFieldOfficeId();
 
         // Field-office staff see only their own participants' requests, the
-        // same rule the roster and participant directory already apply.
+        // same rule the roster and participant directory already apply — and
+        // the same rule scoped() applies to each decision below.
         $scope = fn ($query) => $query->when($officeId !== null, fn ($inner) => $inner->whereHas(
-            'registration.user.profile',
+            self::OFFICE_PATHS[CancellationRequest::class],
             fn ($profile) => $profile->where('field_office_id', $officeId)
         ));
 
@@ -51,7 +100,7 @@ class RequestQueueController extends Controller
 
         $trainingRequests = TrainingRequest::with(['requester.profile', 'training'])
             ->when($officeId !== null, fn ($query) => $query->whereHas(
-                'requester.profile',
+                self::OFFICE_PATHS[TrainingRequest::class],
                 fn ($profile) => $profile->where('field_office_id', $officeId)
             ))
             ->latest()
@@ -106,7 +155,7 @@ class RequestQueueController extends Controller
         $validated = $this->decision($request);
 
         CancellationRequestService::review(
-            $cancellationRequest,
+            $this->scoped($request, $cancellationRequest),
             RequestStatus::from($validated['decision']),
             $request->user(),
             $validated['remarks'] ?? null
@@ -120,7 +169,7 @@ class RequestQueueController extends Controller
         $validated = $this->decision($request);
 
         TrainingRequestService::review(
-            $trainingRequest,
+            $this->scoped($request, $trainingRequest),
             RequestStatus::from($validated['decision']),
             $request->user(),
             $validated['remarks'] ?? null
@@ -146,7 +195,7 @@ class RequestQueueController extends Controller
         $validated = $this->decision($request);
 
         RegistrationOutputService::review(
-            $output,
+            $this->scoped($request, $output),
             RequestStatus::from($validated['decision']),
             $request->user(),
             $validated['remarks'] ?? null

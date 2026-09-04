@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\ScanLink;
 use App\Models\Training;
+use App\Support\ScanLinkService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -53,7 +54,20 @@ class ScanLinkController extends Controller
             'Test stations can only be issued by a super administrator.'
         );
 
-        [$link, $code] = ScanLink::issue(
+        /*
+         * Through the service rather than the model, for the audit entry.
+         *
+         * Note what is deliberately *not* checked here: which training. A
+         * training belongs to the region, not to an office, so there is no
+         * honest scope to apply — and none is needed, because the link carries
+         * its issuer's reach and nothing more. Every response it can ever serve
+         * is narrowed by `$link->issuer->scopedFieldOfficeId()`, so a field
+         * office minting a station for a run it has nothing to do with gets a
+         * door onto its own participants and no one else's. The real gap was
+         * that nobody could tell afterwards that it had done so; that is what
+         * the trail entry closes.
+         */
+        [$link, $code] = ScanLinkService::issue(
             $training,
             $request->user(),
             $validated['label'] ?? null,
@@ -76,14 +90,29 @@ class ScanLinkController extends Controller
     /**
      * Revoke a link.
      *
-     * Soft rather than a delete: the row is the only record of who authorised a
-     * door and when it was last used, and that is exactly what someone will ask
-     * for after an attendance dispute. Revoking is also immediate for grants
-     * already minted — ScanLink::fromGrant re-checks the row every request.
+     * Soft rather than a delete: the row records who authorised a door and when
+     * it was last used, and that is exactly what someone will ask for after an
+     * attendance dispute. Revoking is also immediate for grants already minted —
+     * ScanLink::fromGrant re-checks the row every request.
+     *
+     * Broad, but no longer unbounded. Every staff role in this group could
+     * revoke *any* station in the region, including one another office was
+     * working a live door with — a cross-office destructive action, and an
+     * unrecorded one. The reason revocation is not superadmin-only still holds
+     * (a phone goes missing and the person at the venue must be able to kill
+     * the link without finding an administrator), so the fix is a bound on
+     * whose link rather than on who may revoke: see ScanLinkService::mayRevoke.
+     *
+     * 404 rather than 403, matching every other office-scoped refusal in the
+     * app — another office's stations are not this operator's to enumerate.
      */
-    public function destroy(ScanLink $scanLink): RedirectResponse
+    public function destroy(Request $request, ScanLink $scanLink): RedirectResponse
     {
-        $scanLink->forceFill(['revoked_at' => CarbonImmutable::now()])->save();
+        $scanLink->loadMissing('issuer');
+
+        abort_unless(ScanLinkService::mayRevoke($scanLink, $request->user()), 404);
+
+        ScanLinkService::revoke($scanLink, $request->user());
 
         return back()->with('success', 'That scanning link has been revoked and can no longer be used.');
     }

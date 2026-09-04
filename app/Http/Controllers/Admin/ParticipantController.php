@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FieldOffice;
 use App\Models\Registration;
 use App\Models\User;
+use App\Support\AccountAccess;
 use App\Support\ParticipantFilter;
 use App\Support\PhilippineGeography;
 use App\Support\ProfileOptions;
@@ -218,9 +219,13 @@ class ParticipantController extends Controller
     }
 
     /**
-     * v1's activate/deactivate button. A deactivated participant is refused at
-     * sign-in (LoginController and GoogleController both check `is_active`),
-     * which is the whole effect — nothing already registered is withdrawn.
+     * v1's activate/deactivate button.
+     *
+     * A deactivated participant is refused at sign-in, and — since C3 — is also
+     * ejected from any session they already hold and stripped of any
+     * remember-me cookie. That last part is the whole point: the comment here
+     * used to say refusal at sign-in "is the whole effect", which was true and
+     * was the bug. Nothing already registered is withdrawn; only the access is.
      */
     public function toggle(Request $request, User $user): RedirectResponse
     {
@@ -228,6 +233,10 @@ class ParticipantController extends Controller
 
         $user->is_active = ! $user->is_active;
         $user->save();
+
+        if (! $user->is_active) {
+            AccountAccess::revoke($user);
+        }
 
         return back()->with(
             'success',

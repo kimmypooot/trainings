@@ -624,4 +624,134 @@ class ScanLinkTest extends TestCase
         $this->assertNotNull($link->fresh()->revoked_at);
         $this->assertFalse($link->fresh()->isActive());
     }
+
+    // --------------------------------------------------- who may cut a door
+
+    /*
+     * Revocation is deliberately broad — a phone goes missing mid-session and
+     * the person standing at the venue has to be able to kill the link without
+     * finding a superadmin — but it used to be *unbounded*: every staff role in
+     * the group could revoke any station in the region, including one another
+     * office was working a live door with, and nothing recorded that they had.
+     */
+
+    private function linkIssuedBy(User $issuer): ScanLink
+    {
+        return ScanLink::factory()->create([
+            'training_id' => Training::factory()->create()->getKey(),
+            'issued_by' => $issuer->getKey(),
+        ]);
+    }
+
+    public function test_a_field_office_cannot_revoke_another_offices_station(): void
+    {
+        $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();
+        $samar = FieldOffice::where('code', 'sfo')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::FieldOffice, $samar));
+
+        $this->actingAs($this->issuer(Role::FieldOffice, $leyte))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertNotFound();
+
+        $this->assertNull(
+            $link->fresh()->revoked_at,
+            'Another office’s station was revoked — that closes a door somebody is standing at.'
+        );
+    }
+
+    public function test_a_field_office_can_revoke_a_station_its_own_office_issued(): void
+    {
+        $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::FieldOffice, $leyte));
+
+        $this->actingAs($this->issuer(Role::FieldOffice, $leyte))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertRedirect();
+
+        $this->assertNotNull($link->fresh()->revoked_at);
+    }
+
+    /**
+     * A link issued by HRD reads the whole region, so it is not a branch
+     * office's to cut — the refusal is the correct answer, not an awkward one.
+     */
+    public function test_a_field_office_cannot_revoke_an_unscoped_station(): void
+    {
+        $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::Admin));
+
+        $this->actingAs($this->issuer(Role::FieldOffice, $leyte))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertNotFound();
+
+        $this->assertNull($link->fresh()->revoked_at);
+    }
+
+    public function test_hrd_can_still_revoke_any_station(): void
+    {
+        $samar = FieldOffice::where('code', 'sfo')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::FieldOffice, $samar));
+
+        $this->actingAs($this->issuer(Role::Admin))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertRedirect();
+
+        $this->assertNotNull($link->fresh()->revoked_at);
+    }
+
+    // ------------------------------------------------------- the audit trail
+
+    public function test_issuing_a_station_is_recorded(): void
+    {
+        $training = Training::factory()->create();
+        $issuer = $this->issuer();
+
+        $this->actingAs($issuer)
+            ->post("/admin/trainings/{$training->id}/scan-links", ['label' => 'Main door'])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'scan-link.issued',
+            'causer_id' => $issuer->getKey(),
+        ]);
+    }
+
+    public function test_revoking_a_station_is_recorded(): void
+    {
+        $link = $this->linkIssuedBy($this->issuer());
+        $actor = $this->issuer(Role::SuperAdmin);
+
+        $this->actingAs($actor)
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'scan-link.revoked',
+            'causer_id' => $actor->getKey(),
+        ]);
+    }
+
+    /**
+     * Two people reaching for the same kill switch is the normal case when a
+     * phone goes missing. The second must not move the timestamp, or the trail
+     * would say the door closed later than it did.
+     */
+    public function test_revoking_twice_does_not_move_the_revocation_time(): void
+    {
+        $link = $this->linkIssuedBy($this->issuer());
+        $actor = $this->issuer(Role::SuperAdmin);
+
+        $this->actingAs($actor)->delete("/admin/scan-links/{$link->id}")->assertRedirect();
+        $first = $link->fresh()->revoked_at;
+
+        $this->travel(5)->minutes();
+
+        $this->actingAs($actor)->delete("/admin/scan-links/{$link->id}")->assertRedirect();
+
+        $this->assertEquals($first, $link->fresh()->revoked_at);
+    }
 }

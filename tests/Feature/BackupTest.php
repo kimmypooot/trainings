@@ -107,4 +107,111 @@ class BackupTest extends TestCase
 
         return $found[0];
     }
+
+    // ---------------------------------------------------------- encryption
+
+    /*
+     * The archive holds every participant record, every refund payee's bank
+     * account number and every stored document, and the whole point of the
+     * configured path is that it leaves this machine. Unencrypted, that is all
+     * of it in the clear on every device the destination folder reaches.
+     */
+
+    public function test_a_password_encrypts_every_entry(): void
+    {
+        config(['backup.password' => 'archive-secret']);
+        Storage::disk('local')->put('certificates/one.pdf', 'PDF');
+
+        $this->artisan('tims:backup', ['--path' => $this->destination])->assertSuccessful();
+
+        $zip = new ZipArchive;
+        $zip->open($this->onlyArchive());
+
+        $this->assertGreaterThan(0, $zip->numFiles);
+
+        // Every entry, not just the dump: zip has no archive-level flag, so a
+        // file added without setEncryptionName lands in the clear inside an
+        // otherwise-encrypted archive.
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $zip->getNameIndex($i);
+
+            $this->assertFalse(
+                @$zip->getFromIndex($i),
+                "{$name} was readable without the password."
+            );
+        }
+
+        $zip->setPassword('archive-secret');
+        $this->assertSame('PDF', $zip->getFromName('private/certificates/one.pdf'));
+        $this->assertNotFalse($zip->getFromName('database.sql'));
+        $zip->close();
+    }
+
+    public function test_without_a_password_the_archive_is_readable(): void
+    {
+        config(['backup.password' => null]);
+
+        $this->artisan('tims:backup', ['--path' => $this->destination])->assertSuccessful();
+
+        $zip = new ZipArchive;
+        $zip->open($this->onlyArchive());
+
+        // Stated rather than assumed, so the encryption test above is known to
+        // be measuring the password and not some unrelated property of zip.
+        $this->assertNotFalse($zip->getFromName('database.sql'));
+        $zip->close();
+    }
+
+    // -------------------------------------------------- production refusals
+
+    /*
+     * Both of these were documented and neither was enforced, which is the gap:
+     * config/backup.php was honest that an on-host archive "protects against a
+     * bad migration or a deleted file, but not against the disk", and honest
+     * documentation of a gap is not a mitigation. The default is what ships.
+     */
+
+    public function test_production_refuses_to_write_an_unencrypted_archive(): void
+    {
+        app()->detectEnvironment(fn () => 'production');
+        config(['backup.password' => null]);
+
+        $this->artisan('tims:backup', ['--path' => $this->destination])->assertFailed();
+
+        $this->assertSame(
+            [],
+            glob($this->destination.DIRECTORY_SEPARATOR.'*.zip') ?: [],
+            'An archive was written despite the refusal.'
+        );
+    }
+
+    public function test_production_refuses_a_destination_inside_the_application(): void
+    {
+        app()->detectEnvironment(fn () => 'production');
+        config(['backup.password' => 'archive-secret']);
+
+        // storage_path() is inside base_path(), which is exactly the default
+        // this refusal exists to catch.
+        $this->artisan('tims:backup', ['--path' => storage_path('backups')])->assertFailed();
+    }
+
+    public function test_production_accepts_an_encrypted_off_host_archive(): void
+    {
+        $outside = sys_get_temp_dir().DIRECTORY_SEPARATOR.'tims-offhost-'.uniqid();
+
+        app()->detectEnvironment(fn () => 'production');
+        config(['backup.password' => 'archive-secret']);
+
+        try {
+            $this->artisan('tims:backup', ['--path' => $outside])->assertSuccessful();
+
+            $this->assertNotEmpty(glob($outside.DIRECTORY_SEPARATOR.'*.zip') ?: []);
+        } finally {
+            foreach (glob($outside.DIRECTORY_SEPARATOR.'*') ?: [] as $file) {
+                @unlink($file);
+            }
+
+            @rmdir($outside);
+        }
+    }
 }

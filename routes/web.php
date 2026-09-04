@@ -961,8 +961,37 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
     Route::get('/my/qr', [QrCodeController::class, 'show'])->name('qr.show');
     Route::get('/my/qr.png', [QrCodeController::class, 'image'])->name('qr.image');
     Route::post('/my/qr/regenerate', [QrCodeController::class, 'regenerate'])->name('qr.regenerate');
+});
 
-    // Where a scanned code lands; the controller restricts it to staff.
+/*
+ * Where a scanned participant badge lands.
+ *
+ * These are staff routes and now say so. They used to sit inside the
+ * participant group above with nothing but an isStaff() check inside the
+ * controller, and that check was coarser than every other attendance route in
+ * this file — with two consequences, both of which were reachable:
+ *
+ *  - `management` is deliberately named out of the attendance group further up
+ *    ("it reads rosters and reports and records nothing"), and
+ *    POST /admin/registrations/{id}/attendance duly refuses it with a 403. This
+ *    door did not, so an oversight role could record attendance through it.
+ *  - the controller applied no field-office scope, so a field office could
+ *    scan, read and check in another office's participant — the exact thing
+ *    AttendanceController::authorizeOffice exists to prevent.
+ *
+ * So the role list is the same one the rest of the venue work carries, and the
+ * controller re-resolves the participant against the actor's office.
+ *
+ * The paths and route names are unchanged, deliberately. Moving them under the
+ * /admin prefix would have been tidier and would have broken every badge
+ * already in circulation: the QR code encodes route('scan'), and codes are
+ * printed and carried. Fixing who may open a door is not a reason to invalidate
+ * the keys.
+ */
+Route::middleware([
+    'auth',
+    EnsureUserIsStaff::class.':field-office|collecting-officer|admin|superadmin',
+])->group(function () {
     Route::get('/scan/{token}', [QrCodeController::class, 'scan'])->name('scan');
     Route::post('/scan/{token}/check-in', [QrCodeController::class, 'checkIn'])->name('scan.check-in');
 });

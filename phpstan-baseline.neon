@@ -1309,15 +1309,9 @@ parameters:
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
-			message: '#^Cannot call method diffForHumans\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/Admin/RosterController.php
-
-		-
 			message: '#^Cannot call method format\(\) on string\.$#'
 			identifier: method.nonObject
-			count: 5
+			count: 4
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
@@ -1357,19 +1351,13 @@ parameters:
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/Admin/RosterController.php
-
-		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{App\\Models\\Payment, Illuminate\\Database\\Eloquent\\Model\|null\}, Closure\(App\\Models\\Payment\)\: array\{App\\Models\\Payment, Illuminate\\Database\\Eloquent\\Model\|null\} given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Http/Controllers/Admin/RosterController.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: int, label\: string\|null, is_test\: bool, url\: string, expires_at\: mixed, last_used_at\: mixed\}, Closure\(App\\Models\\ScanLink\)\: array\{id\: int, label\: string\|null, is_test\: bool, url\: string, expires_at\: mixed, last_used_at\: mixed\} given\.$#'
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: int, label\: string\|null, is_test\: bool, url\: string, expires_at\: non\-falsy\-string, last_used_at\: string\|null\}, Closure\(App\\Models\\ScanLink\)\: array\{id\: int, label\: string\|null, is_test\: bool, url\: string, expires_at\: non\-falsy\-string, last_used_at\: string\|null\} given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Http/Controllers/Admin/RosterController.php
@@ -1433,12 +1421,6 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/Admin/RosterController.php
-
-		-
-			message: '#^Cannot call method format\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/Admin/ScanLinkController.php
 
 		-
 			message: '#^Cannot call method format\(\) on string\.$#'
@@ -2533,54 +2515,6 @@ parameters:
 			path: app/Http/Controllers/RegistrationOutputController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$fieldOffice\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$venue\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:scopedFieldOfficeId\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
-			message: '#^Cannot call method isFuture\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
-			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
-			message: '#^Parameter \#1 \$training of static method App\\Support\\ScanStationService\:\:roster\(\) expects App\\Models\\Training, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
-			message: '#^Parameter \#3 \$actor of static method App\\Support\\ScanStationService\:\:sync\(\) expects App\\Models\\User, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/ScanLinkController.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
 			count: 1
@@ -2843,18 +2777,6 @@ parameters:
 			identifier: identical.alwaysFalse
 			count: 2
 			path: app/Models/Registration.php
-
-		-
-			message: '#^Cannot call method getTimestamp\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Models/ScanLink.php
-
-		-
-			message: '#^Cannot call method isFuture\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Models/ScanLink.php
 
 		-
 			message: '#^Cannot access property \$value on int\<0, max\>\.$#'
@@ -4901,12 +4823,6 @@ parameters:
 			identifier: identical.alwaysFalse
 			count: 1
 			path: tests/Feature/SampleActivitySeederTest.php
-
-		-
-			message: '#^Cannot call method toDateTimeString\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: tests/Feature/ScanLinkTest.php
 
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$pivot\.$#'

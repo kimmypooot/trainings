@@ -121,16 +121,43 @@ class QrCodeController extends Controller
     }
 
     /**
-     * Staff-only: a scan resolves a participant's identity, so it must never be
-     * readable by whoever points a camera at it.
+     * Staff-only, and only this staff member's own participants.
+     *
+     * The role check is belt to the route's braces — routes/web.php now gates
+     * these two endpoints on the same role list as the rest of the venue work,
+     * and this stays because a scan resolves a person's identity and the answer
+     * to "who may do that" should not live in one place only.
+     *
+     * The office scope is the part that was missing. Route-model binding is not
+     * involved here — the token is the lookup — but the effect was the same as
+     * an unscoped binding: a field office could scan, read and check in a
+     * participant belonging to another office, which is precisely what
+     * AttendanceController::authorizeOffice refuses for the manual path and
+     * what ScanStationService applies to both scanning doors. This screen was
+     * the one way in that did neither.
+     *
+     * 404 rather than 403 on an out-of-scope participant, and the same 404 as a
+     * token that matches nobody: whether another office's badge exists is not
+     * this operator's to learn by scanning it.
      */
     private function resolveParticipant(Request $request, string $token): User
     {
-        if (! $request->user()?->role->isStaff()) {
+        $actor = $request->user();
+
+        if (! $actor?->role->isStaff()) {
             abort(403, 'Only CSC staff can look up a participant code.');
         }
 
-        $participant = User::where('qr_token', $token)->with('profile.fieldOffice')->first();
+        $participant = User::where('qr_token', $token)
+            ->when(
+                $actor->scopedFieldOfficeId() !== null,
+                fn ($query) => $query->whereHas(
+                    'profile',
+                    fn ($profile) => $profile->where('field_office_id', $actor->scopedFieldOfficeId())
+                )
+            )
+            ->with('profile.fieldOffice')
+            ->first();
 
         if (! $participant) {
             throw new NotFoundHttpException('That code does not match any participant.');

@@ -5,13 +5,16 @@ namespace Tests\Feature;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\RegistrationStatus;
+use App\Enums\RequestStatus;
 use App\Enums\Role;
+use App\Models\CancellationRequest;
 use App\Models\FieldOffice;
 use App\Models\Payment;
 use App\Models\Profile;
 use App\Models\Registration;
 use App\Models\RegistrationOutput;
 use App\Models\Training;
+use App\Models\TrainingRequest;
 use App\Models\User;
 use App\Support\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -427,5 +430,183 @@ class FieldOfficeScopingTest extends TestCase
         $this->actingAs($this->fieldOfficeStaff($this->leyte))
             ->get("/outputs/{$output->id}/download")
             ->assertNotFound();
+    }
+
+    // ------------------------------------------------------- the review queues
+
+    /*
+     * The three decisions in Admin\RequestQueueController.
+     *
+     * `index()` scoped all three queues by office from the beginning; the three
+     * POSTs that act on them scoped none, and nothing in this file covered them
+     * — which is exactly why the hole survived. A field office could approve
+     * another office's withdrawal, which frees a seat and starts a refund, by
+     * posting its id.
+     *
+     * Each is asserted both ways: refused across offices, allowed within one.
+     * The positive case is not decoration — a scope that refuses everything
+     * would satisfy the negative assertion on its own.
+     */
+
+    private function registrationFor(User $participant): Registration
+    {
+        return Registration::factory()->create([
+            'user_id' => $participant->getKey(),
+            'training_id' => Training::factory()->create()->getKey(),
+            'status' => RegistrationStatus::Approved,
+        ]);
+    }
+
+    private function cancellationFor(FieldOffice $office, string $email): CancellationRequest
+    {
+        return CancellationRequest::create([
+            'registration_id' => $this->registrationFor($this->participantIn($office, $email))->getKey(),
+            'reason' => 'Reassigned that week.',
+            'status' => RequestStatus::Pending,
+        ]);
+    }
+
+    public function test_an_officer_cannot_review_another_offices_cancellation(): void
+    {
+        $cancellation = $this->cancellationFor($this->samar, 'samar.cancel@example.com');
+
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->post("/admin/requests/cancellations/{$cancellation->id}", ['decision' => 'approved'])
+            ->assertNotFound();
+
+        $this->assertSame(
+            RequestStatus::Pending,
+            $cancellation->fresh()->status,
+            'Another office’s withdrawal was decided — that frees a seat and starts a refund.'
+        );
+    }
+
+    public function test_an_officer_can_review_their_own_offices_cancellation(): void
+    {
+        $cancellation = $this->cancellationFor($this->leyte, 'leyte.cancel@example.com');
+
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->post("/admin/requests/cancellations/{$cancellation->id}", ['decision' => 'approved'])
+            ->assertRedirect();
+
+        $this->assertSame(RequestStatus::Approved, $cancellation->fresh()->status);
+    }
+
+    public function test_an_officer_cannot_review_another_offices_output(): void
+    {
+        Storage::fake('local');
+
+        $registration = $this->registrationFor($this->participantIn($this->samar, 'samar.output@example.com'));
+
+        $output = RegistrationOutput::create([
+            'registration_id' => $registration->getKey(),
+            'title' => 'Action plan',
+            'file_path' => UploadedFile::fake()->create('output.pdf')->store('outputs', 'local'),
+            'original_filename' => 'output.pdf',
+            'file_size' => 100,
+            'mime_type' => 'application/pdf',
+            'status' => RequestStatus::Pending,
+        ]);
+
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->post("/admin/requests/outputs/{$output->id}", ['decision' => 'approved'])
+            ->assertNotFound();
+
+        $this->assertSame(RequestStatus::Pending, $output->fresh()->status);
+    }
+
+    public function test_an_officer_cannot_review_another_offices_training_request(): void
+    {
+        $requester = $this->participantIn($this->samar, 'samar.request@example.com');
+
+        $trainingRequest = TrainingRequest::create([
+            'requested_by' => $requester->getKey(),
+            'title' => 'Records Management',
+            'justification' => 'The unit has no trained records officer.',
+            'status' => RequestStatus::Pending,
+        ]);
+
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->post("/admin/requests/trainings/{$trainingRequest->id}", ['decision' => 'approved'])
+            ->assertNotFound();
+
+        $this->assertSame(RequestStatus::Pending, $trainingRequest->fresh()->status);
+    }
+
+    /**
+     * HRD is not office-scoped, so the same posts must keep working for them —
+     * the fix must narrow the field office, not the queue.
+     */
+    public function test_hrd_can_still_review_any_offices_cancellation(): void
+    {
+        $cancellation = $this->cancellationFor($this->samar, 'samar.hrd@example.com');
+
+        $this->actingAs(User::factory()->create(['role' => Role::Admin, 'profile_completed_at' => now()]))
+            ->post("/admin/requests/cancellations/{$cancellation->id}", ['decision' => 'approved'])
+            ->assertRedirect();
+
+        $this->assertSame(RequestStatus::Approved, $cancellation->fresh()->status);
+    }
+
+    // ------------------------------------------------- the scanned badge door
+
+    /*
+     * GET /scan/{token} and POST /scan/{token}/check-in.
+     *
+     * These sat in the participant route group behind nothing but an isStaff()
+     * check, which was coarser than every other attendance route — so
+     * `management`, named out of the attendance group precisely because it
+     * "records nothing", could record attendance here, and a field office could
+     * read and check in another office's participant.
+     */
+
+    private function badgeToken(User $participant): string
+    {
+        return $participant->ensureQrToken();
+    }
+
+    public function test_management_cannot_open_a_scanned_badge(): void
+    {
+        $token = $this->badgeToken($this->participantIn($this->leyte, 'badge.mgmt@example.com'));
+
+        $this->actingAs(User::factory()->create(['role' => Role::Management, 'profile_completed_at' => now()]))
+            ->get("/scan/{$token}")
+            ->assertForbidden();
+    }
+
+    public function test_management_cannot_check_someone_in_through_a_scanned_badge(): void
+    {
+        $participant = $this->participantIn($this->leyte, 'badge.mgmt2@example.com');
+        $registration = $this->registrationFor($participant);
+
+        $this->actingAs(User::factory()->create(['role' => Role::Management, 'profile_completed_at' => now()]))
+            ->post("/scan/{$this->badgeToken($participant)}/check-in", [
+                'registration_id' => $registration->getKey(),
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(
+            0,
+            $registration->attendances()->count(),
+            'An oversight role recorded attendance through the badge door.'
+        );
+    }
+
+    public function test_an_officer_cannot_scan_another_offices_participant(): void
+    {
+        $token = $this->badgeToken($this->participantIn($this->samar, 'samar.badge@example.com'));
+
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->get("/scan/{$token}")
+            ->assertNotFound();
+    }
+
+    public function test_an_officer_can_scan_their_own_offices_participant(): void
+    {
+        $token = $this->badgeToken($this->participantIn($this->leyte, 'leyte.badge@example.com'));
+
+        $this->actingAs($this->fieldOfficeStaff($this->leyte))
+            ->get("/scan/{$token}")
+            ->assertSuccessful();
     }
 }

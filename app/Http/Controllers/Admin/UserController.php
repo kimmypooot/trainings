@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\FieldOffice;
 use App\Models\User;
+use App\Support\AccountAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -182,6 +183,15 @@ class UserController extends Controller
 
         $user->save();
 
+        // Switching an account off here has to end its access, exactly as the
+        // toggle below does — the same decision reached through a different
+        // form. A role *downgrade* deliberately does not revoke: the account is
+        // still the same person's, still theirs to keep working in, and the new
+        // role is read from the record on every request anyway.
+        if (! $user->is_active) {
+            AccountAccess::revoke($user);
+        }
+
         return redirect()
             ->route('admin.users.index')
             ->with('success', "{$user->name} has been updated.");
@@ -201,6 +211,15 @@ class UserController extends Controller
 
         $user->is_active = ! $user->is_active;
         $user->save();
+
+        // Deactivating is what the office reaches for when a staff member
+        // leaves or an account is compromised, and in both of those the holder
+        // is already signed in. Flipping the column alone left that session
+        // working, so the button that reads "deactivate" has to actually end
+        // the access rather than only forbid the next sign-in.
+        if (! $user->is_active) {
+            AccountAccess::revoke($user);
+        }
 
         return back()->with(
             'success',

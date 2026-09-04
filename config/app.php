@@ -31,6 +31,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Vite Dev Server Origin
+    |--------------------------------------------------------------------------
+    |
+    | Where the dev server is reachable when it is not on this machine's own
+    | localhost — a VS Code / ngrok tunnel forwarding port 5173. vite.config.js
+    | reads the same variable to set the HMR socket; this copy exists so the
+    | Content-Security-Policy can name the origin it has to allow in local
+    | development, which it cannot do through env() once config is cached.
+    |
+    */
+
+    'vite_dev_origin' => env('VITE_DEV_ORIGIN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |
