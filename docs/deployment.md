@@ -137,6 +137,30 @@ broken install, and every symptom downstream of it is silent — profiles link t
 nothing, field-office scoping resolves to 0 and fails closed, and every
 field-office account sees an empty system with nothing to explain why.
 
+Each row wants `code` (short, unique), `name`, `type` (`field_office`,
+`satellite_office`, `regional_office` or `division`), `province`, and
+`jurisdiction` — the provinces the office covers, which is what a participant
+picks against. `email`, `head_name` and `head_position` are optional and may be
+null.
+
+**Keep one catch-all row.** The shipped list ends with a `division` row covering
+every province plus an "outside the region" option, and it is what a participant
+who belongs to no field office selects. Without one, those participants have
+nothing to choose. Its `code` is not load-bearing — only a backfill migration
+for v1 data mentions `hrd`, guarded, and a fresh install has nothing to backfill
+— but the row itself is.
+
+**Why the file rather than the screen.** Offices are also managed at
+`/admin/field-offices` (admin and superadmin) — create, edit, and activate or
+deactivate. What that screen deliberately cannot do is **delete**, because
+profiles point at these rows and removing one would orphan them; the same rule
+applies as to subject matter experts. So an office that migrates with the shipped
+file and fixes it afterwards is left with nine Regional Office VIII rows it can
+only deactivate, permanently. Editing the file first is the only path that
+leaves no residue. After that first migrate, the screen is the natural place for
+everything: a new satellite office, a head who has moved on, a jurisdiction that
+has been redrawn.
+
 ### The photographs are files, not code
 
 Four screens show a photograph of the office building: the landing hero, the
