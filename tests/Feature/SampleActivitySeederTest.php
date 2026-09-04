@@ -260,7 +260,29 @@ class SampleActivitySeederTest extends TestCase
 
     public function test_a_participant_with_a_certificate_sees_it_as_released(): void
     {
-        $certificate = Certificate::with('user')->firstOrFail();
+        /*
+         * Both constraints below are load-bearing, and neither was here.
+         *
+         * `SampleUsersSeeder` deactivates 8% of the accounts it creates
+         * (`fake()->boolean(92)`), and `EnsureAccountIsActive` correctly ejects
+         * a deactivated account on its next request. A bare `firstOrFail()`
+         * with no ordering takes whatever row MySQL hands back, so roughly one
+         * run in twelve picked a deactivated owner and failed with a 302 and a
+         * message about the account — an assertion failure that says nothing
+         * about certificates. It failed in CI having passed locally, which is
+         * exactly the shape of a test that depends on unordered rows.
+         *
+         * A deactivated account is a different test's subject. This one is
+         * about a participant seeing a certificate they hold, so it asks for
+         * one whose owner can still sign in, and asks in a defined order so the
+         * answer does not change between runs.
+         */
+        $certificate = Certificate::with('user')
+            ->whereHas('user', fn ($user) => $user->where('is_active', true))
+            ->whereNotNull('generated_at')
+            ->whereNotNull('file_path')
+            ->oldest('id')
+            ->firstOrFail();
 
         $response = $this->actingAs($certificate->user)
             ->get('/my/certificates')
