@@ -33,7 +33,31 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+
+            /*
+             * Off, against the skeleton's default of true.
+             *
+             * `serve` registers two routes on this disk — GET and PUT
+             * /storage/{path} — reading from and writing to the directory
+             * holding every certificate, payment proof, agency document and
+             * supervisory document. Both require a valid signature, so this was
+             * never an open door; it was a second path to those files that
+             * applies none of the ownership checks the download controllers
+             * exist to make, writes no audit entry, and would let a signed PUT
+             * overwrite a certificate already in circulation.
+             *
+             * Nothing in this application asks for it. No code calls
+             * Storage::url() or temporaryUrl() on this disk — private files are
+             * served through an authorising controller, which is the invariant
+             * stated in CLAUDE.md and the one those routes quietly broke.
+             *
+             * It also behaved differently depending on deployment: the routes
+             * are skipped entirely when routes are cached, so a production box
+             * that had run `artisan optimize` and one that had not were not the
+             * same application.
+             */
+            'serve' => false,
+
             'throw' => false,
             'report' => false,
         ],

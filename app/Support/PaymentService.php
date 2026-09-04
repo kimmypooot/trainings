@@ -282,17 +282,48 @@ class PaymentService
         $discounted = (bool) ($data['prime_hrm_discount'] ?? false);
         $breakdown = self::primeHrmBreakdown($registration->training);
 
-        $payment = Payment::create([
-            'registration_id' => $registration->getKey(),
-            'user_id' => $registration->user_id,
-            'training_id' => $registration->training_id,
-            'amount' => $discounted ? $breakdown['net'] : $data['amount'],
-            'prime_hrm_discount' => $discounted,
-            'discount_amount' => $discounted ? $breakdown['discount'] : 0,
-            'payment_method' => $data['payment_method'],
-            'reference_number' => $data['reference_number'] ?? null,
-            'payment_date' => $data['payment_date'],
-        ]);
+        /*
+         * Created under the registration's own lock.
+         *
+         * This was the one money path in the file without one. Every sibling —
+         * decide(), RefundService, RegistrationService::register,
+         * CertificateService::release — takes a lockForUpdate and re-checks
+         * state inside the transaction; this read hasClearedFee() outside any
+         * transaction and then created a row, so two officers recording the
+         * same participant's cash at the same moment both passed the check.
+         * The unique index on or_number catches identical receipt numbers, but
+         * two different ones are exactly what two officers at two desks would
+         * enter, and the office would have collected once and recorded twice.
+         *
+         * The registration is what gets locked rather than the payment, because
+         * the thing being guarded is "does this registration already have money
+         * against it" — a row that does not exist yet cannot be locked.
+         */
+        $payment = DB::transaction(function () use ($registration, $data, $discounted, $breakdown) {
+            $locked = Registration::whereKey($registration->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $locked->load('payments');
+
+            if ($locked->hasClearedFee()) {
+                throw ValidationException::withMessages([
+                    'payment' => 'This registration has already been paid.',
+                ]);
+            }
+
+            return Payment::create([
+                'registration_id' => $locked->getKey(),
+                'user_id' => $locked->user_id,
+                'training_id' => $locked->training_id,
+                'amount' => $discounted ? $breakdown['net'] : $data['amount'],
+                'prime_hrm_discount' => $discounted,
+                'discount_amount' => $discounted ? $breakdown['discount'] : 0,
+                'payment_method' => $data['payment_method'],
+                'reference_number' => $data['reference_number'] ?? null,
+                'payment_date' => $data['payment_date'],
+            ]);
+        });
 
         return self::verify($payment, $officer, $data['remarks'] ?? null, [
             'or_number' => $data['or_number'] ?? null,

@@ -318,13 +318,13 @@ class AccountRevocationTest extends TestCase
         $this->post('/reset-password', [
             'token' => $token,
             'email' => 'reset@example.test',
-            'password' => 'BrandNew123',
-            'password_confirmation' => 'BrandNew123',
+            'password' => 'BrandNewPass123',
+            'password_confirmation' => 'BrandNewPass123',
         ])->assertSessionHasNoErrors();
 
         $user->refresh();
 
-        $this->assertTrue(Hash::check('BrandNew123', $user->password));
+        $this->assertTrue(Hash::check('BrandNewPass123', $user->password));
         $this->assertNotSame(
             $before,
             $user->remember_token,

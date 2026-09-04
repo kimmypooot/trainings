@@ -7,7 +7,21 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property Carbon|null $date_of_birth
+ * @property bool $is_pwd
+ * @property Carbon|null $consented_at
+ * @property-read User $user
+ * @property-read FieldOffice|null $fieldOffice
+ *
+ * Larastan reads casts from the `$casts` property rather than the `casts()`
+ * method this model uses, so the two cast columns resolved to their raw
+ * database types and `$profile->date_of_birth->format(...)` read as a method
+ * call on a string. Same cause as the blocks on `User`, `Registration` and
+ * `ScanLink`; see CLAUDE.md.
+ */
 #[Fillable([
     'first_name', 'middle_name', 'last_name', 'suffix', 'date_of_birth', 'sex',
     'is_pwd', 'civil_status', 'mobile_number', 'position_title', 'salary_grade',

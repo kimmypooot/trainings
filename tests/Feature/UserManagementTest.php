@@ -132,8 +132,8 @@ class UserManagementTest extends TestCase
                 'name' => 'Jane Cruz',
                 'email' => 'jane@csc.gov.ph',
                 'role' => Role::Admin->value,
-                'password' => 'sikreto123',
-                'password_confirmation' => 'sikreto123',
+                'password' => 'sikretokong123',
+                'password_confirmation' => 'sikretokong123',
             ])
             ->assertRedirect('/admin/users')
             ->assertSessionHas('success');
@@ -142,7 +142,7 @@ class UserManagementTest extends TestCase
 
         $this->assertSame(Role::Admin, $user->role);
         $this->assertTrue($user->is_active);
-        $this->assertTrue(Hash::check('sikreto123', $user->password));
+        $this->assertTrue(Hash::check('sikretokong123', $user->password));
         // Staff never fill in a participant profile, so the gate must not catch them.
         $this->assertTrue($user->hasCompletedProfile());
     }
@@ -155,8 +155,8 @@ class UserManagementTest extends TestCase
                 'name' => 'Office Staff',
                 'email' => 'office@csc.gov.ph',
                 'role' => Role::FieldOffice->value,
-                'password' => 'sikreto123',
-                'password_confirmation' => 'sikreto123',
+                'password' => 'sikretokong123',
+                'password_confirmation' => 'sikretokong123',
             ])
             ->assertSessionHasErrors('field_office_id');
     }
@@ -189,7 +189,7 @@ class UserManagementTest extends TestCase
     {
         $user = User::factory()->create([
             'role' => Role::Admin,
-            'password' => 'original123',
+            'password' => 'originalpass123',
             'profile_completed_at' => now(),
         ]);
         $original = $user->password;
@@ -208,11 +208,11 @@ class UserManagementTest extends TestCase
             'email' => $user->email,
             'role' => Role::Admin->value,
             'is_active' => true,
-            'password' => 'brandnew123',
-            'password_confirmation' => 'brandnew123',
+            'password' => 'brandnewpass123',
+            'password_confirmation' => 'brandnewpass123',
         ]);
 
-        $this->assertTrue(Hash::check('brandnew123', $user->fresh()->password));
+        $this->assertTrue(Hash::check('brandnewpass123', $user->fresh()->password));
     }
 
     public function test_a_superadmin_cannot_change_their_own_role_or_deactivate_themselves(): void
@@ -268,14 +268,14 @@ class UserManagementTest extends TestCase
     {
         User::factory()->create([
             'email' => 'off@csc.gov.ph',
-            'password' => 'sikreto123',
+            'password' => 'sikretokong123',
             'role' => Role::Admin,
             'is_active' => false,
             'profile_completed_at' => now(),
         ]);
 
         $this->from('/login')
-            ->post('/login', ['email' => 'off@csc.gov.ph', 'password' => 'sikreto123'])
+            ->post('/login', ['email' => 'off@csc.gov.ph', 'password' => 'sikretokong123'])
             ->assertRedirect('/login')
             ->assertSessionHasErrors('form');
 

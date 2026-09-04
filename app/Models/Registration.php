@@ -15,7 +15,33 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property RegistrationStatus $status
+ * @property ChargeTo|null $charge_to
+ * @property SupervisoryDocumentStatus|null $supervisory_document_status
+ * @property bool $needs_certificate
+ * @property bool $is_walk_in
+ * @property Carbon|null $registered_at
+ * @property Carbon|null $cancelled_at
+ * @property Carbon|null $attended_at
+ * @property Carbon|null $reviewed_at
+ * @property Carbon|null $supervisory_document_reviewed_at
+ * @property-read User $user
+ * @property-read Training $training
+ *
+ * Larastan reads casts from the `$casts` property, not the `casts()` method
+ * this model uses, so without these every cast column resolves to its raw
+ * database type and every relation to the generic `Model` — the same problem
+ * `User` documents for its role and `ScanLink` for its datetimes. This is the
+ * most-used model in the application, so the noise was the loudest here:
+ * `$registration->user->name` read as an undefined property and
+ * `$registration->status->label()` as a method call on a string.
+ *
+ * Statements of what the casts and relations already do, not suppressions — a
+ * wrong comparison or a misspelled property still fails.
+ */
 #[Fillable([
     'user_id', 'training_id', 'status', 'charge_to', 'needs_certificate',
     'supporting_document_path', 'supervisory_document_status',

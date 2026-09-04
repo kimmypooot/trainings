@@ -8,6 +8,8 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -17,6 +19,20 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            /*
+             * A floor under the authenticated half of the application, which
+             * had none at all: every unauthenticated state-change endpoint in
+             * routes/web.php carries a `throttle:`, and a signed-in account
+             * could hammer any admin endpoint without limit — including the
+             * exports, each of which runs a full-table query.
+             *
+             * 300/min per user, which is a guard against a runaway script
+             * rather than a usage policy. Appended, so it runs after the
+             * session has started and there is a user to key by; a limit keyed
+             * by address would put a whole office behind one NAT in one bucket.
+             * See AppServiceProvider::defineRateLimiters.
+             */
+            'throttle:authenticated',
             // First of the three, because a deactivated account should not
             // reach the maintenance gate, the visitor counter or a page
             // payload. `is_active` was checked only at sign-in, which left an
@@ -160,4 +176,47 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        /*
+         * Keep errors inside the application.
+         *
+         * The app ships per-status Blade error pages and a branded Error.vue,
+         * but only the `fallback` route reached the Vue one — so a 403 from the
+         * role middleware, a 419 on an expired token, a 429 or a 500 during
+         * *in-app navigation* returned a full HTML document to a request that
+         * asked for an Inertia response. Inertia cannot use that, so it renders
+         * the document in its own error-modal overlay: the participant gets a
+         * scrollable iframe of a page in the middle of the app they were using.
+         *
+         * Two different error experiences, and the worse one covered exactly
+         * the case a signed-in user is most likely to hit.
+         *
+         * Only Inertia requests are touched. A first page load, a direct link
+         * and a curl all still get the Blade pages, which is right: those are
+         * not running the SPA and have no shell to stay inside.
+         */
+        $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
+            if (! $request->header('X-Inertia')) {
+                return $response;
+            }
+
+            /*
+             * 419 is a session that has expired, not a page. Re-rendering the
+             * error component would strand somebody on a dead end whose only
+             * honest action is a reload; sending them back to where they were
+             * with a message lets the form be resubmitted against a fresh
+             * token, which is what they were trying to do.
+             */
+            if ($response->getStatusCode() === 419) {
+                return back()->with('error', 'Your session expired. Please try again.');
+            }
+
+            if (in_array($response->getStatusCode(), [401, 403, 404, 405, 429, 500, 503], true)) {
+                return Inertia::render('Error', ['status' => $response->getStatusCode()])
+                    ->toResponse($request)
+                    ->setStatusCode($response->getStatusCode());
+            }
+
+            return $response;
+        });
     })->create();

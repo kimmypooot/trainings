@@ -44,7 +44,7 @@ class ChangePasswordController extends Controller
             // complete silence. 'required' still fires on null for an ordinary
             // account, so the check itself is untouched.
             'current_password' => [Rule::requiredIf(! $isCreating), 'nullable', 'string'],
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
         if (! $isCreating && ! Hash::check($validated['current_password'], $user->password)) {

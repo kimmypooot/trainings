@@ -77,7 +77,7 @@ class SendEvaluationInvitations extends Command
                 continue;
             }
 
-            $registration->user?->notify(new EvaluationRequested(
+            $registration->user->notify(new EvaluationRequested(
                 $registration,
                 $invitation['day'],
                 $invitation['experts'],

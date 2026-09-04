@@ -194,7 +194,12 @@ Route::get('/maintenance', fn () => Inertia::render('Maintenance', [
 ]))->name('maintenance');
 
 Route::get('/login', [LoginController::class, 'create'])->name('login');
-Route::post('/login', [LoginController::class, 'store'])->name('login.store');
+Route::post('/login', [LoginController::class, 'store'])
+    // Per address. LoginController throttles per email|ip, which caps attempts
+    // against one account and none at all on one address walking a list — which
+    // is what credential stuffing is. Both are needed; neither replaces the other.
+    ->middleware('throttle:login')
+    ->name('login.store');
 
 Route::get('/register', [RegisterController::class, 'create'])->name('register');
 // Throttled like every other unauthenticated state-change endpoint here —
@@ -731,38 +736,49 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
          * — see ExportScopingTest, which is the guard on that.
          */
         Route::get('/analytics', AdminAnalyticsController::class)->name('analytics');
-        Route::get('/exports/participants', [AdminExportController::class, 'participants'])
-            ->name('exports.participants');
-        Route::get('/exports/certificates', [AdminExportController::class, 'certificates'])
-            ->name('exports.certificates');
-        Route::get('/exports/registrations', [AdminExportController::class, 'registrations'])
-            ->name('exports.registrations');
-        // One participant's whole record, for when someone asks what they have
-        // attended. Office-scoped in the controller like the directory itself.
-        Route::get('/exports/participants/{user}/history', [AdminExportController::class, 'participantHistory'])
-            ->name('exports.participant-history');
-        Route::get('/exports/trainings/{training}/roster', [AdminExportController::class, 'roster'])
-            ->name('exports.roster');
-        // The affected-participants list for a rescheduled run, with the fee
-        // state that decides each case. Office-scoped in the controller like
-        // every other export here.
-        Route::get('/exports/trainings/{training}/affected', [AdminExportController::class, 'affected'])
-            ->name('exports.affected');
-        Route::get('/exports/payments', [AdminExportController::class, 'payments'])
-            ->name('exports.payments');
-        // Per-training revenue, with the PRIME-HRM discounts identified.
-        // Gated on the collecting-officer designation inside the controller,
-        // like the payments export it sits beside.
-        Route::get('/exports/trainings/{training}/revenue', [AdminExportController::class, 'revenue'])
-            ->name('exports.revenue');
-        // The analytics report exports. They share the ReportScope parser with
-        // the analytics page, so a download and the screen it came from always
-        // cover the same trainings; the revenue one is gated on the
-        // collecting-officer designation inside the controller.
-        Route::get('/exports/reports/revenue', [AdminExportController::class, 'revenueReport'])
-            ->name('exports.reports.revenue');
-        Route::get('/exports/reports/breakdown', [AdminExportController::class, 'breakdownReport'])
-            ->name('exports.reports.breakdown');
+
+        /*
+         * Every export below is throttled tighter than the rest of the admin
+         * area: each runs a full-table query and streams it, and the page
+         * hands the download to a plain <a href> and forgets about it, so the
+         * cost is invisible from the browser. Twenty a minute is far more than
+         * useDownload.js will let a person start by clicking, and far less
+         * than a loop.
+         */
+        Route::middleware('throttle:exports')->group(function () {
+            Route::get('/exports/participants', [AdminExportController::class, 'participants'])
+                ->name('exports.participants');
+            Route::get('/exports/certificates', [AdminExportController::class, 'certificates'])
+                ->name('exports.certificates');
+            Route::get('/exports/registrations', [AdminExportController::class, 'registrations'])
+                ->name('exports.registrations');
+            // One participant's whole record, for when someone asks what they have
+            // attended. Office-scoped in the controller like the directory itself.
+            Route::get('/exports/participants/{user}/history', [AdminExportController::class, 'participantHistory'])
+                ->name('exports.participant-history');
+            Route::get('/exports/trainings/{training}/roster', [AdminExportController::class, 'roster'])
+                ->name('exports.roster');
+            // The affected-participants list for a rescheduled run, with the fee
+            // state that decides each case. Office-scoped in the controller like
+            // every other export here.
+            Route::get('/exports/trainings/{training}/affected', [AdminExportController::class, 'affected'])
+                ->name('exports.affected');
+            Route::get('/exports/payments', [AdminExportController::class, 'payments'])
+                ->name('exports.payments');
+            // Per-training revenue, with the PRIME-HRM discounts identified.
+            // Gated on the collecting-officer designation inside the controller,
+            // like the payments export it sits beside.
+            Route::get('/exports/trainings/{training}/revenue', [AdminExportController::class, 'revenue'])
+                ->name('exports.revenue');
+            // The analytics report exports. They share the ReportScope parser with
+            // the analytics page, so a download and the screen it came from always
+            // cover the same trainings; the revenue one is gated on the
+            // collecting-officer designation inside the controller.
+            Route::get('/exports/reports/revenue', [AdminExportController::class, 'revenueReport'])
+                ->name('exports.reports.revenue');
+            Route::get('/exports/reports/breakdown', [AdminExportController::class, 'breakdownReport'])
+                ->name('exports.reports.breakdown');
+        });
 
         /*
          * The participants desk, ported from v1's admin/hrd/participants page.

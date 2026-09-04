@@ -7,10 +7,21 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Append-only. Nothing in the app updates or deletes a row here — a trail that
  * can be edited answers no question worth asking.
+ *
+ * @property array<string, mixed>|null $properties
+ * @property Carbon|null $created_at
+ * @property-read User|null $causer
+ *
+ * Larastan reads casts from the `$casts` property rather than the `casts()`
+ * method this model uses, so `properties` resolved to the column's `string` and
+ * every read off an entry — `$log->properties['from']` — looked like an offset
+ * on a string. Same cause as the blocks on `User`, `Registration` and
+ * `ScanLink`; see CLAUDE.md.
  */
 #[Fillable([
     'subject_type', 'subject_id', 'causer_id', 'causer_name',

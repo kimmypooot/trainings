@@ -414,13 +414,13 @@ class PublicPagesTest extends TestCase
             ->post('/reset-password', [
                 'token' => $token,
                 'email' => $user->email,
-                'password' => 'NewPass123',
-                'password_confirmation' => 'NewPass123',
+                'password' => 'NewPassword123',
+                'password_confirmation' => 'NewPassword123',
             ])
             ->assertRedirect('/login')
             ->assertSessionHas('status');
 
-        $this->assertTrue(Hash::check('NewPass123', $user->fresh()->password));
+        $this->assertTrue(Hash::check('NewPassword123', $user->fresh()->password));
     }
 
     public function test_a_password_reset_requires_a_valid_token(): void
@@ -431,21 +431,21 @@ class PublicPagesTest extends TestCase
             ->post('/reset-password', [
                 'token' => 'bogus-token',
                 'email' => $user->email,
-                'password' => 'NewPass123',
-                'password_confirmation' => 'NewPass123',
+                'password' => 'NewPassword123',
+                'password_confirmation' => 'NewPassword123',
             ])
             ->assertRedirect('/reset-password/bogus-token?email='.$user->email)
             ->assertSessionHasErrors('form');
 
-        $this->assertFalse(Hash::check('NewPass123', $user->fresh()->password));
+        $this->assertFalse(Hash::check('NewPassword123', $user->fresh()->password));
     }
 
     public function test_registration_creates_and_signs_in_a_participant(): void
     {
         $this->post('/register', [
             'email' => 'juan@example.com',
-            'password' => 'sikreto123',
-            'password_confirmation' => 'sikreto123',
+            'password' => 'sikretokong123',
+            'password_confirmation' => 'sikretokong123',
             'consent' => true,
         ])->assertRedirect('/profile/complete');
 
@@ -453,7 +453,7 @@ class PublicPagesTest extends TestCase
 
         $this->assertNotNull($user);
         $this->assertNull($user->name, 'The name is collected on the profile form, not at registration.');
-        $this->assertNotSame('sikreto123', $user->password, 'Password must be hashed.');
+        $this->assertNotSame('sikretokong123', $user->password, 'Password must be hashed.');
         $this->assertAuthenticatedAs($user);
     }
 
@@ -479,8 +479,8 @@ class PublicPagesTest extends TestCase
         $this->from('/register')
             ->post('/register', [
                 'email' => 'taken@example.com',
-                'password' => 'sikreto123',
-                'password_confirmation' => 'sikreto123',
+                'password' => 'sikretokong123',
+                'password_confirmation' => 'sikretokong123',
                 'consent' => true,
             ])
             ->assertRedirect('/register')
@@ -506,8 +506,8 @@ class PublicPagesTest extends TestCase
         $this->from('/register')
             ->post('/register', [
                 'email' => 'juan@gmail.com',
-                'password' => 'sikreto123',
-                'password_confirmation' => 'sikreto123',
+                'password' => 'sikretokong123',
+                'password_confirmation' => 'sikretokong123',
                 'consent' => true,
             ])
             ->assertSessionHasErrorsIn('default', [
@@ -532,8 +532,8 @@ class PublicPagesTest extends TestCase
         $this->from('/register')
             ->post('/register', [
                 'email' => 'juan@deped.gov.ph',
-                'password' => 'sikreto123',
-                'password_confirmation' => 'sikreto123',
+                'password' => 'sikretokong123',
+                'password_confirmation' => 'sikretokong123',
                 'consent' => true,
             ])
             ->assertSessionHasErrorsIn('default', [

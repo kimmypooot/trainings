@@ -53,8 +53,8 @@ class ProfileCompletionTest extends TestCase
 
         $this->post('/register', [
             'email' => 'juan@example.com',
-            'password' => 'sikreto123',
-            'password_confirmation' => 'sikreto123',
+            'password' => 'sikretokong123',
+            'password_confirmation' => 'sikretokong123',
             'consent' => true,
         ])->assertRedirect('/profile/complete');
 
@@ -255,11 +255,11 @@ class ProfileCompletionTest extends TestCase
     {
         $user = User::factory()->create([
             'email' => 'done@example.com',
-            'password' => 'sikreto123',
+            'password' => 'sikretokong123',
             'profile_completed_at' => now(),
         ]);
 
-        $this->post('/login', ['email' => 'done@example.com', 'password' => 'sikreto123'])
+        $this->post('/login', ['email' => 'done@example.com', 'password' => 'sikretokong123'])
             ->assertRedirect('/dashboard');
 
         $this->assertAuthenticatedAs($user);
@@ -269,11 +269,11 @@ class ProfileCompletionTest extends TestCase
     {
         User::factory()->create([
             'email' => 'todo@example.com',
-            'password' => 'sikreto123',
+            'password' => 'sikretokong123',
             'profile_completed_at' => null,
         ]);
 
-        $this->post('/login', ['email' => 'todo@example.com', 'password' => 'sikreto123'])
+        $this->post('/login', ['email' => 'todo@example.com', 'password' => 'sikretokong123'])
             ->assertRedirect('/profile/complete');
     }
 }
