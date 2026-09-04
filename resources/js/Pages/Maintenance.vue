@@ -123,7 +123,7 @@ const stillAvailable = [
                     <img src="/images/csc-logo-256.png" alt="Civil Service Commission" class="h-9 w-auto shrink-0" />
                     <div class="min-w-0">
                         <p class="text-xs font-semibold tracking-wide text-csc-blue uppercase">
-                            Civil Service Commission — Regional Office VIII
+                            {{ office.name }}
                         </p>
                         <p class="mt-0.5 text-xs text-csc-ink-subtle">Training Information Management System</p>
                     </div>
@@ -242,7 +242,7 @@ const stillAvailable = [
         </main>
 
         <footer class="relative pb-6 text-center text-xs text-white/70">
-            &copy; {{ new Date().getFullYear() }} Civil Service Commission Regional Office VIII
+            &copy; {{ new Date().getFullYear() }} {{ office.name }}
         </footer>
     </div>
 </template>

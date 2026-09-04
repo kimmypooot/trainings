@@ -85,6 +85,53 @@ closure runs before `.env` is parsed, so `env()` there always returns its
 default. The setting used to live in exactly that spot and had never once taken
 effect.
 
+### Which office this is
+
+This codebase is deployed one copy per regional office, so the operating office
+is configuration. `config/office.php` holds it and everything reads from there
+— the site footer, the sidebar wordmark, outgoing mail, the maintenance notice,
+the structured data a search engine indexes, and the certificate itself.
+Anything left blank is omitted rather than guessed, so an unset telephone number
+prints no telephone row instead of somebody else's number.
+
+```dotenv
+OFFICE_NAME="Civil Service Commission Regional Office V"
+OFFICE_SHORT_NAME="CSC RO V"
+OFFICE_REGION="Bicol"
+OFFICE_ADDRESS="..."
+OFFICE_PHONE=
+OFFICE_EMAIL=ro05.hrd@csc.gov.ph
+OFFICE_CERTIFICATE_PREFIX=CSC5        # the printed number: CSC5-2026-000042
+```
+
+**Set these before releasing a single certificate**, for the same reason
+`APP_URL` has to be right first: a certificate is rendered once at issue and
+stored, so the office named on it cannot be corrected afterwards. Every other
+string here re-renders on the next page load and is fixable at any time; that
+one is not. `OFFICE_CERTIFICATE_PREFIX` is the same story — numbers already
+assigned stay as they were printed, which is correct, so changing it later
+leaves a permanent seam in the series.
+
+`tests/Feature/OfficeIdentityTest.php` guards the code against picking up a
+hard-coded office again. It does not and cannot check that *your* values are
+right — that is this step.
+
+### The photographs are files, not code
+
+Four screens show a photograph of the office building: the landing hero, the
+sign-in and legal layouts, and both certificate-verification pages. They load
+`public/images/cscbg_facade.{webp,jpeg}` by fixed path, so an office replaces
+those two files and changes nothing else. The landing page's rotating hero
+photos (`training-0*.jpg`) work the same way, and `HeroPhotoStack` drops the
+whole column if none of them load — an absent photograph is never drawn as an
+empty space.
+
+One constraint when swapping the facade: white text sits on top of it, and
+`AppBrandBackdrop`'s gradient is what keeps that readable. The `wash` levels
+were measured against the worst case — a pure-white stone pixel — and **72% is
+the floor for any backdrop carrying text**. A markedly brighter building than
+the current one should be re-checked rather than assumed.
+
 ---
 
 ## 3. Deploy

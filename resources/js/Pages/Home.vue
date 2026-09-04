@@ -287,7 +287,10 @@ const pages = computed(() => {
             name="description"
             content="Browse and register for training programs offered by the Civil Service Commission, keep your certificates in one place, and check in to events with your own QR code."
         />
-        <meta property="og:site_name" content="CSC RO VIII - Training Information Management System" />
+        <meta
+            property="og:site_name"
+            :content="`${office.short_name} - Training Information Management System`"
+        />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="CSC TIMS - Training Information Management System" />
         <meta
@@ -310,10 +313,7 @@ const pages = computed(() => {
         <meta property="og:image" :content="origin + '/images/cscbg_facade.jpeg'" />
         <meta property="og:image:width" content="1920" />
         <meta property="og:image:height" content="1440" />
-        <meta
-            property="og:image:alt"
-            content="The Civil Service Commission Regional Office VIII building"
-        />
+        <meta property="og:image:alt" :content="`The ${office.name} building`" />
         <meta name="twitter:card" content="summary_large_image" />
         <link rel="canonical" :href="origin + '/'" />
     </Head>

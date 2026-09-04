@@ -138,17 +138,22 @@ class CertificateService
      *
      * Sequential per year in the style of v1's `certificate_number`, so CSC can
      * quote "certificate 42 of 2026" in correspondence.
+     *
+     * The prefix is `office.certificate_prefix` rather than a literal "CSC8" —
+     * the 8 is Region VIII, and this codebase is deployed per office. It
+     * defaults to CSC8, so this deployment's numbering is unchanged.
      */
     private static function nextNumber(Registration $registration): string
     {
         $year = $registration->training->starts_at->format('Y');
+        $prefix = config('office.certificate_prefix');
         $sequence = Certificate::whereHas(
             'training',
             fn ($query) => $query->whereYear('starts_at', $year)
         )->count() + 1;
 
         do {
-            $number = sprintf('CSC8-%s-%06d', $year, $sequence);
+            $number = sprintf('%s-%s-%06d', $prefix, $year, $sequence);
             $sequence++;
         } while (Certificate::where('certificate_number', $number)->exists());
 

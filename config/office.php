@@ -24,6 +24,22 @@ return [
     'address' => env('OFFICE_ADDRESS', 'Government Center, Candahug, Palo, Leyte'),
 
     /*
+     * The prefix on a printed certificate number: CSC8-2026-000042.
+     *
+     * The "8" is Region VIII, so this is an office identity string like the
+     * rest — but unlike the others it is stored on the row, not just rendered,
+     * and it is quoted in correspondence ("certificate 42 of 2026"). Changing
+     * it therefore affects certificates issued from that point on and leaves
+     * every existing number exactly as it was printed, which is the right way
+     * round: an already-issued number must keep matching the paper copy.
+     *
+     * Deliberately not derived from `region`, which is a place name and not a
+     * number, and not from `short_name`, which contains a space and roman
+     * numerals that do not belong in a serial.
+     */
+    'certificate_prefix' => env('OFFICE_CERTIFICATE_PREFIX', 'CSC8'),
+
+    /*
      * Deliberately null by default. The old number was verifiably the wrong
      * office's, and guessing a replacement would repeat the mistake in a way
      * that is harder to notice. Set OFFICE_PHONE in .env for a deployment and

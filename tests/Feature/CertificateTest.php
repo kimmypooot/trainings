@@ -741,4 +741,77 @@ class CertificateTest extends TestCase
             ->get("/admin/certificates/{$certificate->id}")
             ->assertNotFound();
     }
+
+    // --- The issuing office is a deployment fact, not a literal -----------
+
+    /**
+     * Render the stored certificate template the way CertificateService does,
+     * minus dompdf — the office strings are what is under test, not the PDF.
+     */
+    private function renderCertificate(): string
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+        $certificate->loadMissing(['user.profile', 'training']);
+
+        return view('certificates.default', [
+            'certificate' => $certificate,
+            'participant' => $certificate->user,
+            'training' => $certificate->training,
+            'qr' => 'data:image/png;base64,',
+        ])->render();
+    }
+
+    /**
+     * The one identity string in the app that cannot be corrected afterwards.
+     *
+     * A certificate is rendered once at release and stored, so an office name
+     * baked into the template outlives the fix. This codebase is deployed one
+     * copy per regional office, and the template used to name Regional Office
+     * VIII outright — every other office would have issued permanent documents
+     * crediting the wrong one.
+     */
+    public function test_the_certificate_names_the_configured_office(): void
+    {
+        config([
+            'office.name' => 'Civil Service Commission Regional Office V',
+            'office.region' => 'Bicol',
+            'office.short_name' => 'CSC RO V',
+        ]);
+
+        $html = $this->renderCertificate();
+
+        $this->assertStringContainsString('Civil Service Commission Regional Office V', $html);
+        $this->assertStringContainsString('Bicol', $html);
+        $this->assertStringContainsString('CSC RO V', $html);
+
+        // The point of the test: no other office's identity survives in it.
+        $this->assertStringNotContainsString('Regional Office VIII', $html);
+        $this->assertStringNotContainsString('Eastern Visayas', $html);
+        $this->assertStringNotContainsString('RO VIII', $html);
+    }
+
+    /**
+     * No region beats the wrong region, matching the rest of config/office.php.
+     */
+    public function test_the_certificate_omits_the_region_when_it_is_unset(): void
+    {
+        config(['office.name' => 'Civil Service Commission Regional Office V', 'office.region' => null]);
+
+        $html = $this->renderCertificate();
+
+        $this->assertStringContainsString('Civil Service Commission Regional Office V', $html);
+        $this->assertStringNotContainsString('class="office"', $html);
+    }
+
+    /**
+     * The printed number carries the region too — CSC8 is Region VIII.
+     */
+    public function test_the_certificate_number_prefix_is_configurable(): void
+    {
+        config(['office.certificate_prefix' => 'CSC5']);
+
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->assertStringStartsWith('CSC5-', $certificate->certificate_number);
+    }
 }
