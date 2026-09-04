@@ -5,8 +5,8 @@ namespace App\Enums;
 /**
  * The physical OR delivery pipeline.
  *
- * A participant outside Region VIII may ask for a physical copy of their
- * official receipt. That is not a yes/no decision — the receipt has to be
+ * A participant outside this office's region may ask for a physical copy of
+ * their official receipt. That is not a yes/no decision — the receipt has to be
  * prepared, paid for (a GCash courier fee), handed to a courier, and tracked —
  * so it gets its own staged pipeline rather than being folded into the generic
  * RequestStatus.

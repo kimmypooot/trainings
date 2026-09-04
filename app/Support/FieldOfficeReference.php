@@ -5,115 +5,67 @@ namespace App\Support;
 use Database\Seeders\FieldOfficeSeeder;
 
 /**
- * The canonical CSC Regional Office VIII office list, as recorded in v2.
+ * The office list this deployment serves, from database/data/field-offices.json.
  *
- * Held here so the migration that creates the table and the seeder that keeps
- * it current cannot drift apart — the migration needs the rows in place before
- * profiles can be linked to them.
+ * Held in one place so the migration that creates the table and the seeder that
+ * keeps it current cannot drift apart — the migration needs the rows in place
+ * before profiles can be linked to them.
+ *
+ * It is a data file rather than a PHP array because the rows are a deployment
+ * fact, not a constant: this codebase goes to regional offices one copy each,
+ * and every office has different field offices, different jurisdictions and
+ * different people running them. As an array it was Regional Office VIII's nine
+ * offices compiled into the application, seeded automatically on first migrate,
+ * so another region's installation came up holding Biliran, Leyte I and II and
+ * the rest — an org chart belonging to a region 500km away, with names attached.
+ *
+ * An office replaces the file before its first `migrate`, the same way it
+ * replaces the facade photograph. Deliberately not `config/`: it is a list of
+ * records rather than settings, it is long, and it is read at migration time
+ * when a config cache may be cold or stale.
  *
  * @see FieldOfficeSeeder
+ * @see docs/deployment.md
  */
 class FieldOfficeReference
 {
+    /** @var array<int, array<string, mixed>>|null */
+    private static ?array $offices = null;
+
     /**
      * @return array<int, array<string, mixed>>
      */
     public static function all(): array
     {
-        return [
-            [
-                'code' => 'bfo',
-                'name' => 'CSC Field Office - Biliran',
-                'type' => 'field_office',
-                'province' => 'Biliran',
-                'jurisdiction' => ['Biliran'],
-                'email' => 'ro08.fo_biliran@csc.gov.ph',
-                'head_name' => 'Michael M. Dela Cruz',
-                'head_position' => 'Director II',
-            ],
-            [
-                'code' => 'lfoi',
-                'name' => 'CSC Field Office - Leyte I',
-                'type' => 'field_office',
-                'province' => 'Leyte',
-                'jurisdiction' => ['Leyte'],
-                'email' => 'ro08.fo_leyte1@csc.gov.ph',
-                'head_name' => 'Ma. Natividad L. Costibolo',
-                'head_position' => 'Director II',
-            ],
-            [
-                'code' => 'lfoii',
-                'name' => 'CSC Field Office - Leyte II',
-                'type' => 'field_office',
-                'province' => 'Leyte',
-                'jurisdiction' => ['Leyte'],
-                'email' => 'ro08.fo_leyte2@csc.gov.ph',
-                'head_name' => 'Pharida Q. Aurelia',
-                'head_position' => 'Director II',
-            ],
-            [
-                'code' => 'slfo',
-                'name' => 'CSC Field Office - Southern Leyte',
-                'type' => 'field_office',
-                'province' => 'Southern Leyte',
-                'jurisdiction' => ['Southern Leyte'],
-                'email' => null,
-                'head_name' => 'Richmond A. Sanglay',
-                'head_position' => 'OIC-Field Office Caretaker',
-            ],
-            [
-                'code' => 'wlso',
-                'name' => 'CSC Satellite Office - Western Leyte',
-                'type' => 'satellite_office',
-                'province' => 'Western Leyte',
-                'jurisdiction' => ['Western Leyte'],
-                'email' => 'ro08.fo_westernleyte@csc.gov.ph',
-                'head_name' => 'Michael M. Dela Cruz',
-                'head_position' => 'Director II',
-            ],
-            [
-                'code' => 'sfo',
-                'name' => 'CSC Field Office - Samar',
-                'type' => 'field_office',
-                'province' => 'Samar',
-                'jurisdiction' => ['Samar'],
-                'email' => null,
-                'head_name' => 'Rey Albert B. Uy',
-                'head_position' => 'Director II',
-            ],
-            [
-                'code' => 'esfo',
-                'name' => 'CSC Field Office - Eastern Samar',
-                'type' => 'field_office',
-                'province' => 'Eastern Samar',
-                'jurisdiction' => ['Eastern Samar'],
-                'email' => 'ro08.fo_easternsamar@csc.gov.ph',
-                'head_name' => 'Rey Albert B. Uy',
-                'head_position' => 'Director II',
-            ],
-            [
-                'code' => 'nsfo',
-                'name' => 'CSC Field Office - Northern Samar',
-                'type' => 'field_office',
-                'province' => 'Northern Samar',
-                'jurisdiction' => ['Northern Samar'],
-                'email' => null,
-                'head_name' => null,
-                'head_position' => null,
-            ],
-            [
-                'code' => 'hrd',
-                'name' => 'Outside Region VIII',
-                'type' => 'division',
-                'province' => 'Outside Region VIII',
-                'jurisdiction' => [
-                    'Biliran', 'Leyte', 'Western Leyte', 'Southern Leyte',
-                    'Samar', 'Eastern Samar', 'Northern Samar', 'Outside Region VIII',
-                ],
-                'email' => null,
-                'head_name' => 'Jay M. Merelos',
-                'head_position' => 'Chief Human Resource Management Officer',
-            ],
-        ];
+        if (self::$offices === null) {
+            $raw = file_get_contents(self::path());
+
+            self::$offices = json_decode($raw ?: '', true) ?: [];
+        }
+
+        return self::$offices;
+    }
+
+    /**
+     * Where the list lives.
+     *
+     * Exposed so the seeder's failure message and the deployment check can name
+     * the file, and so a test can point at a fixture without writing over the
+     * committed one.
+     */
+    public static function path(): string
+    {
+        return database_path('data/field-offices.json');
+    }
+
+    /**
+     * Forget the cached list.
+     *
+     * Only needed by tests that swap the file underneath a booted application;
+     * nothing in a request's lifetime changes it.
+     */
+    public static function flush(): void
+    {
+        self::$offices = null;
     }
 }

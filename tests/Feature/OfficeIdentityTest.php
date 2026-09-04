@@ -2,10 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Models\FieldOffice;
 use App\Models\User;
 use App\Notifications\EmailChangeRequested;
 use App\Notifications\PasswordChanged;
+use App\Support\FieldOfficeReference;
+use App\Support\PhilippineGeography;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -96,14 +100,86 @@ class OfficeIdentityTest extends TestCase
     }
 
     /**
+     * The region matcher, which decides who this office serves.
+     *
+     * Tolerant about spelling because older and imported profile rows are, but
+     * word-bounded because roman numerals nest: the pair at the end is the case
+     * that makes a plain `str_contains` unusable no matter which numeral is
+     * substituted into it.
+     */
+    #[DataProvider('regionMatches')]
+    public function test_a_region_string_is_matched_against_the_office_region(
+        string $candidate,
+        string $canonical,
+        bool $expected
+    ): void {
+        $this->assertSame(
+            $expected,
+            PhilippineGeography::denotesRegion($candidate, $canonical),
+            "\"{$candidate}\" against \"{$canonical}\""
+        );
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string, 2: bool}>
+     */
+    public static function regionMatches(): array
+    {
+        $ev = 'Region VIII (Eastern Visayas)';
+
+        return [
+            'exact canonical' => [$ev, $ev, true],
+            'numeral only' => ['Region VIII', $ev, true],
+            'name only' => ['Eastern Visayas', $ev, true],
+            'upper cased' => ['REGION VIII', $ev, true],
+            'loose spacing' => ['Region   VIII', $ev, true],
+            'a different region' => ['Region XI (Davao Region)', $ev, false],
+            'a parenthetical abbreviation' => ['NCR', 'National Capital Region (NCR)', true],
+            'no numeral in the name' => ['MIMAROPA Region', 'MIMAROPA Region', true],
+
+            // VII is a prefix of VIII, in both directions.
+            'VIII is not VII' => ['Region VIII (Eastern Visayas)', 'Region VII (Central Visayas)', false],
+            'VII is not VIII' => ['Region VII (Central Visayas)', $ev, false],
+        ];
+    }
+
+    /**
+     * The office list is data a deployment supplies, not an array compiled in.
+     *
+     * It was nine Regional Office VIII offices in a PHP class, seeded on first
+     * migrate, so another region's installation came up holding Biliran, Leyte
+     * I and II and the rest — with the incumbent directors' names attached.
+     */
+    public function test_the_field_office_list_comes_from_a_data_file(): void
+    {
+        $this->assertFileExists(FieldOfficeReference::path());
+
+        $offices = FieldOfficeReference::all();
+
+        $this->assertNotEmpty($offices);
+
+        foreach ($offices as $office) {
+            $this->assertArrayHasKey('code', $office);
+            $this->assertArrayHasKey('name', $office);
+            $this->assertArrayHasKey('jurisdiction', $office);
+        }
+
+        // The rows the migration seeded are the rows the file describes, so the
+        // two cannot disagree about who this deployment serves.
+        $this->assertSame(
+            array_column($offices, 'code'),
+            FieldOffice::orderBy('id')->pluck('code')->all()
+        );
+    }
+
+    /**
      * Nothing in the presentation layer hard-codes this office.
      *
      * Deliberately scoped to what is rendered — Vue templates and Blade views.
-     * The domain layer still carries Region VIII in places that are logic
-     * rather than chrome (App\Support\FieldOfficeReference's office list,
-     * Profile::isOutsideRegion's "VIII" test, and the physical-OR rule built on
-     * it). Those are a separate, larger piece of work; they are out of this
-     * test's scope on purpose rather than by oversight.
+     * One piece of domain logic still carries Region VIII and is out of scope
+     * on purpose rather than by oversight: App\Support\FieldOfficeReference's
+     * office list, which is seeded from inside a migration and so cannot be
+     * swapped by configuration alone.
      */
     public function test_no_view_or_component_hard_codes_the_office(): void
     {

@@ -21,6 +21,27 @@ return [
     'short_name' => env('OFFICE_SHORT_NAME', 'CSC RO VIII'),
     'region' => env('OFFICE_REGION', 'Eastern Visayas'),
 
+    /*
+     * The same region, as the PSA spells it — and it is a separate setting
+     * from `region` above on purpose.
+     *
+     * `region` is prose: it goes in the footer and on certificates, where
+     * "Eastern Visayas" is what a reader wants. This one is matched against
+     * `profiles.region`, which holds a canonical PSGC name chosen from
+     * PhilippineGeography ("Region VIII (Eastern Visayas)"), and it is what
+     * decides whether a participant counts as being served by this office.
+     *
+     * That decision is the physical-OR rule: a participant who cannot come to
+     * the counter may pay a courier to post their official receipt. It used to
+     * be `str_contains($region, 'VIII')` written into Profile, so on any other
+     * deployment every participant read as an outsider and the whole region
+     * was offered postal delivery — silently, with nothing to notice.
+     *
+     * Must be one of PhilippineGeography::regions() verbatim; `tims:doctor`
+     * checks that, because a typo here fails the same silent way.
+     */
+    'psgc_region' => env('OFFICE_PSGC_REGION', 'Region VIII (Eastern Visayas)'),
+
     'address' => env('OFFICE_ADDRESS', 'Government Center, Candahug, Palo, Leyte'),
 
     /*

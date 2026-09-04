@@ -90,4 +90,67 @@ class PhilippineGeography
     {
         return self::data();
     }
+
+    /**
+     * Whether a stored region string denotes the same region as $canonical.
+     *
+     * The profile form validates against regions(), so `profiles.region` holds
+     * a canonical name in anything entered through the app. Imported and older
+     * rows are less tidy — "REGION VIII", "Region VIII" — so this is tolerant
+     * rather than an equality check, which is what the code it replaces did.
+     *
+     * What that code could not do is generalise. It asked
+     * `str_contains($region, 'VIII')`, and a bare numeral is not safe to match
+     * on: "REGION VIII" contains "VII", so an office in Region VII would have
+     * read every Region VIII participant as one of its own. Hence the word
+     * boundaries — "REGION VII" as a needle stops matching "REGION VIII" once
+     * the numeral has to end where the needle does.
+     *
+     * A canonical name splits into the parts people actually write: the whole
+     * string, the parenthetical ("Eastern Visayas", "NCR"), and the part
+     * before it ("Region VIII"). Any one of them identifies the region.
+     */
+    public static function denotesRegion(?string $candidate, ?string $canonical): bool
+    {
+        if (blank($candidate) || blank($canonical)) {
+            return false;
+        }
+
+        $haystack = self::normalise($candidate);
+
+        foreach (self::aliasesFor($canonical) as $alias) {
+            if (preg_match('/\b'.preg_quote($alias, '/').'\b/u', $haystack) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The ways a canonical region name is written in the wild, longest first
+     * so the most specific alias is tried before its own fragments.
+     *
+     * @return array<int, string>
+     */
+    private static function aliasesFor(string $canonical): array
+    {
+        $normalised = self::normalise($canonical);
+        $aliases = [$normalised];
+
+        if (preg_match('/^(.*?)\s*\((.+)\)$/u', $normalised, $matches) === 1) {
+            // "REGION VIII (EASTERN VISAYAS)" → also "REGION VIII" and
+            // "EASTERN VISAYAS", either of which people write on its own.
+            $aliases[] = trim($matches[1]);
+            $aliases[] = trim($matches[2]);
+        }
+
+        return array_values(array_filter(array_unique($aliases)));
+    }
+
+    /** Upper-cased with runs of whitespace collapsed, so spacing cannot decide a match. */
+    private static function normalise(string $value): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', mb_strtoupper($value)));
+    }
 }

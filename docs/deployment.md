@@ -116,6 +116,27 @@ leaves a permanent seam in the series.
 hard-coded office again. It does not and cannot check that *your* values are
 right — that is this step.
 
+### The field offices, before the first migrate
+
+`database/data/field-offices.json` lists the offices this deployment serves —
+their codes, names, provinces, jurisdictions and heads. It ships with Regional
+Office VIII's nine, which is the wrong org chart for anyone else, so **replace
+it before running `migrate` for the first time**.
+
+It has to be right at that moment rather than afterwards because the migration
+that creates the table seeds these rows, and the migration after it links
+existing profiles to them. `FieldOfficeSeeder` re-applies the file later
+(matching on `code`), so corrections and new offices are a file edit plus
+`php artisan db:seed --class=FieldOfficeSeeder` — but rows already pointed at by
+profiles should be deactivated rather than deleted, the same rule as subject
+matter experts.
+
+A missing, empty or malformed file stops the migration with a message naming
+it. That is deliberate: an empty office list is not an empty office, it is a
+broken install, and every symptom downstream of it is silent — profiles link to
+nothing, field-office scoping resolves to 0 and fails closed, and every
+field-office account sees an empty system with nothing to explain why.
+
 ### The photographs are files, not code
 
 Four screens show a photograph of the office building: the landing hero, the

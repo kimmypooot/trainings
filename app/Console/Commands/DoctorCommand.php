@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\PhilippineGeography;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -43,6 +44,7 @@ class DoctorCommand extends Command
         }
 
         $this->checkApplication($production);
+        $this->checkOfficeIdentity($production);
         $this->checkSessionAndCookies($production);
         $this->checkCaches($production);
         $this->checkQueue();
@@ -81,6 +83,48 @@ class DoctorCommand extends Command
             ! $production || str_starts_with($url, 'https://'),
             'APP_URL is https',
             "APP_URL is {$url}, so mailed links will send people to plain HTTP."
+        );
+    }
+
+    /**
+     * Who this deployment says it is.
+     *
+     * The codebase goes to regional offices one copy each, so leaving these at
+     * their defaults is how a deployment ends up quietly claiming to be
+     * Regional Office VIII — in its footer, its outgoing mail, and permanently
+     * on every certificate it issues.
+     *
+     * `psgc_region` gets an assert rather than a warning because a value that
+     * is not a PSGC region matches no participant at all, which reads as "every
+     * participant is an outsider" and offers the whole region courier delivery
+     * of a receipt they could collect at the counter. Nothing errors.
+     */
+    private function checkOfficeIdentity(bool $production): void
+    {
+        $psgcRegion = (string) config('office.psgc_region');
+
+        $this->assert(
+            PhilippineGeography::isValidRegion($psgcRegion),
+            'OFFICE_PSGC_REGION is a real region',
+            "OFFICE_PSGC_REGION is \"{$psgcRegion}\", which is not one of the PSA's region names. "
+            .'It decides who counts as being outside this office\'s region, so an unrecognised value '
+            .'silently marks every participant an outsider. It must match a name in '
+            .'PhilippineGeography::regions() exactly.'
+        );
+
+        $this->warnIf(
+            $production && config('office.name') === 'Civil Service Commission Regional Office VIII',
+            'Office identity is still the default',
+            'OFFICE_NAME is the shipped default. If this is not Regional Office VIII, set the OFFICE_* '
+            .'block before issuing any certificate — a certificate is rendered once and stored, so the '
+            .'office named on it cannot be corrected afterwards.'
+        );
+
+        $this->warnIf(
+            blank(config('office.email')),
+            'No office email is set',
+            'OFFICE_EMAIL is the contact in the footer, the accessibility statement and every email sent. '
+            .'Left blank, participants are shown no way to reach the office.'
         );
     }
 

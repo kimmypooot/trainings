@@ -131,8 +131,9 @@ class PaymentController extends Controller
     }
 
     /**
-     * A verified, receipted payment outside Region VIII can be mailed a
-     * physical copy — unless a delivery is already in flight or was completed.
+     * A verified, receipted payment from outside this office's region can be
+     * mailed a physical copy — unless a delivery is already in flight or was
+     * completed.
      */
     private function canRequestPhysicalOr(Payment $payment, Request $request): bool
     {
