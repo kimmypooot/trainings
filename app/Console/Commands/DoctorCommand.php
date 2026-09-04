@@ -98,6 +98,13 @@ class DoctorCommand extends Command
      * is not a PSGC region matches no participant at all, which reads as "every
      * participant is an outsider" and offers the whole region courier delivery
      * of a receipt they could collect at the counter. Nothing errors.
+     *
+     * These read `config('office.*')`, which OfficeSettingsProvider has already
+     * overlaid with the saved row, so what is checked is what is actually in
+     * force — the settings screen where the office has used it, the env
+     * fallback where it has not. The screen picks the region from a list, so a
+     * failure here now means the env fallback is wrong, which is the only way
+     * left to misspell it.
      */
     private function checkOfficeIdentity(bool $production): void
     {
@@ -115,9 +122,9 @@ class DoctorCommand extends Command
         $this->warnIf(
             $production && config('office.name') === 'Civil Service Commission Regional Office VIII',
             'Office identity is still the default',
-            'OFFICE_NAME is the shipped default. If this is not Regional Office VIII, set the OFFICE_* '
-            .'block before issuing any certificate — a certificate is rendered once and stored, so the '
-            .'office named on it cannot be corrected afterwards.'
+            'The office name is the shipped default. If this is not Regional Office VIII, set it at '
+            .'/admin/office (or in the OFFICE_* env block) before issuing any certificate — a certificate '
+            .'is rendered once and stored, so the office named on it cannot be corrected afterwards.'
         );
 
         $this->warnIf(

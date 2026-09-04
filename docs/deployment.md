@@ -88,11 +88,23 @@ effect.
 ### Which office this is
 
 This codebase is deployed one copy per regional office, so the operating office
-is configuration. `config/office.php` holds it and everything reads from there
-— the site footer, the sidebar wordmark, outgoing mail, the maintenance notice,
-the structured data a search engine indexes, and the certificate itself.
-Anything left blank is omitted rather than guessed, so an unset telephone number
-prints no telephone row instead of somebody else's number.
+is configuration. Everything reads it from `config('office.*')` — the site
+footer, the sidebar wordmark, outgoing mail, the maintenance notice, the
+structured data a search engine indexes, and the certificate itself. Anything
+left blank is omitted rather than guessed, so an unset telephone number prints
+no telephone row instead of somebody else's number.
+
+**The office edits this itself, at `/admin/office`** (superadmin only, beside
+the maintenance switch). That screen writes a single row which overlays the
+values below, so changing the office telephone number no longer needs a shell
+and a `config:cache` clear. The region is chosen from the PSA's own list rather
+than typed, and the certificate prefix stops being offered once any certificate
+has been issued under it.
+
+The env block below is the **fallback**. It is what the site shows on its very
+first page load, before anyone has signed in to save anything, and each field
+falls back independently — so it is still worth setting, even though the screen
+supersedes it.
 
 ```dotenv
 OFFICE_NAME="Civil Service Commission Regional Office V"
@@ -115,6 +127,16 @@ leaves a permanent seam in the series.
 `tests/Feature/OfficeIdentityTest.php` guards the code against picking up a
 hard-coded office again. It does not and cannot check that *your* values are
 right — that is this step.
+
+`tims:doctor` reads the effective values, so it checks whatever is actually in
+force: the saved row where one exists, the env fallback where it does not.
+
+**Upgrading an existing install:** `/admin/office` needs its table, so run
+`php artisan migrate` before opening it — until then that one screen errors
+while the rest of the site carries on using the env values. That is the
+intended degradation rather than an oversight: the overlay is deliberately
+guarded so a missing settings table can never take the public site down, and
+only the screen that edits the table actually requires it.
 
 ### The field offices, before the first migrate
 

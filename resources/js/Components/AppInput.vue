@@ -77,6 +77,13 @@ const describedBy = computed(() => {
         </label>
 
         <div class="relative">
+            <!--
+                The disabled trio in the class list matches AppSelect's exactly.
+                A disabled input that looks identical to an editable one is
+                worse than no affordance: the reader types, nothing happens, and
+                nothing on screen says why. `disabled` itself arrives through
+                controlAttrs rather than as a declared prop.
+            -->
             <input
                 v-bind="controlAttrs"
                 :id="inputId"
@@ -87,7 +94,7 @@ const describedBy = computed(() => {
                 :required="required"
                 :aria-invalid="error ? 'true' : undefined"
                 :aria-describedby="describedBy"
-                class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1"
+                class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink-subtle"
                 :class="[
                     error
                         ? 'border-csc-red-ink focus:outline-csc-red-ink'

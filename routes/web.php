@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\EvaluationController as AdminEvaluationController
 use App\Http\Controllers\Admin\ExportController as AdminExportController;
 use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeController;
 use App\Http\Controllers\Admin\MaintenanceController as AdminMaintenanceController;
+use App\Http\Controllers\Admin\OfficeSettingController as AdminOfficeSettingController;
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PhysicalOrRequestController as AdminPhysicalOrRequestController;
@@ -532,6 +533,23 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             // screen that flips it back.
             Route::get('/maintenance', [AdminMaintenanceController::class, 'index'])->name('maintenance');
             Route::post('/maintenance', [AdminMaintenanceController::class, 'update'])->name('maintenance.update');
+
+            /*
+             * The office's own identity — name, address, contacts, region, and
+             * the certificate number prefix.
+             *
+             * Superadmin for the same reason as the maintenance switch: this is
+             * what the site calls itself in its footer, in every email it sends
+             * and on every certificate it issues, and a certificate is rendered
+             * once and stored, so a wrong value here outlives its correction.
+             * Not an operational setting a training officer should reach
+             * between two registrations.
+             *
+             * These were .env settings, which meant changing the office
+             * telephone number needed a shell and a config:cache clear.
+             */
+            Route::get('/office', [AdminOfficeSettingController::class, 'index'])->name('office');
+            Route::post('/office', [AdminOfficeSettingController::class, 'update'])->name('office.update');
         });
 
         /*

@@ -331,6 +331,13 @@ const navGroups = [
                 icon: 'shield',
             },
             {
+                key: 'admin-office',
+                label: 'Office Details',
+                href: '/admin/office',
+                roles: ['superadmin'],
+                icon: 'building',
+            },
+            {
                 key: 'admin-maintenance',
                 label: 'Maintenance Mode',
                 href: '/admin/maintenance',
