@@ -209,8 +209,6 @@ class RosterController extends Controller
                 'position' => $registration->user->profile?->position_title,
                 'field_office' => $registration->user->profile?->fieldOffice?->name,
                 'food_restrictions' => $registration->user->profile?->food_restrictions_details,
-                'registered_at' => $registration->registered_at->format('d M Y'),
-                'registered_at_ts' => $registration->registered_at->timestamp,
                 'review_remarks' => $registration->review_remarks,
                 // The supervisory document, for the monitoring column on the
                 // roster. Null when the training is not supervisory or the
@@ -230,7 +228,6 @@ class RosterController extends Controller
                             'remarks' => $registration->supervisory_document_remarks,
                         ]
                         : null,
-                'attended' => $registration->attended_at !== null,
                 // Keyed by day number so the grid can look each cell up directly.
                 'attendance' => $registration->attendances
                     ->keyBy('training_day')
@@ -238,7 +235,6 @@ class RosterController extends Controller
                         'status' => $attendance->status->value,
                         'status_label' => $attendance->status->label(),
                         'time_in' => $attendance->time_in,
-                        'time_out' => $attendance->time_out,
                         'remarks' => $attendance->remarks,
                     ])->all(),
                 'credited_days' => $registration->creditedDays(),
