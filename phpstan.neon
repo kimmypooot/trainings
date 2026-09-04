@@ -44,3 +44,20 @@ parameters:
             message: '#Result of static method Illuminate\\Database\\Connection::transaction\(\) \(void\) is used#'
             paths:
                 - app/Support/*Service.php
+
+        # The second framework-annotation false positive, and the same treatment.
+        #
+        # Laravel types Logout::$user as non-nullable, but POST /logout carries
+        # no auth middleware and SessionGuard::logout() dispatches the event
+        # with whatever user() returned — which for a guest is null. Verified
+        # against a running application: a guest posting to /logout fires Logout
+        # with a null user. Removing the `?->` the analyser objects to would
+        # turn that request into a fatal error.
+        #
+        # Ignored rather than baselined for the same reason as the entry above:
+        # a baseline entry is a promise to come back and fix something, and the
+        # code here is already correct.
+        -
+            message: '#Using nullsafe method call on non-nullable type Illuminate\\Contracts\\Auth\\Authenticatable#'
+            paths:
+                - app/Listeners/RecordAuthenticationEvents.php

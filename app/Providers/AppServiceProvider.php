@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Listeners\RecordAuthenticationEvents;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
@@ -27,6 +29,15 @@ class AppServiceProvider extends ServiceProvider
         $this->pinTheApplicationUrl();
         $this->definePasswordPolicy();
         $this->defineRateLimiters();
+
+        /*
+         * The authentication trail. Subscribed to the framework's own auth
+         * events rather than called from LoginController, because the
+         * controller is not the only door: Google sign-in goes through
+         * GoogleController, and a "remember me" sign-in happens inside
+         * SessionGuard without reaching either.
+         */
+        Event::subscribe(RecordAuthenticationEvents::class);
     }
 
     /**

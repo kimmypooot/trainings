@@ -73,6 +73,29 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+         * Authentication events — sign-in, failed sign-in, lockout, sign-out,
+         * completed password reset, registration.
+         *
+         * Its own file, and its own retention. These are high-volume and
+         * individually uninteresting, which is precisely why they must not go
+         * into `activity_logs` beside the administrative decisions: v1 kept
+         * login rows there and the volume buried the decisions worth auditing
+         * (see LoginController). They are also the records kept *longest* —
+         * "how many failed attempts preceded this compromise" is a question
+         * asked months later, so 180 days rather than the application log's 14.
+         *
+         * Never contains a password. RecordAuthenticationEvents extracts only
+         * the address from a failed attempt's credentials.
+         */
+        'auth' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/auth.log'),
+            'level' => 'info',
+            'max_files' => env('LOG_AUTH_DAYS', 180),
+            'replace_placeholders' => true,
+        ],
+
         'monthly' => [
             'driver' => 'monthly',
             'path' => storage_path('logs/laravel.log'),
