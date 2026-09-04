@@ -52,6 +52,19 @@ class PendingActionCounter
          * Both would then serve counts from before the state change under test.
          * Request attributes die with the request, so the cache can never be
          * older than the page it is printed on.
+         *
+         * And that last sentence is also the reason there is deliberately *no*
+         * cross-request cache here, despite these being ~7 COUNTs with
+         * `whereHas` subqueries on every staff page load. A TTL of even thirty
+         * seconds means a member of staff approves the last item in a queue and
+         * the badge goes on claiming there is work — which is precisely the
+         * failure this file's own participant() comment describes as the one
+         * worth avoiding: a badge showing work the screen behind it does not
+         * list, that the reader cannot clear and so learns to ignore. Caching it
+         * correctly would need invalidation in every service that decides a
+         * queue item, and the cost of missing one of those is a badge that lies
+         * rather than a page that is slow. If these counts ever do need to get
+         * cheaper, narrow the queries — do not stale the answer.
          */
         $request = request();
         $key = (int) $user->getKey();

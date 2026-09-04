@@ -12,6 +12,7 @@ use App\Support\RegistrationOutputService;
 use App\Support\TrainingRequestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -26,6 +27,16 @@ use Inertia\Response;
  */
 class RequestQueueController extends Controller
 {
+    /**
+     * How many rows each queue shows.
+     *
+     * A bound rather than a paginator: three independent paginators on one
+     * three-tab screen is a worse answer than a cap, provided the cap can only
+     * hide decided items — which is what the pending-first ordering below
+     * guarantees, and what the summary() counts make visible.
+     */
+    private const LIMIT = 100;
+
     /**
      * How a request in each of the three queues reaches a field office.
      *
@@ -86,25 +97,45 @@ class RequestQueueController extends Controller
             fn ($profile) => $profile->where('field_office_id', $officeId)
         ));
 
+        $scopeTrainingRequests = fn ($query) => $query->when($officeId !== null, fn ($inner) => $inner->whereHas(
+            self::OFFICE_PATHS[TrainingRequest::class],
+            fn ($profile) => $profile->where('field_office_id', $officeId)
+        ));
+
+        /*
+         * Pending first, then newest.
+         *
+         * The cap is what makes the ordering matter. These lists are capped at
+         * 100 rather than paginated — three independent paginators on one
+         * three-tab screen is a worse answer than a bound — and with a plain
+         * `latest()` the hundredth decided item pushed the oldest *pending* one
+         * off the end. That item then existed only in the sidebar badge, which
+         * counts the database: a number telling a staff member there is work,
+         * beside a list that does not contain it and no way to reach it.
+         *
+         * Ordering by status first means the cap can only ever hide items that
+         * have already been decided, which are the ones nobody is looking for.
+         */
+        $pendingFirst = fn ($query) => $query
+            ->orderByRaw('CASE WHEN status = ? THEN 0 ELSE 1 END', [RequestStatus::Pending->value])
+            ->latest();
+
         $cancellations = CancellationRequest::with(['registration.user', 'registration.training'])
             ->tap($scope)
-            ->latest()
-            ->limit(100)
+            ->tap($pendingFirst)
+            ->limit(self::LIMIT)
             ->get();
 
         $outputs = RegistrationOutput::with(['registration.user', 'registration.training'])
             ->tap($scope)
-            ->latest()
-            ->limit(100)
+            ->tap($pendingFirst)
+            ->limit(self::LIMIT)
             ->get();
 
         $trainingRequests = TrainingRequest::with(['requester.profile', 'training'])
-            ->when($officeId !== null, fn ($query) => $query->whereHas(
-                self::OFFICE_PATHS[TrainingRequest::class],
-                fn ($profile) => $profile->where('field_office_id', $officeId)
-            ))
-            ->latest()
-            ->limit(100)
+            ->tap($scopeTrainingRequests)
+            ->tap($pendingFirst)
+            ->limit(self::LIMIT)
             ->get();
 
         return Inertia::render('Admin/Requests/Index', [
@@ -146,8 +177,42 @@ class RequestQueueController extends Controller
                 'submitted_at' => $item->created_at->format('d M Y'),
                 'download_url' => route('outputs.download', $item),
             ])->all(),
+            /*
+             * Counted in the database, not from the arrays above.
+             *
+             * The page used to derive its tab badges by filtering the truncated
+             * list, so once a queue passed the cap the tab and the sidebar
+             * disagreed — and the sidebar was the one telling the truth. Both
+             * now read the same number.
+             *
+             * `total` rides along so the page can say how much it is not
+             * showing. A list silently ending at 100 is the failure this whole
+             * change is about.
+             */
+            'queues' => [
+                'cancellations' => $this->summary(CancellationRequest::query()->tap($scope), $cancellations),
+                'trainings' => $this->summary(TrainingRequest::query()->tap($scopeTrainingRequests), $trainingRequests),
+                'outputs' => $this->summary(RegistrationOutput::query()->tap($scope), $outputs),
+            ],
             'scopedTo' => $request->user()->fieldOffice?->name,
         ]);
+    }
+
+    /**
+     * How many are pending, how many exist, and how many made it onto the page.
+     *
+     * @param  Collection<int, mixed>  $shown
+     * @return array{pending: int, total: int, shown: int}
+     */
+    private function summary($query, $shown): array
+    {
+        $total = (clone $query)->count();
+
+        return [
+            'pending' => (clone $query)->where('status', RequestStatus::Pending)->count(),
+            'total' => $total,
+            'shown' => $shown->count(),
+        ];
     }
 
     public function reviewCancellation(Request $request, CancellationRequest $cancellationRequest): RedirectResponse
