@@ -254,10 +254,70 @@ class ScanStationService
             ->get()
             ->keyBy('id');
 
-        return array_map(
-            fn (array $scan) => self::applyScan($registrations, $scan, $actor, $dryRun),
-            $scans
-        );
+        /*
+         * Who the server already holds an arrival time for, as one query.
+         *
+         * This used to be an `exists()` per scan inside the loop, so a station
+         * flushing a day's queue asked the same question five hundred times.
+         * The endpoint accepts up to 500 scans, which made the request's
+         * duration a function of how long a device had been offline — the one
+         * request that must not time out, because it is the one carrying
+         * attendance that exists nowhere else.
+         *
+         * Passed by reference through the loop rather than re-read, because
+         * checking someone in *changes the answer*: two scans of the same badge
+         * in one batch have to come back synced and then duplicate, which is
+         * what a plain snapshot taken before the loop would get wrong.
+         */
+        $arrivals = self::arrivalsFor($registrations->keys()->all());
+
+        /*
+         * A foreach rather than array_map, and that is not a style choice.
+         *
+         * An arrow function captures by value, so `$arrivals` inside one is a
+         * copy — the `&$arrivals` parameter would then take a reference to that
+         * copy and every scan would be handed the state as it was before the
+         * batch began. The symptom is narrow and bad: a badge scanned twice in
+         * one flush comes back synced twice, telling the operator two people
+         * arrived. Written out, the same variable is passed each time.
+         */
+        $results = [];
+
+        foreach ($scans as $scan) {
+            $results[] = self::applyScan($registrations, $scan, $actor, $dryRun, $arrivals);
+        }
+
+        return $results;
+    }
+
+    /**
+     * The `registration:day` pairs that already carry an arrival time.
+     *
+     * A set rather than a nested map: the only question ever asked of it is
+     * whether one pair is present.
+     *
+     * @param  array<int, int>  $registrationIds
+     * @return array<string, true>
+     */
+    private static function arrivalsFor(array $registrationIds): array
+    {
+        if ($registrationIds === []) {
+            return [];
+        }
+
+        return Attendance::query()
+            ->whereIn('registration_id', $registrationIds)
+            ->whereNotNull('time_in')
+            ->get(['registration_id', 'training_day'])
+            ->mapWithKeys(fn (Attendance $attendance) => [
+                self::arrivalKey($attendance->registration_id, $attendance->training_day) => true,
+            ])
+            ->all();
+    }
+
+    private static function arrivalKey(int $registrationId, int $day): string
+    {
+        return $registrationId.':'.$day;
     }
 
     /**
@@ -329,7 +389,8 @@ class ScanStationService
         Collection $registrations,
         array $scan,
         User $actor,
-        bool $dryRun = false
+        bool $dryRun,
+        array &$arrivals
     ): array {
         $registration = $registrations->get($scan['registration_id']);
 
@@ -371,15 +432,23 @@ class ScanStationService
 
         $day = $registration->training->dayNumberFor($at);
 
-        $alreadyPresent = $day !== null && Attendance::where('registration_id', $registration->getKey())
-            ->where('training_day', $day)
-            ->whereNotNull('time_in')
-            ->exists();
+        $alreadyPresent = $day !== null
+            && isset($arrivals[self::arrivalKey($registration->getKey(), $day)]);
 
         if ($dryRun) {
             return self::rehearseScan($registration, $scan, $actor, $at, $alreadyPresent);
         }
 
+        /*
+         * One transaction per scan, and deliberately still so.
+         *
+         * Wrapping the whole batch in one would be the obvious other half of
+         * this change and would be wrong: this endpoint's contract is a verdict
+         * *per scan*, and a single rejected badge must not roll back the four
+         * hundred arrivals sent with it. checkIn() owns its own transaction and
+         * that is the right granularity — what was worth removing was the
+         * repeated read, not the repeated write.
+         */
         try {
             $attendance = AttendanceService::checkIn($registration, $actor, $at);
         } catch (ValidationException $exception) {
@@ -388,6 +457,15 @@ class ScanStationService
                 'status' => 'rejected',
                 'message' => $exception->validator->errors()->first(),
             ];
+        }
+
+        // The arrival this scan just recorded, so a second scan of the same
+        // badge later in the same batch reads as the duplicate it is. Only on
+        // the live path: a rehearsal is rolled back, so recording it here would
+        // have a dry run report a duplicate against something that never
+        // happened.
+        if ($attendance->time_in !== null) {
+            $arrivals[self::arrivalKey($registration->getKey(), $attendance->training_day)] = true;
         }
 
         return [

@@ -37,7 +37,22 @@ class PhysicalOrSetting extends Model
      */
     public static function current(): self
     {
-        $setting = static::first();
+        /*
+         * `oldest('id')`, not a bare `first()`.
+         *
+         * There is meant to be one row, and nothing in the database enforces
+         * that: two requests arriving together can both find none and both
+         * create one, and a restore or a hand-run insert can do the same. An
+         * unordered read then returns whichever row the storage engine feels
+         * like, so two requests a second apart can disagree about a setting —
+         * and the answer is stable in development right up until the day it
+         * is not.
+         *
+         * Ordering does not stop a duplicate being written. It makes every
+         * reader agree on which row is the real one, which is the half that
+         * actually matters: the older row is the one the application has been
+         * using, so it wins.
+         */ $setting = static::oldest('id')->first();
 
         if ($setting !== null) {
             return $setting;
