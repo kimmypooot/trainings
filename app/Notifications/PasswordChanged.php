@@ -73,7 +73,11 @@ class PasswordChanged extends Notification
 
         return $message
             ->line('If this was you, nothing further is needed — this message is only to let you know.')
-            ->line('**If this was not you, someone else may have access to your account.** Reset your password immediately and contact the CSC Regional Office VIII.')
+            // The office from config, like the sign-off directly below. These
+            // two disagreed: signature() has read config since it was written,
+            // while this line still named Regional Office VIII, so a security
+            // email could credit two different offices in one message.
+            ->line('**If this was not you, someone else may have access to your account.** Reset your password immediately and contact '.config('office.name').'.')
             ->action('Reset my password', route('password.request'))
             ->salutation($this->signature());
     }

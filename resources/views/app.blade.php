@@ -40,14 +40,19 @@
             off leaves nothing for the directive pattern to match.
         --}}
         <script type="application/ld+json">
-            {!! json_encode([
+            {{-- The office is config, not a literal: this codebase ships one
+                 copy per regional office, and a hard-coded name here tells
+                 every search engine that Region V's portal belongs to Region
+                 VIII. array_filter drops alternateName when no short name is
+                 set, rather than publishing a null. --}}
+            {!! json_encode(array_filter([
                 '@'.'context' => 'https://schema.org',
                 '@type' => 'GovernmentOrganization',
-                'name' => 'Civil Service Commission Regional Office VIII',
-                'alternateName' => 'CSC RO VIII',
+                'name' => config('office.name'),
+                'alternateName' => config('office.short_name'),
                 'url' => url('/'),
                 'logo' => url('/images/csc-logo-512.png'),
-            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) !!}
+            ]), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) !!}
         </script>
 
         @fonts

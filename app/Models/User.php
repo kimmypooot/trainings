@@ -15,10 +15,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
  * @property Role $role
+ * @property bool $is_active
+ * @property bool $is_collecting_officer
+ * @property Carbon|null $email_verified_at
+ * @property Carbon|null $profile_completed_at
+ * @property Carbon|null $last_login_at
+ * @property-read Profile|null $profile
+ * @property-read FieldOffice|null $fieldOffice
  *
  * Larastan reads casts from the `$casts` property, not from the `casts()`
  * method this model uses, so it falls back to the column type and every

@@ -26,10 +26,35 @@ import RosterScanStations from '@/Components/RosterScanStations.vue';
 import RosterEvaluationCodes from '@/Components/RosterEvaluationCodes.vue';
 import { formatDateRange } from '@/dateRange';
 import { useDownload } from '@/useDownload';
+import { useFilters, filteringClass } from '@/useFilters';
+import AppPagination from '@/Components/AppPagination.vue';
 
 const props = defineProps({
     training: { type: Object, required: true },
-    registrations: { type: Array, required: true },
+    /**
+     * One page of the roster, as a serialized paginator: `data` plus the
+     * counts AppPagination reads.
+     *
+     * The whole roster used to arrive here, which is what this shape change is
+     * about — a six-hundred-person run was a payload of that size on every
+     * load, every row action and, once the filters moved server-side, every
+     * keystroke. Anything on this page that needs a figure for the *whole*
+     * roster now reads `counts`, because the browser no longer holds enough
+     * rows to work one out.
+     */
+    registrations: { type: Object, required: true },
+    /** The filters the server applied, echoed back so the controls can seed. */
+    filters: { type: Object, required: true },
+    /** Chip and tile figures over the whole roster, not the page. */
+    counts: { type: Object, required: true },
+    /** Everyone with a dietary note. Sent whole — it is a short list. */
+    restrictions: { type: Array, default: () => [] },
+    /**
+     * The printed sheet's rows: every participant the current filters match,
+     * not the twenty-five on screen. Absent until Print is pressed — see
+     * printAttendanceSheet.
+     */
+    printRows: { type: Array, default: null },
     summary: { type: Object, required: true },
     scopedTo: { type: String, default: null },
     attendanceStatuses: { type: Array, default: () => [] },
@@ -132,6 +157,10 @@ const setAttendance = (registration, day, status) => {
 };
 
 // Only a participant holding a place can be marked, matching AttendanceService.
+// The rows on screen. Named apart from the prop because the prop is now a page
+// of the roster rather than the roster, and every use of it here means the page.
+const rows = computed(() => props.registrations.data);
+
 const isMarkable = (registration) => ['approved', 'completed'].includes(registration.status);
 
 /*
@@ -170,9 +199,7 @@ const releaseCertificate = (id) =>
 const releaseAll = () =>
     router.post(`/admin/trainings/${props.training.id}/certificates`, {}, { preserveScroll: true });
 
-const awaitingCertificates = computed(
-    () => props.registrations.filter((r) => r.status === 'completed' && !r.certificate_number).length
-);
+const awaitingCertificates = computed(() => props.counts.awaiting_certificates);
 
 const decide = (registration, decision) => {
     const url = `/admin/registrations/${registration.id}/review`;
@@ -244,22 +271,71 @@ const cancelRegistration = (registration) => {
 const isCancellable = (registration) =>
     props.can.manage_roster && ['pending', 'approved', 'waitlisted'].includes(registration.status);
 
-const pendingCount = computed(() => props.registrations.filter((r) => r.status === 'pending').length);
-
-const restrictions = computed(() => props.registrations.filter((r) => r.food_restrictions));
+const pendingCount = computed(() => props.counts.pending);
 
 /* -------------------------------------------------------------------------- */
 /* Filtering, search, "not checked in today", sorting                          */
 /* -------------------------------------------------------------------------- */
 
-const query = ref('');
-const statusFilter = ref('all');
-const onlyNotCheckedInToday = ref(false);
+/*
+ * Seeded from what the server actually applied, not from a default.
+ *
+ * These used to be plain refs over a roster that was entirely in the browser.
+ * Now they are a round trip, so they have to survive one: land on
+ * `?status=pending`, or reload after paging, and the chips have to come up
+ * showing the filter the rows in front of you were selected by.
+ */
+const query = ref(props.filters.search ?? '');
+const statusFilter = ref(props.filters.status ?? 'all');
+const onlyNotCheckedInToday = ref(Boolean(props.filters.not_checked_in));
 // The supervisory-document filter, meaningful only when the training is
 // supervisory and someone has actually been asked to attach a document.
-const docFilter = ref('all');
+const docFilter = ref(props.filters.document ?? 'all');
 // And the evaluations tab's own filter — see evaluationChips.
-const evalFilter = ref('all');
+const evalFilter = ref(props.filters.evaluation ?? 'all');
+
+const sortKey = ref(props.filters.sort ?? null);
+const sortDir = ref(props.filters.direction ?? 'asc');
+
+const { filtering, apply } = useFilters({
+    /*
+     * A function, not a string: the open tab lives in the fragment, and a visit
+     * to the bare path would drop it — the address bar would then disagree with
+     * the page, and a reload would land the operator back on Participants.
+     */
+    url: () => `/admin/trainings/${props.training.id}/roster${window.location.hash}`,
+    /*
+     * Only what the filters actually move. `counts` is deliberately absent: it
+     * describes the whole roster and does not change when the roster is
+     * narrowed, which is the entire point of a chip carrying a number.
+     * `printRows` is absent for the opposite reason — it is fetched on demand,
+     * and listing it here would pull the whole filtered roster back on every
+     * keystroke, which is the cost this change exists to remove.
+     */
+    only: ['registrations', 'filters'],
+    watch: [query],
+    query: () => ({
+        search: query.value || undefined,
+        status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
+        document: docFilter.value !== 'all' ? docFilter.value : undefined,
+        evaluation: evalFilter.value !== 'all' ? evalFilter.value : undefined,
+        not_checked_in: onlyNotCheckedInToday.value ? 1 : undefined,
+        sort: sortKey.value ?? undefined,
+        direction: sortKey.value ? sortDir.value : undefined,
+    }),
+    preserveScroll: true,
+});
+
+/*
+ * The text box debounces; everything else is a click.
+ *
+ * `watch` above covers the search field alone. A chip or a checkbox waiting
+ * 300ms to do anything reads as a missed tap, so those call this instead —
+ * the distinction useFilters' `immediate` flag exists for.
+ */
+const applyNow = () => apply({ immediate: true });
+
+watch([statusFilter, docFilter, evalFilter, onlyNotCheckedInToday], applyNow);
 
 // The training day that is happening right now, if any. The "not checked in
 // today" view has nothing to say on a day the training is not running.
@@ -301,27 +377,22 @@ const activeDayLabel = computed(
 const correcting = ref(null);
 
 const correctingRow = computed(
-    () => props.registrations.find((registration) => registration.id === correcting.value) ?? null
+    () => rows.value.find((registration) => registration.id === correcting.value) ?? null
 );
 
-const notCheckedInToday = (registration) =>
-    todayDay.value !== null &&
-    isMarkable(registration) &&
-    !(registration.attendance[todayDay.value]?.time_in);
+/*
+ * The chip counts come from the server now.
+ *
+ * They always described the whole roster rather than what was on screen — a
+ * chip reading "12 cancelled" is an offer to go and look at twelve people — so
+ * they could not survive the page holding only twenty-five rows. The predicates
+ * behind them moved to App\Support\RosterFilter, which is also what the filters
+ * themselves now run through, so the count beside a chip and the rows you get
+ * for pressing it cannot disagree.
+ */
+const statusCounts = computed(() => props.counts.status ?? {});
 
-const statusCounts = computed(() => {
-    const counts = { all: props.registrations.length };
-
-    for (const registration of props.registrations) {
-        counts[registration.status] = (counts[registration.status] ?? 0) + 1;
-    }
-
-    return counts;
-});
-
-const notCheckedInCount = computed(
-    () => props.registrations.filter(notCheckedInToday).length
-);
+const notCheckedInCount = computed(() => props.counts.not_checked_in_today ?? 0);
 
 /*
  * Chips in display order. Statuses that never occur on this roster simply read
@@ -360,14 +431,12 @@ const statusChips = [
  * that ever happens to one of these forms. "Outstanding" was the word here and
  * in the office table, meaning an unsubmitted form in one place and an unpaid
  * fee in the other — a word doing two jobs is a word doing neither.
+ *
+ * Which state a given participant is in is decided by
+ * RosterFilter::evaluationState() now, not here: the chip counts and the rows
+ * a chip selects both come from the server, and the two disagreeing would be a
+ * list that does not match the number on the thing you pressed to get it.
  */
-const evaluationState = (registration) => {
-    if (!registration.evaluation?.expected) {
-        return 'not-required';
-    }
-
-    return registration.evaluation.outstanding.length ? 'not-submitted' : 'submitted';
-};
 
 // Not submitted first: it is the only one of the three anybody opens this tab
 // to act on.
@@ -379,19 +448,7 @@ const evaluationChips = [
     { value: 'not-required', label: 'Not Required' },
 ];
 
-const evaluationCounts = computed(() => {
-    const counts = { all: props.registrations.length };
-
-    for (const registration of props.registrations) {
-        const state = evaluationState(registration);
-        counts[state] = (counts[state] ?? 0) + 1;
-    }
-
-    return counts;
-});
-
-const sortKey = ref(null);
-const sortDir = ref('asc');
+const evaluationCounts = computed(() => props.counts.evaluation ?? {});
 
 function toggleSort(key) {
     if (sortKey.value === key) {
@@ -400,6 +457,10 @@ function toggleSort(key) {
         sortKey.value = key;
         sortDir.value = 'asc';
     }
+
+    // Sorting one page of a roster would sort the wrong twenty-five people, so
+    // the order is the server's to decide and this is a request for it.
+    applyNow();
 }
 
 const sortIndicator = (key) => {
@@ -410,43 +471,6 @@ const sortIndicator = (key) => {
     return sortDir.value === 'asc' ? ' ↑' : ' ↓';
 };
 
-const filtered = computed(() => {
-    const needle = query.value.trim().toLowerCase();
-
-    let rows = props.registrations.filter((registration) => {
-        const matchesQuery =
-            !needle ||
-            `${registration.name} ${registration.email} ${registration.organization ?? ''}`
-                .toLowerCase()
-                .includes(needle);
-        const matchesStatus = statusFilter.value === 'all' || registration.status === statusFilter.value;
-        const matchesDoc = docFilter.value === 'all'
-            || registration.supervisory_document?.status === docFilter.value;
-        const matchesToday = !onlyNotCheckedInToday.value || notCheckedInToday(registration);
-        const matchesEvaluation = evalFilter.value === 'all'
-            || evaluationState(registration) === evalFilter.value;
-
-        return matchesQuery && matchesStatus && matchesToday && matchesDoc && matchesEvaluation;
-    });
-
-    if (sortKey.value) {
-        const dir = sortDir.value === 'asc' ? 1 : -1;
-
-        // Dotted keys resolve a nested value (e.g. the document status label);
-        // the fallback keeps a null document from sorting above a present one.
-        const valueAt = (row, key) =>
-            key.split('.').reduce((acc, part) => (acc == null ? null : acc[part]), row);
-
-        rows = [...rows].sort((a, b) => {
-            const av = valueAt(a, sortKey.value) ?? '';
-            const bv = valueAt(b, sortKey.value) ?? '';
-
-            return (typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv))) * dir;
-        });
-    }
-
-    return rows;
-});
 
 const hasActiveFilters = computed(
     () =>
@@ -463,22 +487,16 @@ const clearFilters = () => {
     onlyNotCheckedInToday.value = false;
     docFilter.value = 'all';
     evalFilter.value = 'all';
+
+    // Five watched refs, one visit: the watchers each queue an apply and
+    // useFilters clears the pending timer on every call, so the five collapse
+    // into the single request the last one schedules.
+    applyNow();
 };
 
-// Document status chips for a supervisory training, with live counts.
-const docStatusCounts = computed(() => {
-    const counts = { all: props.registrations.filter((r) => r.supervisory_document).length };
-
-    for (const registration of props.registrations) {
-        const status = registration.supervisory_document?.status;
-
-        if (status) {
-            counts[status] = (counts[status] ?? 0) + 1;
-        }
-    }
-
-    return counts;
-});
+// Document status chips for a supervisory training, counted over the whole
+// roster for the same reason as every other chip row here.
+const docStatusCounts = computed(() => props.counts.document ?? {});
 
 /* -------------------------------------------------------------------------- */
 /* Tabs                                                                        */
@@ -507,7 +525,7 @@ const tabs = computed(() => {
             key: 'participants',
             label: 'Participants',
             icon: 'users',
-            count: props.registrations.length,
+            count: props.registrations.total,
         },
         {
             key: 'attendance',
@@ -640,9 +658,7 @@ const rosterCardSubtitle = computed(() => ({
  * Only rows a bulk action could actually apply to are selectable — a checkbox
  * beside a cancelled registration is a promise the server will refuse to keep.
  */
-const selectable = computed(() =>
-    props.registrations.filter((r) => ['pending', 'approved'].includes(r.status))
-);
+const selectable = computed(() => rows.value.filter((r) => ['pending', 'approved'].includes(r.status)));
 
 const selected = ref(new Set());
 
@@ -664,10 +680,17 @@ const toggle = (id) => {
     selected.value = next;
 };
 
-// Select-all acts on the rows currently in front of the operator, not on the
-// whole roster — checking one box and approving "all" when the roster was
-// filtered is a scope the server would reject anyway.
-const visibleSelectable = computed(() => filtered.value.filter((r) => selectable.value.includes(r)));
+/*
+ * Select-all acts on the rows in front of the operator, not on the whole
+ * roster — approving "all" on a roster that was filtered is a scope the server
+ * would reject anyway.
+ *
+ * That used to mean the filtered list and now means the page, which is the same
+ * sentence with a smaller number in it: "in front of the operator" is
+ * twenty-five people, and `selectable` is already exactly them. The alias is
+ * kept because the name is what the markup below reads.
+ */
+const visibleSelectable = selectable;
 
 const allSelected = computed(
     () => visibleSelectable.value.length > 0 && selected.value.size === visibleSelectable.value.length
@@ -677,7 +700,7 @@ const toggleAll = () => {
     selected.value = allSelected.value ? new Set() : new Set(visibleSelectable.value.map((r) => r.id));
 };
 
-const selectedRows = computed(() => props.registrations.filter((r) => selected.value.has(r.id)));
+const selectedRows = computed(() => rows.value.filter((r) => selected.value.has(r.id)));
 const selectedPending = computed(() => selectedRows.value.filter((r) => r.status === 'pending').length);
 const selectedApproved = computed(() => selectedRows.value.filter((r) => r.status === 'approved').length);
 
@@ -855,9 +878,34 @@ const canRecordPayment = (registration) =>
     !registration.payment.awaiting_review &&
     registration.status !== 'cancelled';
 
-// The attendance sheet is the same page in print — the interactive chrome
-// carries the print:hidden class and the sheet the print-only section shows.
-const printAttendanceSheet = () => window.print();
+/*
+ * The attendance sheet is the same page in print — the interactive chrome
+ * carries the print:hidden class and the print-only section shows the sheet.
+ *
+ * What it prints is every participant the current filters match, which is no
+ * longer what the page is holding: the roster arrives twenty-five rows at a
+ * time. So Print fetches the sheet and then prints it. Carrying those rows on
+ * every load to serve an action taken once or twice a session was exactly the
+ * weight this page was rebuilt to shed, and printing page 3 of 24 without
+ * saying so would be a worse answer than waiting a moment for the real thing.
+ */
+const printing = ref(false);
+
+const printAttendanceSheet = () => {
+    printing.value = true;
+
+    router.reload({
+        only: ['printRows'],
+        /*
+         * `window.print()` blocks, so it cannot run inside onSuccess — the
+         * dialog would open before Vue had patched the new rows into the DOM
+         * and the sheet would print from whatever was there before. A frame
+         * later, the render has happened.
+         */
+        onSuccess: () => requestAnimationFrame(() => window.print()),
+        onFinish: () => { printing.value = false; },
+    });
+};
 
 // Evaluated once when the page loads; for a printout that is the right "now".
 const printedAt = new Date().toLocaleString();
@@ -901,7 +949,7 @@ const printedAt = new Date().toLocaleString();
                 >
                     Export Roster (Excel)
                 </AppButton>
-                <AppButton variant="ghost" size="sm" icon="print" @click="printAttendanceSheet">
+                <AppButton variant="ghost" size="sm" icon="print" :loading="printing" @click="printAttendanceSheet">
                     Print Attendance Sheet
                 </AppButton>
                 <!--
@@ -1043,11 +1091,11 @@ const printedAt = new Date().toLocaleString();
                 v-if="tab !== 'offices' && !(tab === 'evaluations' && !training.collects_evaluations)"
                 :title="rosterCardTitle"
                 :subtitle="rosterCardSubtitle"
-                :padded="registrations.length > 0"
+                :padded="registrations.total > 0"
                 class="print:hidden"
             >
                 <AppEmptyState
-                    v-if="!registrations.length"
+                    v-if="!registrations.total"
                     title="No one has registered yet"
                     description="Registrations will appear here as participants sign up."
                     icon="users"
@@ -1055,17 +1103,17 @@ const printedAt = new Date().toLocaleString();
 
                 <template v-else>
                 <!--
-                    Client-side find and filter. The whole roster ships in the
-                    page, so the narrowing happens locally — the operator at the
-                    venue gets the answer without a round trip. Selection is not
-                    affected by the filters; choosing rows always means choosing
-                    rows in the roster.
+                    Find and filter, both server-side. The roster used to ship
+                    whole and narrow in the browser, which was fast until a run
+                    had six hundred people on it and every load carried all of
+                    them. The controls stay live while a query is out; only the
+                    results dim — see filteringClass on the region below.
                 -->
                 <div class="flex flex-col gap-3 border-b border-csc-line pb-4">
                     <input
                         v-model="query"
                         type="search"
-                        :placeholder="`Find ${registrations.length} participant(s) by name, email or agency…`"
+                        :placeholder="`Find ${registrations.total} participant(s) by name, email or agency…`"
                         aria-label="Find participants"
                         class="w-full rounded-lg border border-csc-ink/20 bg-white px-4 py-2.5 text-sm text-csc-ink focus:border-csc-blue focus:outline-2 focus:outline-offset-1 focus:outline-csc-blue"
                     />
@@ -1225,7 +1273,7 @@ const printedAt = new Date().toLocaleString();
                 </div>
 
                 <AppEmptyState
-                    v-if="filtered.length === 0"
+                    v-if="registrations.data.length === 0"
                     title="No participants match"
                     :description="
                         hasActiveFilters
@@ -1240,7 +1288,7 @@ const printedAt = new Date().toLocaleString();
                     </template>
                 </AppEmptyState>
 
-                <template v-if="filtered.length > 0">
+                <template v-if="registrations.data.length > 0">
                 <!--
                     The bulk bar sticks to the bottom of the viewport rather
                     than the top of the table: on a long roster the selection is
@@ -1314,7 +1362,11 @@ const printedAt = new Date().toLocaleString();
                     </div>
                 </div>
 
-                <div class="-mx-5 hidden overflow-x-auto sm:-mx-6 md:block print:hidden">
+                <div
+                    class="-mx-5 hidden overflow-x-auto sm:-mx-6 md:block print:hidden"
+                    :class="filteringClass(filtering)"
+                    :aria-busy="filtering"
+                >
                     <table class="w-full min-w-160 text-left text-sm">
                         <thead class="border-y border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                             <tr>
@@ -1424,7 +1476,7 @@ const printedAt = new Date().toLocaleString();
                         -->
                         <TransitionGroup tag="tbody" name="roster-row" class="divide-y divide-csc-line">
                             <tr
-                                v-for="registration in filtered"
+                                v-for="registration in registrations.data"
                                 :key="registration.id"
                                 :class="isSelected(registration.id) ? 'bg-csc-blue-tint/50' : ''"
                             >
@@ -1541,9 +1593,15 @@ const printedAt = new Date().toLocaleString();
                     Roster* components, so an action added to one is an action
                     in both. They had already drifted apart once.
                 -->
-                <TransitionGroup tag="ul" name="roster-row" class="space-y-3 md:hidden print:hidden">
+                <TransitionGroup
+                    tag="ul"
+                    name="roster-row"
+                    class="space-y-3 md:hidden print:hidden"
+                    :class="filteringClass(filtering)"
+                    :aria-busy="filtering"
+                >
                     <li
-                        v-for="registration in filtered"
+                        v-for="registration in registrations.data"
                         :key="registration.id"
                         class="rounded-xl border border-csc-line bg-white p-4"
                         :class="isSelected(registration.id) ? 'border-csc-blue/50 bg-csc-blue-tint/30' : ''"
@@ -1643,6 +1701,20 @@ const printedAt = new Date().toLocaleString();
                         </div>
                     </li>
                 </TransitionGroup>
+
+                <!--
+                    Below both layouts, so it reads as the end of one list
+                    rather than the end of each. preserve-scroll keeps the
+                    operator where they were: the control is at the bottom of a
+                    long table and jumping to the top to read the next page is
+                    a scroll back down every time.
+                -->
+                <AppPagination
+                    :pagination="registrations"
+                    label="participants"
+                    preserve-scroll
+                    class="mt-4 print:hidden"
+                />
                 </template>
                 </template>
             </AppCard>
@@ -1852,6 +1924,11 @@ const printedAt = new Date().toLocaleString();
                 The printed attendance sheet. Everything interactive above is
                 print:hidden; this section only exists in the @media print
                 rendering and reflects the filters currently applied.
+
+                Its rows are `printRows`, not the page: the sheet is the whole
+                filtered roster, and the screen is twenty-five of it. The prop
+                is absent until Print fetches it, so this renders as an empty
+                table on a page nobody is printing — which is what it should be.
             -->
             <section class="hidden print:block">
                 <header class="mb-6 text-center">
@@ -1883,7 +1960,7 @@ const printedAt = new Date().toLocaleString();
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(registration, index) in filtered" :key="registration.id">
+                        <tr v-for="(registration, index) in printRows ?? []" :key="registration.id">
                             <td class="border border-black px-2 py-1.5">{{ index + 1 }}</td>
                             <td class="border border-black px-2 py-1.5">{{ registration.name }}</td>
                             <td class="border border-black px-2 py-1.5">{{ registration.organization ?? '—' }}</td>
@@ -1893,7 +1970,7 @@ const printedAt = new Date().toLocaleString();
                                 :key="day.day"
                                 class="border border-black px-2 py-1.5 text-center"
                             >
-                                {{ registration.attendance[day.day]?.status_label ?? '—' }}
+                                {{ registration.attendance[day.day] ?? '—' }}
                             </td>
                             <td class="border border-black px-2 py-1.5">{{ registration.status_label }}</td>
                         </tr>

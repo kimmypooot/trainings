@@ -839,8 +839,7 @@ onMounted(() => {
                             I hereby agree and give consent for the processing of my personal data information, as
                             well as agree to be bound by the
                             <Link href="/privacy-policy" class="font-medium text-csc-blue hover:text-csc-red-ink">
-                                Privacy Policy </Link
-                            >.
+                                Privacy Policy</Link>.
                         </span>
                     </label>
                     <p v-if="errorFor('consent')" id="consent-error" class="mt-2 text-xs font-medium text-csc-red-ink">

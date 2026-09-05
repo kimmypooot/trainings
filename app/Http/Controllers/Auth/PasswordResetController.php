@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Support\AccountAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
@@ -59,7 +60,7 @@ class PasswordResetController extends Controller
         $request->validate([
             'token' => ['required'],
             'email' => ['required', 'string', 'email', 'max:255'],
-            'password' => ['required', 'confirmed', PasswordRule::min(8)->letters()->numbers()],
+            'password' => ['required', 'confirmed', PasswordRule::defaults()],
         ]);
 
         $status = Password::broker()->reset(
@@ -68,6 +69,24 @@ class PasswordResetController extends Controller
                 // password is a hashed cast, so writing the raw value here is
                 // enough — the cast does the hashing on save.
                 $user->forceFill(['password' => $password])->save();
+
+                /*
+                 * A reset is an account-recovery action, so it ends whatever
+                 * was already going on: every session this account holds, and
+                 * the remember-me token that would otherwise sign it back in
+                 * for 400 days.
+                 *
+                 * Both were being kept. This callback overrides the broker's
+                 * default write, and the default is the one that rotates
+                 * `remember_token` — so a stolen recaller cookie survived the
+                 * very action a person takes *because* they think they have
+                 * been compromised.
+                 *
+                 * Safe to clear every session here, unlike on a password
+                 * change: whoever is resetting is a guest holding no session of
+                 * their own, so there is nothing of theirs to sign out.
+                 */
+                AccountAccess::revoke($user);
             }
         );
 

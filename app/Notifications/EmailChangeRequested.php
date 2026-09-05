@@ -49,7 +49,9 @@ class EmailChangeRequested extends Notification
                 ->line('A request was made to move your CSC TIMS account to **'.$this->newEmail.'**.')
                 ->line('Nothing has changed yet. The move only takes effect if the confirmation link sent to that address is opened.')
                 ->line('If this was you, no action is needed here — just confirm from the new address.')
-                ->line('**If this was not you, someone else may have access to your account.** Sign in and cancel the request from your profile, change your password, and contact the CSC Regional Office VIII.')
+                // The office from config, matching signature() below — see the
+                // same fix in PasswordChanged.
+                ->line('**If this was not you, someone else may have access to your account.** Sign in and cancel the request from your profile, change your password, and contact '.config('office.name').'.')
                 ->action('Go to my profile', route('profile.edit'))
                 ->salutation($this->signature()),
             'A move to '.$this->newEmail.' was requested. If this was not you, act now.'

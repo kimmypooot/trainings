@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppBadge from '@/Components/AppBadge.vue';
@@ -23,6 +23,11 @@ const props = defineProps({
     physical_or_pipeline: { type: Array, default: () => [] },
     payment_settings: { type: Object, default: null },
 });
+
+// The issuing office, for the refund notice that tells a participant where to
+// post their original receipt. Typed in as Regional Office VIII, it would have
+// sent another region's participants' documents to the wrong province.
+const office = computed(() => usePage().props.office);
 
 const paying = ref(null);
 
@@ -608,7 +613,7 @@ const submitPhysicalOr = () =>
             @close="closeRefundConfirm"
         >
             <AppAlert tone="info">
-                The original official receipt(s) must be returned to the CSC Regional Office VIII
+                The original official receipt(s) must be returned to {{ office.name }}
                 or to the nearest CSC Field Office / Satellite Office — they are required as
                 attachment for the processing of your refund.
             </AppAlert>

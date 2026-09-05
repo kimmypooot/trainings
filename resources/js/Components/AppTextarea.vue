@@ -70,7 +70,7 @@ const remaining = computed(() => {
             :required="required"
             :aria-invalid="error ? 'true' : undefined"
             :aria-describedby="describedBy"
-            class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1"
+            class="w-full rounded-lg border bg-white px-4 py-2.5 text-base text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1 sm:text-sm"
             :class="[
                 error
                     ? 'border-csc-red-ink focus:outline-csc-red-ink'

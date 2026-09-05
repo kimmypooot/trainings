@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
+use App\Support\ActivityLogger;
 use App\Support\Exports\SpreadsheetExport;
 use App\Support\ParticipantFilter;
 use App\Support\ReportScope;
@@ -60,6 +61,8 @@ class ExportController extends Controller
      */
     public function participants(Request $request): StreamedResponse
     {
+        $this->recordDownload($request, 'the participants register', $request->query());
+
         $officeId = $request->user()->scopedFieldOfficeId();
 
         $query = ParticipantFilter::apply(
@@ -107,6 +110,8 @@ class ExportController extends Controller
      */
     public function roster(Request $request, Training $training): StreamedResponse
     {
+        $this->recordDownload($request, 'a training roster', $request->query());
+
         $query = Registration::with(['user.profile.fieldOffice', 'attendances', 'certificate'])
             ->where('training_id', $training->getKey());
 
@@ -160,6 +165,8 @@ class ExportController extends Controller
      */
     public function affected(Request $request, Training $training): StreamedResponse
     {
+        $this->recordDownload($request, 'the affected-participants list', $request->query());
+
         $target = $request->integer('target') > 0
             ? Training::whereKey($request->integer('target'))->whereKeyNot($training->getKey())->first()
             : $training->reschedules()->latest('id')->first();
@@ -232,6 +239,8 @@ class ExportController extends Controller
      */
     public function participantHistory(Request $request, User $user): StreamedResponse
     {
+        $this->recordDownload($request, 'one participant\'s history', $request->query());
+
         abort_unless($user->role === Role::Participant, 404);
 
         // The same office guard the participant directory applies. 404 rather
@@ -304,6 +313,8 @@ class ExportController extends Controller
      */
     public function revenue(Request $request, Training $training): StreamedResponse
     {
+        $this->recordDownload($request, 'a training\'s revenue', $request->query());
+
         abort_unless($request->user()->collectsPayments(), 403);
 
         $query = Payment::with(['user.profile.fieldOffice', 'collectingOfficer'])
@@ -344,6 +355,8 @@ class ExportController extends Controller
      */
     public function registrations(Request $request): StreamedResponse
     {
+        $this->recordDownload($request, 'the registrations register', $request->query());
+
         $query = Registration::with(['user.profile.fieldOffice', 'training'])
             ->when(
                 $request->string('status')->toString(),
@@ -381,6 +394,8 @@ class ExportController extends Controller
      */
     public function payments(Request $request): StreamedResponse
     {
+        $this->recordDownload($request, 'the payments register', $request->query());
+
         abort_unless($request->user()->collectsPayments(), 403);
 
         $status = $request->string('status')->toString();
@@ -425,6 +440,8 @@ class ExportController extends Controller
      */
     public function certificates(Request $request): StreamedResponse
     {
+        $this->recordDownload($request, 'the certificate register', $request->query());
+
         $query = Certificate::query()
             ->with(['user.profile.fieldOffice', 'training'])
             // A row with no file is a half-finished release, not a certificate.
@@ -491,6 +508,8 @@ class ExportController extends Controller
      */
     public function revenueReport(Request $request): StreamedResponse
     {
+        $this->recordDownload($request, 'the revenue report', $request->query());
+
         abort_unless($request->user()->collectsPayments(), 403);
 
         $scope = ReportScope::fromRequest($request);
@@ -544,6 +563,8 @@ class ExportController extends Controller
      */
     public function breakdownReport(Request $request): StreamedResponse
     {
+        $this->recordDownload($request, 'the breakdown report', $request->query());
+
         $scope = ReportScope::fromRequest($request);
 
         abort_if($scope->view === 'training' && $scope->trainingId === null, 404);
@@ -592,5 +613,44 @@ class ExportController extends Controller
         foreach ($query->lazy(500) as $model) {
             yield $map($model);
         }
+    }
+
+    /**
+     * Record that a download happened, and what it covered.
+     *
+     * Bulk extraction was the largest hole in the audit trail: the participants
+     * export alone carries every participant's date of birth, mobile number,
+     * salary grade and dietary needs, and taking a copy left no trace anywhere.
+     * The office could not answer "who has a copy of the register, and from
+     * when" — which is the first question after a leak and the one a
+     * data-protection review asks in the abstract.
+     *
+     * The filters are recorded with it because "exported the register" and
+     * "exported one field office's twelve participants" are different events,
+     * and the query string is the only thing that distinguishes them.
+     *
+     * Deliberately logged before the stream rather than after: a
+     * StreamedResponse runs its callback long after the controller has
+     * returned, and an export abandoned half way through — a closed tab, a
+     * dropped connection — still put rows on somebody's screen. The honest
+     * record is that the download was *started*.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function recordDownload(Request $request, string $what, array $filters = []): void
+    {
+        ActivityLogger::record(
+            'export.downloaded',
+            null,
+            sprintf('Exported %s.', $what),
+            [
+                'export' => $what,
+                'filters' => array_filter($filters, fn ($value) => $value !== null && $value !== ''),
+                'format' => $request->string('format')->toString() ?: 'csv',
+                // What the actor could see, which is what the file contains.
+                'scoped_to_field_office_id' => $request->user()->scopedFieldOfficeId(),
+            ],
+            $request->user(),
+        );
     }
 }

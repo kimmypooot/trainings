@@ -38,7 +38,7 @@ class RegisterController extends Controller
             // `bail` so a malformed address is rejected on its shape alone and
             // never reaches the lookup below.
             'email' => ['bail', 'required', 'string', 'email', 'max:255', self::addressIsFree(...)],
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'confirmed', Password::defaults()],
             'consent' => ['accepted'],
         ], [
             'consent.accepted' => 'You must accept the Privacy Policy and Terms of Service to register.',

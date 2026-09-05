@@ -58,7 +58,14 @@ const go = (page) => {
     const url = new URL(window.location.href);
     url.searchParams.set('page', String(page));
 
-    router.get(url.pathname + url.search, {}, { preserveScroll: props.preserveScroll });
+    /*
+     * The fragment rides along. Most pages that page have none, but the
+     * training roster keeps its open tab there — dropping it would send the
+     * address bar back to the first tab while the page carried on showing the
+     * fourth, and a reload would then land somewhere the operator did not ask
+     * for.
+     */
+    router.get(url.pathname + url.search + url.hash, {}, { preserveScroll: props.preserveScroll });
 };
 </script>
 

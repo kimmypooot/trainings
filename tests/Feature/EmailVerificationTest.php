@@ -21,8 +21,8 @@ class EmailVerificationTest extends TestCase
 
         $this->post('/register', [
             'email' => 'juan@example.com',
-            'password' => 'sikreto123',
-            'password_confirmation' => 'sikreto123',
+            'password' => 'sikretokong123',
+            'password_confirmation' => 'sikretokong123',
             'consent' => true,
         ])->assertRedirect('/profile/complete');
 
@@ -63,7 +63,7 @@ class EmailVerificationTest extends TestCase
     {
         User::factory()->unverified()->create([
             'email' => 'done@example.com',
-            'password' => 'sikreto123',
+            'password' => 'sikretokong123',
             'profile_completed_at' => now(),
         ]);
 
@@ -73,7 +73,7 @@ class EmailVerificationTest extends TestCase
         // request and the "Email Not Verified" card would never appear. The
         // POST's own response carries the email.
         $this->from('/login')
-            ->post('/login', ['email' => 'done@example.com', 'password' => 'sikreto123'])
+            ->post('/login', ['email' => 'done@example.com', 'password' => 'sikretokong123'])
             ->assertOk()
             ->assertInertia(
                 fn ($page) => $page->component('Auth/Login')
@@ -87,11 +87,11 @@ class EmailVerificationTest extends TestCase
     {
         User::factory()->unverified()->create([
             'email' => 'todo@example.com',
-            'password' => 'sikreto123',
+            'password' => 'sikretokong123',
             'profile_completed_at' => null,
         ]);
 
-        $this->post('/login', ['email' => 'todo@example.com', 'password' => 'sikreto123'])
+        $this->post('/login', ['email' => 'todo@example.com', 'password' => 'sikretokong123'])
             ->assertRedirect('/profile/complete');
 
         $this->assertAuthenticated();

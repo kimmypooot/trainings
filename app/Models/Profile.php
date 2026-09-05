@@ -2,12 +2,27 @@
 
 namespace App\Models;
 
+use App\Support\PhilippineGeography;
 use Database\Factories\ProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property Carbon|null $date_of_birth
+ * @property bool $is_pwd
+ * @property Carbon|null $consented_at
+ * @property-read User $user
+ * @property-read FieldOffice|null $fieldOffice
+ *
+ * Larastan reads casts from the `$casts` property rather than the `casts()`
+ * method this model uses, so the two cast columns resolved to their raw
+ * database types and `$profile->date_of_birth->format(...)` read as a method
+ * call on a string. Same cause as the blocks on `User`, `Registration` and
+ * `ScanLink`; see CLAUDE.md.
+ */
 #[Fillable([
     'first_name', 'middle_name', 'last_name', 'suffix', 'date_of_birth', 'sex',
     'is_pwd', 'civil_status', 'mobile_number', 'position_title', 'salary_grade',
@@ -48,14 +63,21 @@ class Profile extends Model
     }
 
     /**
-     * Whether the participant lives outside Region VIII.
+     * Whether the participant lives outside the region this office serves.
      *
      * The region field holds the canonical PSGC name ("Region VIII (Eastern
-     * Visayas)", "Region XI (Davao Region)", ...), so the check is a tolerant
-     * contains rather than an exact match. Fails open: a blank region is
-     * treated as outside, because the physical-OR option only ever matters to
-     * people who cannot collect the receipt in person — erring toward showing
-     * the option is the safe side.
+     * Visayas)", "Region XI (Davao Region)", ...), so the check is tolerant
+     * rather than an exact match — see PhilippineGeography::denotesRegion.
+     * Fails open: a blank region is treated as outside, because the
+     * physical-OR option only ever matters to people who cannot collect the
+     * receipt in person — erring toward showing the option is the safe side.
+     *
+     * Which region that is comes from `office.psgc_region`. It was written in
+     * here as a test for the string "VIII", which is correct in exactly one
+     * deployment: everywhere else no participant matched, so the entire region
+     * was marked as outsiders and offered courier delivery of a receipt they
+     * could have collected at the counter. Nothing errored — it is the kind of
+     * wrong that only shows up as unexpected postage.
      */
     public function isOutsideCscRegion(): bool
     {
@@ -63,9 +85,7 @@ class Profile extends Model
             return true;
         }
 
-        $region = mb_strtoupper((string) $this->region);
-
-        return ! str_contains($region, 'VIII') && ! str_contains($region, 'EASTERN VISAYAS');
+        return ! PhilippineGeography::denotesRegion($this->region, config('office.psgc_region'));
     }
 
     /**

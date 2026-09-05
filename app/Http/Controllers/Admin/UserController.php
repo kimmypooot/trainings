@@ -6,6 +6,8 @@ use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\FieldOffice;
 use App\Models\User;
+use App\Support\AccountAccess;
+use App\Support\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -39,6 +41,7 @@ class UserController extends Controller
 
         return Inertia::render('Admin/Users/Index', [
             'canManage' => $canManage,
+            'summary' => $this->summary(),
             'users' => $users->through(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -67,6 +70,43 @@ class UserController extends Controller
         ]);
     }
 
+    /**
+     * The directory at a glance, over the whole of it.
+     *
+     * Deliberately not narrowed by the search box or the role filter: this is
+     * the shape of the staff roll, and a header figure that moved with the
+     * filters would be answering a different question every keystroke — and
+     * `useFilters` does not reload it, so it would go stale rather than
+     * follow. The list below is what narrows.
+     *
+     * One conditional-aggregate query rather than four counts. "Never signed
+     * in" is the figure worth having that nothing else on the page shows: an
+     * account created and never used is either an onboarding that stalled or a
+     * credential sitting unclaimed, and both want chasing.
+     *
+     * @return array<string, int>
+     */
+    private function summary(): array
+    {
+        $row = (array) User::query()
+            ->whereIn('role', array_map(fn (Role $role) => $role->value, Role::staff()))
+            ->toBase()
+            ->selectRaw(
+                'COUNT(*) as total,'
+                .' SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,'
+                .' SUM(CASE WHEN is_collecting_officer = 1 THEN 1 ELSE 0 END) as collectors,'
+                .' SUM(CASE WHEN last_login_at IS NULL THEN 1 ELSE 0 END) as never_signed_in'
+            )
+            ->first();
+
+        return [
+            'total' => (int) ($row['total'] ?? 0),
+            'active' => (int) ($row['active'] ?? 0),
+            'collectors' => (int) ($row['collectors'] ?? 0),
+            'never_signed_in' => (int) ($row['never_signed_in'] ?? 0),
+        ];
+    }
+
     public function create(): Response
     {
         return Inertia::render('Admin/Users/Form', [
@@ -88,7 +128,7 @@ class UserController extends Controller
                 Rule::exists('field_offices', 'id'),
             ],
             'is_collecting_officer' => ['boolean'],
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'confirmed', Password::defaults()],
         ], [
             'field_office_id.required' => 'A field office account must be assigned to an office.',
         ]);
@@ -110,6 +150,31 @@ class UserController extends Controller
         // Staff do not fill in a participant profile.
         $user->profile_completed_at = now();
         $user->save();
+
+        /*
+         * Logged from the controller rather than a service, following
+         * SubjectMatterExpertController and MaintenanceController: account
+         * administration has no domain service to hang this off, and inventing
+         * one to hold a single log call would be an abstraction with nothing
+         * else in it.
+         *
+         * Creating a staff account is granting access, which makes it the same
+         * class of event as the role change below — and neither of them was
+         * recorded anywhere. "Who made this person an administrator" is the
+         * first question an auditor asks and was the one the trail could not
+         * answer.
+         */
+        ActivityLogger::record(
+            'user.created',
+            $user,
+            sprintf('%s added as %s.', $user->name, $user->role->label()),
+            [
+                'role' => $user->role->value,
+                'field_office_id' => $user->field_office_id,
+                'is_collecting_officer' => $user->is_collecting_officer,
+            ],
+            $request->user(),
+        );
 
         return redirect()
             ->route('admin.users.index')
@@ -153,7 +218,7 @@ class UserController extends Controller
             // on top of whatever role the person holds.
             'is_collecting_officer' => ['boolean'],
             // Optional: only set when the administrator wants to reset it.
-            'password' => ['nullable', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['nullable', 'confirmed', Password::defaults()],
         ], [
             'field_office_id.required' => 'A field office account must be assigned to an office.',
         ]);
@@ -165,6 +230,17 @@ class UserController extends Controller
         if ($error = $this->guardLastSuperAdmin($user, $validated)) {
             return back()->withErrors(['role' => $error]);
         }
+
+        // Read before the write, because the trail's whole value here is the
+        // *previous* state: "who changed this" is answerable from causer_id
+        // alone, but "changed it from what" is not recoverable afterwards.
+        $before = [
+            'role' => $user->role->value,
+            'field_office_id' => $user->field_office_id,
+            'is_collecting_officer' => $user->is_collecting_officer,
+            'is_active' => $user->is_active,
+            'email' => $user->email,
+        ];
 
         $user->fill([
             'name' => $validated['name'],
@@ -181,6 +257,57 @@ class UserController extends Controller
         }
 
         $user->save();
+
+        // Switching an account off here has to end its access, exactly as the
+        // toggle below does — the same decision reached through a different
+        // form. A role *downgrade* deliberately does not revoke: the account is
+        // still the same person's, still theirs to keep working in, and the new
+        // role is read from the record on every request anyway.
+        if (! $user->is_active) {
+            AccountAccess::revoke($user);
+        }
+
+        $after = [
+            'role' => $user->role->value,
+            'field_office_id' => $user->field_office_id,
+            'is_collecting_officer' => $user->is_collecting_officer,
+            'is_active' => $user->is_active,
+            'email' => $user->email,
+        ];
+
+        /*
+         * Only what actually moved.
+         *
+         * A form post carries every field whether or not it changed, so logging
+         * the whole payload would bury a role change under four fields that
+         * were re-submitted unchanged — and a trail nobody can scan is a trail
+         * nobody reads, which is the failure mode LoginController's comment
+         * describes for the login rows v1 kept.
+         *
+         * The password is deliberately absent from both sides: that it changed
+         * is worth recording, what it changed to is not, and a hash in an audit
+         * row is an offline cracking target sitting in a table more people can
+         * read than can read `users`.
+         */
+        $changes = array_keys(array_diff_assoc($after, $before));
+
+        if (filled($validated['password'] ?? null)) {
+            $changes[] = 'password';
+        }
+
+        if ($changes !== []) {
+            ActivityLogger::record(
+                'user.updated',
+                $user,
+                sprintf('%s: %s changed.', $user->name, implode(', ', $changes)),
+                [
+                    'changed' => $changes,
+                    'from' => array_intersect_key($before, array_flip($changes)),
+                    'to' => array_intersect_key($after, array_flip($changes)),
+                ],
+                $request->user(),
+            );
+        }
 
         return redirect()
             ->route('admin.users.index')
@@ -201,6 +328,25 @@ class UserController extends Controller
 
         $user->is_active = ! $user->is_active;
         $user->save();
+
+        // Deactivating is what the office reaches for when a staff member
+        // leaves or an account is compromised, and in both of those the holder
+        // is already signed in. Flipping the column alone left that session
+        // working, so the button that reads "deactivate" has to actually end
+        // the access rather than only forbid the next sign-in.
+        if (! $user->is_active) {
+            AccountAccess::revoke($user);
+        }
+
+        ActivityLogger::recordTransition(
+            $user->is_active ? 'user.activated' : 'user.deactivated',
+            $user,
+            $user->is_active ? 'deactivated' : 'active',
+            $user->is_active ? 'active' : 'deactivated',
+            sprintf('%s is now %s.', $user->name, $user->is_active ? 'active' : 'deactivated'),
+            ['role' => $user->role->value],
+            $request->user(),
+        );
 
         return back()->with(
             'success',

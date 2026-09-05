@@ -5,7 +5,7 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 
 const props = defineProps({
     office: { type: Object, required: true },
@@ -56,12 +56,22 @@ const jurisdiction = props.office.jurisdiction.join(', ') || props.office.provin
             </AppCard>
 
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <AppStat label="Participants" :value="stats.participants" />
-                <AppStat label="Assigned Staff" :value="stats.staff" />
-                <AppStat label="Registrations" :value="stats.registrations" />
-                <AppStat label="Fees Settled" :value="stats.settled" />
-                <AppStat label="Awaiting Payment" :value="stats.outstanding" />
-                <AppStat label="Collected" :value="`₱${money(stats.collected)}`" />
+                <AppStatTile label="Participants" :value="stats.participants" icon="users" />
+                <AppStatTile label="Assigned Staff" :value="stats.staff" icon="user" />
+                <AppStatTile label="Registrations" :value="stats.registrations" icon="list" />
+                <AppStatTile label="Fees Settled" :value="stats.settled" icon="check-circle" tone="success" />
+                <AppStatTile
+                    label="Awaiting Payment"
+                    :value="stats.outstanding"
+                    icon="clock"
+                    :tone="stats.outstanding > 0 ? 'warning' : 'success'"
+                />
+                <AppStatTile
+                    label="Collected"
+                    :value="`₱${money(stats.collected)}`"
+                    icon="card"
+                    tone="success"
+                />
             </div>
 
             <AppCard title="Office Details">

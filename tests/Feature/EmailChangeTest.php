@@ -182,6 +182,24 @@ class EmailChangeTest extends TestCase
 
         $other = $this->participant(['email' => 'maria@deped.gov.ph']);
 
+        /*
+         * A different person, so a different browser.
+         *
+         * AuthenticateSession binds a session to the password it was opened
+         * with, and the request above left this test's session holding the
+         * *first* participant's password hash. Acting as somebody else without
+         * clearing it presents that session under a second identity, which the
+         * middleware correctly reads as a stolen session and ends — the POST
+         * below would then redirect to /login and the missing `success` key
+         * would look like a bug in the email-change flow.
+         *
+         * Nothing to reproduce in production, where two people never share a
+         * session and signing in regenerates it. It is `actingAs` that is the
+         * shortcut: it swaps the user without the sign-in that would normally
+         * come with it.
+         */
+        $this->flushSession();
+
         $this->actingAs($other)
             ->post('/profile/email', [
                 'email' => 'shared@lgu.gov.ph',

@@ -29,6 +29,26 @@ return new class extends Migration
             $table->index('is_active');
         });
 
+        $offices = FieldOfficeReference::all();
+
+        /*
+         * An empty list is a broken install, not an empty office.
+         *
+         * The rows come from a data file each deployment supplies, so a missing
+         * file or invalid JSON decodes to nothing — and every failure downstream
+         * of that is silent. The next migration links profiles to these rows and
+         * matches none; field-office scoping then resolves to 0, failing closed,
+         * so every field-office account sees an empty system and nothing
+         * anywhere says why. Better to stop here, where the message can name the
+         * file.
+         */
+        if ($offices === []) {
+            throw new RuntimeException(
+                'No field offices to seed. '.FieldOfficeReference::path().' is missing, empty, or not valid JSON. '
+                .'It lists the offices this deployment serves and must be in place before migrating — see docs/deployment.md.'
+            );
+        }
+
         // Seeded here, not left to a seeder: the next migration links existing
         // profiles to these rows, and would silently match nothing against an
         // empty table.
@@ -38,7 +58,7 @@ return new class extends Migration
             'is_active' => true,
             'created_at' => now(),
             'updated_at' => now(),
-        ], FieldOfficeReference::all()));
+        ], $offices));
     }
 
     public function down(): void

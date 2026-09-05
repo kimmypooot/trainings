@@ -39,6 +39,12 @@ class BackupCommand extends Command
         $destination = $this->option('path') ?: config('backup.path');
         $keepDays = (int) ($this->option('keep') ?? config('backup.keep_days'));
 
+        if ($problem = $this->productionObjection($destination)) {
+            $this->components->error($problem);
+
+            return self::FAILURE;
+        }
+
         if (! is_dir($destination) && ! mkdir($destination, 0755, true) && ! is_dir($destination)) {
             $this->components->error("Could not create the backup directory at {$destination}.");
 
@@ -82,6 +88,54 @@ class BackupCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The two ways a production backup is worse than no backup, refused.
+     *
+     * Both were previously documented and neither was enforced, which is the
+     * gap this closes: config/backup.php was honest that an on-host archive
+     * "protects against a bad migration or a deleted file, but not against the
+     * disk", and honest documentation of a gap is not a mitigation. The default
+     * is what ships, and the default was the unsafe one.
+     *
+     * Only in production. A developer running `tims:backup` on a laptop wants
+     * the archive next to the project and has no network share to point at, and
+     * making them configure one to try the command would just teach them to
+     * skip it.
+     *
+     * Both are overridable by explicit configuration rather than by a flag: a
+     * deployment that genuinely wants a plaintext on-host archive can say so in
+     * .env, which leaves a record of the decision where the next person looks.
+     */
+    private function productionObjection(string $destination): ?string
+    {
+        if (! app()->isProduction()) {
+            return null;
+        }
+
+        if ((string) config('backup.password') === '') {
+            return 'BACKUP_PASSWORD is not set. The archive holds every participant record, '
+                .'every bank account number and every stored document — it must not leave this '
+                .'machine unencrypted. Set BACKUP_PASSWORD (and keep it somewhere other than this server).';
+        }
+
+        $real = realpath($destination) ?: $destination;
+        $inside = static fn (string $root) => str_starts_with(
+            str_replace('\\', '/', $real).'/',
+            rtrim(str_replace('\\', '/', $root), '/').'/'
+        );
+
+        if ($inside(storage_path()) || $inside(base_path())) {
+            return sprintf(
+                'BACKUP_PATH (%s) is inside the application directory, so the archive dies with the disk '
+                .'it is protecting. Point it at a mapped network drive, a synced folder, or anything that '
+                .'leaves this machine.',
+                $destination
+            );
+        }
+
+        return null;
     }
 
     /**
@@ -182,13 +236,44 @@ class BackupCommand extends Command
      */
     private function writeArchive(string $archivePath, string $dumpPath): void
     {
+        $password = (string) config('backup.password');
+        $encrypt = $password !== '';
+
+        if ($encrypt && ! defined('ZipArchive::EM_AES_256')) {
+            /*
+             * Refused rather than downgraded. A password was configured, which
+             * is somebody stating that this archive must be encrypted; writing
+             * it in the clear anyway — with a cheerful "Wrote 41 MB" — is how
+             * an office ends up believing its backups are protected for a year.
+             *
+             * Depends on the server's libzip, not on PHP itself, so it is
+             * checked at run time on the machine that will actually write the
+             * archive.
+             */
+            throw new RuntimeException(
+                'BACKUP_PASSWORD is set but this PHP build has no zip encryption support '
+                .'(libzip too old). Refusing to write an unencrypted archive.'
+            );
+        }
+
         $zip = new ZipArchive;
 
         if ($zip->open($archivePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new RuntimeException("Could not open {$archivePath} for writing.");
         }
 
+        if ($encrypt) {
+            $zip->setPassword($password);
+        }
+
+        // Every entry is encrypted individually — zip has no archive-level
+        // flag, so a file added without this call lands in the clear inside an
+        // otherwise-encrypted archive. Collected as they are added so nothing
+        // can be missed.
+        $entries = [];
+
         $zip->addFile($dumpPath, 'database.sql');
+        $entries[] = 'database.sql';
 
         $privateRoot = config('filesystems.disks.local.root');
 
@@ -200,6 +285,19 @@ class BackupCommand extends Command
                 $relative = str_replace('\\', '/', substr($absolute, strlen($privateRoot) + 1));
 
                 $zip->addFile($absolute, 'private/'.$relative);
+                $entries[] = 'private/'.$relative;
+            }
+        }
+
+        if ($encrypt) {
+            foreach ($entries as $entry) {
+                if (! $zip->setEncryptionName($entry, ZipArchive::EM_AES_256)) {
+                    // Close first, or the half-written archive stays locked by
+                    // this handle and the caller cannot delete it.
+                    $zip->close();
+
+                    throw new RuntimeException("Could not encrypt {$entry} inside the archive.");
+                }
             }
         }
 

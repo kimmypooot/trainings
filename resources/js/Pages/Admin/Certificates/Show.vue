@@ -7,7 +7,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 
 const props = defineProps({
     certificate: { type: Object, required: true },
@@ -107,8 +107,8 @@ const details = [
             </AppAlert>
 
             <div class="grid grid-cols-2 gap-3">
-                <AppStat label="Public Verifications" :value="certificate.verifications" />
-                <AppStat label="Downloads" :value="certificate.downloads" />
+                <AppStatTile label="Public Verifications" :value="certificate.verifications" icon="shield" />
+                <AppStatTile label="Downloads" :value="certificate.downloads" icon="download" />
             </div>
 
             <AppCard title="Certificate Details">

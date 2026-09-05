@@ -222,24 +222,50 @@ template:
 `.env.example` is the local-development template and is commented at length;
 what follows is the short version of what bites.
 
-**`APP_URL`** is baked into queued mail and into certificates *at render time*.
-Certificates are rendered once and never re-rendered, so a wrong value here is
-permanent in documents already issued.
+**`APP_URL`** is the root of *every* URL this application generates — not only
+queued mail and certificates, but links built inside a request too.
+`AppServiceProvider` calls `URL::forceRootUrl()` so that the `Host` header
+cannot decide where a generated link points; without it, a forged `Host` on
+`POST /forgot-password` put a working reset token on the attacker's domain in a
+genuine email from this office. `TrustHosts` refuses such a request outright as
+well, but it is inert in `local` and under tests, so the pin is what actually
+holds. Consequences worth knowing: certificates are rendered once and never
+re-rendered, so a wrong value is permanent in documents already issued — and
+when tunnelling, `APP_URL` **must** be the tunnel's URL or every link in the app
+points at localhost. Only the scheme still follows the request, which is what
+lets a proxy's `X-Forwarded-Proto` produce `https://` links. `TrustedHostTest`
+is the guard.
 
 **`TRUSTED_PROXIES`** defaults to trusting nothing, on purpose.
 `X-Forwarded-For` is what every IP-keyed `throttle:` counts against, so trusting
-it blindly hands out a fresh rate-limit bucket per forged header
-(`TrustProxiesTest` guards the default). Set it to `*` only behind a tunnel on a
-machine nothing else can reach; in production, name the actual proxy addresses.
+it blindly hands out a fresh rate-limit bucket per forged header. Set it to `*`
+only behind a tunnel on a machine nothing else can reach; in production, name
+the actual proxy addresses. It is read by `config/trustedproxy.php`, and it has
+to be — the `withMiddleware()` closure in `bootstrap/app.php` runs before `.env`
+is parsed, so the `env()` call that used to live there always returned its
+default and the setting had never once taken effect. `TrustProxiesTest` now
+guards the configured branch as well as the default, and asserts that
+`bootstrap/app.php` reads no environment variables at all.
 
 **`VITE_DEV_ORIGIN`** exists for tunnelled development (VS Code port forwarding,
-ngrok), which also needs `TRUSTED_PROXIES`.
+ngrok), which also needs `TRUSTED_PROXIES` and a matching `APP_URL`.
 
 **Google sign-in** needs `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and
 `GOOGLE_REDIRECT_URI`, and the callback host must match the host the flow
 started on. `SERVER_HOST=localhost` is in the template for exactly this reason:
 `artisan serve` otherwise announces `127.0.0.1`, a different origin as far as
 cookies go, and the OAuth state check fails.
+
+**Security headers** — `SecurityHeaders` (appended to the `web` group) sends
+`X-Frame-Options: DENY`, `nosniff`, a referrer policy and a Permissions-Policy
+that denies the camera everywhere except the two scanning doors, on every
+response. Two parts are staged in `config/security.php`: the
+Content-Security-Policy ships **report-only** until a deployment has watched the
+reports and set `CSP_ENFORCE=true` — enforcing an incomplete policy fails
+silently and totally — and HSTS is sent only on requests that actually arrived
+over HTTPS. `SecurityHeaderTest` is the guard, including the two cases that
+would otherwise break a venue: the camera must stay allowed on `/admin/scanner`
+and `/station/{token}`.
 
 **Backups** — `BACKUP_PATH` defaults to `storage/backups`, which survives a bad
 migration but not a dead disk. Point it at a mapped or synced folder to get the
@@ -256,10 +282,21 @@ number beats the wrong telephone number.
 
 ### Deploying
 
-`.env.example` is a *development* template. A production deploy must at minimum
-set `APP_ENV=production`, `APP_DEBUG=false` (a debug page hands stack traces,
-SQL and `.env` values to anyone who can trigger a 500) and
-`SESSION_SECURE_COOKIE=true` once the site is actually served over HTTPS.
+**See [docs/deployment.md](docs/deployment.md)** — server requirements, the two
+background processes the app depends on, permissions, the post-deploy check, and
+backup and recovery.
+
+The short version: `.env.example` is a *development* template, so a production
+deploy must at minimum set `APP_ENV=production`, `APP_DEBUG=false` (a debug page
+hands stack traces, SQL and `.env` values to anyone who can trigger a 500) and
+`SESSION_SECURE_COOKIE=true`. Then two things that are easy to miss entirely and
+announce themselves in no way at all: **a supervised `queue:work`**, without
+which no participant ever receives an email, and **one cron entry running
+`schedule:run` every minute**, without which none of the three scheduled jobs
+run — including the nightly backup.
+
+`php artisan tims:doctor` checks all of that and exits non-zero on failure. Run
+it at the end of every deploy.
 
 ## Scheduled jobs
 
@@ -276,6 +313,8 @@ Two more that are run by hand:
 
 ```bash
 php artisan tims:import-google-avatar user@example.com --force
+php artisan tims:doctor                        # post-deploy: is this configured for production?
+php artisan tims:restore <archive>              # put a backup back — see docs/deployment.md
 php artisan tims:types                         # regenerate resources/js/types/enums.ts from App\Enums
 ```
 

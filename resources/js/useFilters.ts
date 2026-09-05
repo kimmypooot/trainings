@@ -1,5 +1,34 @@
 import { ref, watch } from 'vue';
+import type { WatchSource } from 'vue';
 import { router } from '@inertiajs/vue3';
+
+/**
+ * One filter set, as it goes onto the query string.
+ *
+ * `undefined` is meaningful here rather than sloppy: a filter sitting at its
+ * default is omitted from the URL entirely, so a page at rest has a clean
+ * address and a shared link carries only what was actually chosen.
+ */
+export type FilterQuery = Record<string, string | number | boolean | undefined>;
+
+export interface UseFiltersOptions {
+    /**
+     * The path to visit. A function is evaluated per visit, for a page whose
+     * URL is not fixed for the life of the component — the training roster
+     * keeps its open tab in the fragment, and a filtered visit to the bare path
+     * would drop it, so a reload would land the operator back on Participants.
+     */
+    url: string | (() => string);
+    /** The current filter values, read fresh on every visit. */
+    query: () => FilterQuery;
+    /** The props the filters actually move. See the note above on `only`. */
+    only?: string[];
+    /** Refs to watch; every change queues a debounced visit. */
+    watch?: WatchSource[] | null;
+    resetPage?: boolean;
+    preserveScroll?: boolean;
+    delay?: number;
+}
 
 /**
  * Server-side filtering for the admin list screens, in one place.
@@ -58,7 +87,6 @@ export function useFilters({
     url,
     query,
     only = [],
-    /** Refs to watch; every change queues a debounced visit. */
     watch: sources = null,
     /*
      * A filter change starts from the first page. Staying on page 4 of a
@@ -73,10 +101,10 @@ export function useFilters({
      */
     preserveScroll = false,
     delay = 300,
-} = {}) {
+}: UseFiltersOptions) {
     const filtering = ref(false);
 
-    let timer = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     /*
      * Visits overlap: Inertia cancels an in-flight visit when the next one
@@ -87,10 +115,10 @@ export function useFilters({
     let inflight = 0;
 
     const run = () => {
-        timer = null;
+        timer = undefined;
 
         router.get(
-            url,
+            typeof url === 'function' ? url() : url,
             { ...query(), ...(resetPage ? { page: 1 } : {}) },
             {
                 only: only.length ? only : undefined,
@@ -139,5 +167,5 @@ export function useFilters({
  * place for no gain. Pointer events go with it so a row cannot be actioned in
  * the moment between it being superseded and it being redrawn.
  */
-export const filteringClass = (filtering) =>
+export const filteringClass = (filtering: boolean): string =>
     filtering ? 'opacity-50 transition-opacity pointer-events-none' : 'transition-opacity';

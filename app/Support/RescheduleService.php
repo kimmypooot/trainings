@@ -71,7 +71,12 @@ class RescheduleService
                 'user.profile',
                 fn ($profile) => $profile->where('field_office_id', $fieldOfficeId)
             ))
+            // `id` as the tiebreak: `registered_at` is second-resolution, so a
+            // sort on it alone is not a total order, and the seat allocation
+            // below — and the transfer that has to match it — would differ
+            // between two runs over identical data.
             ->orderBy('registered_at')
+            ->orderBy('id')
             ->get();
 
         // Handed over rather than re-queried: the fee predicates below reach

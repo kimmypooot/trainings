@@ -77,6 +77,21 @@ const describedBy = computed(() => {
         </label>
 
         <div class="relative">
+            <!--
+                The disabled trio in the class list matches AppSelect's exactly.
+                A disabled input that looks identical to an editable one is
+                worse than no affordance: the reader types, nothing happens, and
+                nothing on screen says why. `disabled` itself arrives through
+                controlAttrs rather than as a declared prop.
+
+                `text-base sm:text-sm` is not a sizing preference: iOS Safari
+                zooms the page in when a focused control's text is under 16px,
+                and it does not zoom back out on blur. On the sign-in form that
+                means tapping the email field leaves the visitor on a page they
+                now have to pinch to escape — before they have typed anything.
+                16px below `sm`, the design's 14px from `sm` up, where no phone
+                is doing that. Same two classes in AppSelect and AppTextarea.
+            -->
             <input
                 v-bind="controlAttrs"
                 :id="inputId"
@@ -87,7 +102,7 @@ const describedBy = computed(() => {
                 :required="required"
                 :aria-invalid="error ? 'true' : undefined"
                 :aria-describedby="describedBy"
-                class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1"
+                class="w-full rounded-lg border bg-white px-4 py-2.5 text-base text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink-subtle sm:text-sm"
                 :class="[
                     error
                         ? 'border-csc-red-ink focus:outline-csc-red-ink'

@@ -120,7 +120,42 @@ class SpreadsheetExport
                 return $value->format('Y-m-d H:i');
             }
 
-            return $value;
+            return is_string($value) ? self::defuseFormula($value) : $value;
         }, $row);
+    }
+
+    /**
+     * Stop a spreadsheet treating participant text as a formula.
+     *
+     * Every export here carries free text that a participant typed:
+     * `organization_name`, `position_title`, `food_restrictions_details`, the
+     * name itself, and the `reason` and `remarks` on requests. A value opening
+     * with `=`, `+`, `-` or `@` is a formula to Excel and to LibreOffice, so a
+     * participant who sets their employer to `=HYPERLINK(...)` — or to one of
+     * the DDE payloads that shell out — is running it on the machine of
+     * whichever HRD officer opens the register. The application never renders
+     * it, which is what makes this easy to miss: the payload is inert
+     * everywhere except the one place the data is meant to end up.
+     *
+     * A leading apostrophe is the fix both applications understand: it marks
+     * the cell as literal text and is not displayed.
+     *
+     * Deliberately narrow. Only strings are touched, so the numeric columns an
+     * accountant sums stay numeric — a naive version of this prefixes every
+     * negative amount and turns the revenue column into text. And a string that
+     * is merely a number (`-1500.00`, which is what a refund looks like once it
+     * has been through number_format) is left alone for the same reason: it
+     * opens with `-`, but there is no formula a bare number can become.
+     */
+    private static function defuseFormula(string $value): string
+    {
+        if ($value === '' || is_numeric($value)) {
+            return $value;
+        }
+
+        // Tab, CR and LF are here because a leading one shifts the payload into
+        // the next cell in some importers, which puts an unescaped `=` at the
+        // start of a value again.
+        return str_contains("=+-@\t\r\n", $value[0]) ? "'".$value : $value;
     }
 }

@@ -14,19 +14,43 @@ const props = defineProps({
     cancellations: { type: Array, required: true },
     trainingRequests: { type: Array, required: true },
     outputs: { type: Array, required: true },
+    // Per-queue { pending, total, shown }, counted in the database rather than
+    // off the arrays above — see below.
+    queues: { type: Object, required: true },
     scopedTo: { type: String, default: null },
 });
 
+/*
+ * The tab badges count the database, not the list.
+ *
+ * They used to filter the arrays above, which are capped at 100 rows. Past that
+ * cap the tab and the sidebar badge disagreed, and the sidebar — which counts
+ * the database — was the one telling the truth. Both read the same number now.
+ */
 const tabs = computed(() => [
-    { key: 'cancellations', label: 'Withdrawals', count: pendingCount(props.cancellations) },
-    { key: 'trainings', label: 'Training Requests', count: pendingCount(props.trainingRequests) },
-    { key: 'outputs', label: 'Outputs', count: pendingCount(props.outputs) },
+    { key: 'cancellations', label: 'Withdrawals', count: props.queues.cancellations.pending },
+    { key: 'trainings', label: 'Training Requests', count: props.queues.trainings.pending },
+    { key: 'outputs', label: 'Outputs', count: props.queues.outputs.pending },
 ]);
 
 const active = ref('cancellations');
 
-function pendingCount(items) {
-    return items.filter((item) => item.status === 'pending').length;
+/**
+ * What a capped list is not showing, or null when it is showing everything.
+ *
+ * Said out loud because a list that simply stops at its hundredth row is
+ * indistinguishable from one that has reached the end. Everything hidden has
+ * already been decided — the server orders pending first for exactly that
+ * reason — so this is history, not work, and the wording says so.
+ */
+function hiddenNotice(key) {
+    const queue = props.queues[key];
+
+    if (!queue || queue.total <= queue.shown) {
+        return null;
+    }
+
+    return `Showing the ${queue.shown} most recent of ${queue.total}. The rest have all been decided.`;
 }
 
 /**
@@ -237,6 +261,10 @@ const convert = (id) => {
                         </div>
                     </li>
                 </ul>
+
+                <p v-if="hiddenNotice('cancellations')" class="mt-4 text-sm text-csc-ink-subtle">
+                    {{ hiddenNotice('cancellations') }}
+                </p>
             </AppCard>
 
             <!-- Training requests -->
@@ -298,6 +326,10 @@ const convert = (id) => {
                         </div>
                     </li>
                 </ul>
+
+                <p v-if="hiddenNotice('trainings')" class="mt-4 text-sm text-csc-ink-subtle">
+                    {{ hiddenNotice('trainings') }}
+                </p>
             </AppCard>
 
             <!-- Outputs -->
@@ -345,6 +377,10 @@ const convert = (id) => {
                         </div>
                     </li>
                 </ul>
+
+                <p v-if="hiddenNotice('outputs')" class="mt-4 text-sm text-csc-ink-subtle">
+                    {{ hiddenNotice('outputs') }}
+                </p>
             </AppCard>
         </div>
 

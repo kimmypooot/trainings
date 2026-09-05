@@ -36,7 +36,29 @@ const props = defineProps({
     },
     /** Bare numbers, oldest first. Drawn as a 100%-wide sparkline. */
     spark: { type: Array, default: null },
+    /*
+     * Movement against the period before, as `{ direction, text, caption }` —
+     * already formatted, because only the caller knows whether the figure is
+     * pesos, a count or a rate.
+     *
+     * `direction` is coloured on the assumption that up is good, which is true
+     * of every figure this is used for. A metric where a rise is *bad* — a
+     * backlog, a rejection count — must not be given one of these: it would
+     * paint a growing problem green. Show it as a plain caption instead.
+     */
+    delta: {
+        type: Object,
+        default: null,
+        validator: (value) => value === null || ['up', 'down', 'flat'].includes(value.direction),
+    },
 });
+
+const deltaSkin = {
+    up: { chip: 'bg-success-soft text-success', icon: 'trend-up' },
+    down: { chip: 'bg-danger-soft text-danger', icon: 'trend-down' },
+    // Flat is not news, so it is told in the muted voice rather than a colour.
+    flat: { chip: 'bg-csc-blue-tint text-csc-ink-muted', icon: null },
+};
 
 const tones = {
     brand: {
@@ -105,8 +127,26 @@ const sparkPath = computed(() => {
             aria-hidden="true"
         />
 
-        <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
+        <!--
+            The icon sits beside the figure from `sm` up and above it below.
+
+            Not a taste call, and the numbers are measured rather than guessed.
+            The dashboard runs these two per row on a phone (deliberately — see
+            Dashboard.vue), so at a 323px viewport a tile is 132px wide, 100px
+            of it content, and the icon chip with its gap takes half: "₱2,050"
+            needs 83px and was given 50, then clipped by the card's own
+            `overflow-hidden`. It rendered as "₱2,05" — not a smaller number, a
+            wrong one, on a revenue tile. Captions in the same column broke to
+            one word per line. Stacking gives the figure the tile's full width
+            where width is scarce and changes nothing where it is not.
+        -->
+        <div class="flex flex-col-reverse items-start gap-2 sm:flex-row sm:justify-between sm:gap-3">
+            <!--
+                `w-full` as well as `min-w-0`: stacked, a flex child sizes to
+                its content, so without it the column would be as wide as the
+                longest caption and overflow the card again rather than wrap.
+            -->
+            <div class="w-full min-w-0">
                 <!--
                     Proportional figures, deliberately: tabular-nums gives every
                     digit the width of a zero, which makes a short number look
@@ -114,6 +154,27 @@ const sparkPath = computed(() => {
                 -->
                 <p class="text-2xl font-bold sm:text-3xl" :class="skin.value">{{ value }}</p>
                 <p class="mt-1 text-xs font-medium text-csc-ink-muted sm:text-sm">{{ label }}</p>
+
+                <!--
+                    The comparison sits under the label rather than beside the
+                    number: it is the second thing read, and putting it on the
+                    headline row makes two figures compete for the same glance.
+                -->
+                <div v-if="delta" class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    <span
+                        class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-semibold"
+                        :class="deltaSkin[delta.direction].chip"
+                    >
+                        <AppIcon
+                            v-if="deltaSkin[delta.direction].icon"
+                            :name="deltaSkin[delta.direction].icon"
+                            size="sm"
+                        />
+                        {{ delta.text }}
+                    </span>
+                    <span v-if="delta.caption" class="text-2xs text-csc-ink-subtle">{{ delta.caption }}</span>
+                </div>
+
                 <p v-if="caption" class="mt-0.5 text-2xs text-csc-ink-subtle">{{ caption }}</p>
             </div>
 

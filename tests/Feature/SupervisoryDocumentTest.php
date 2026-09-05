@@ -131,9 +131,9 @@ class SupervisoryDocumentTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('summary.documents_to_review', 2)
                 ->where('training.is_supervisory', true)
-                ->has('registrations', 2)
-                ->where('registrations.0.supervisory_document.status', 'submitted')
-                ->where('registrations.0.supervisory_document.can_review', true)
+                ->has('registrations.data', 2)
+                ->where('registrations.data.0.supervisory_document.status', 'submitted')
+                ->where('registrations.data.0.supervisory_document.can_review', true)
             );
     }
 

@@ -10,6 +10,8 @@ use App\Http\Controllers\Controller;
 use App\Models\FieldOffice;
 use App\Models\Registration;
 use App\Models\User;
+use App\Support\AccountAccess;
+use App\Support\ActivityLogger;
 use App\Support\ParticipantFilter;
 use App\Support\PhilippineGeography;
 use App\Support\ProfileOptions;
@@ -208,9 +210,45 @@ class ParticipantController extends Controller
             ProfileService::messages()
         );
 
+        $before = $user->profile?->only(array_keys($validated)) ?? [];
+
         // recordConsent: false — the participant gave consent, or has not. An
         // administrator fixing a typo does not get to answer that for them.
         ProfileService::save($user, $validated, recordConsent: false);
+
+        /*
+         * One member of staff changing another person's personal data, which is
+         * exactly the event a data-protection review asks to see and the trail
+         * did not carry. The correction itself is ordinary and expected; what
+         * has to be recoverable is who made it and what the record said before,
+         * because the participant is not present to notice.
+         *
+         * Field *names* only, never the values. This profile holds a date of
+         * birth, a mobile number, PWD status and dietary needs — copying them
+         * into activity_logs would spread sensitive data into a second table
+         * with a wider audience, which is the opposite of what auditing them is
+         * for. `from`/`to` are carried for the non-sensitive columns alone.
+         */
+        $changed = array_keys(array_diff_assoc(
+            array_map(fn ($value) => is_scalar($value) ? (string) $value : '', $validated),
+            array_map(fn ($value) => is_scalar($value) ? (string) $value : '', $before),
+        ));
+
+        if ($changed !== []) {
+            $safe = array_flip(['field_office_id', 'organization_name', 'position_title', 'sector', 'employment_status']);
+
+            ActivityLogger::record(
+                'participant.profile_updated',
+                $user,
+                sprintf("%s's profile edited by staff: %s.", $user->fresh()->name, implode(', ', $changed)),
+                [
+                    'changed' => $changed,
+                    'from' => array_intersect_key(array_intersect_key($before, array_flip($changed)), $safe),
+                    'to' => array_intersect_key(array_intersect_key($validated, array_flip($changed)), $safe),
+                ],
+                $request->user(),
+            );
+        }
 
         return redirect()
             ->route('admin.participants.show', $user)
@@ -218,9 +256,13 @@ class ParticipantController extends Controller
     }
 
     /**
-     * v1's activate/deactivate button. A deactivated participant is refused at
-     * sign-in (LoginController and GoogleController both check `is_active`),
-     * which is the whole effect — nothing already registered is withdrawn.
+     * v1's activate/deactivate button.
+     *
+     * A deactivated participant is refused at sign-in, and — since C3 — is also
+     * ejected from any session they already hold and stripped of any
+     * remember-me cookie. That last part is the whole point: the comment here
+     * used to say refusal at sign-in "is the whole effect", which was true and
+     * was the bug. Nothing already registered is withdrawn; only the access is.
      */
     public function toggle(Request $request, User $user): RedirectResponse
     {
@@ -228,6 +270,20 @@ class ParticipantController extends Controller
 
         $user->is_active = ! $user->is_active;
         $user->save();
+
+        if (! $user->is_active) {
+            AccountAccess::revoke($user);
+        }
+
+        ActivityLogger::recordTransition(
+            $user->is_active ? 'participant.activated' : 'participant.deactivated',
+            $user,
+            $user->is_active ? 'deactivated' : 'active',
+            $user->is_active ? 'active' : 'deactivated',
+            sprintf('%s is now %s.', $user->name, $user->is_active ? 'active' : 'deactivated'),
+            [],
+            $request->user(),
+        );
 
         return back()->with(
             'success',
@@ -261,6 +317,21 @@ class ParticipantController extends Controller
                 'participant' => 'The reset link could not be sent. Please try again in a moment.',
             ]);
         }
+
+        /*
+         * A member of staff putting a password-reset link into somebody else's
+         * inbox. Entirely legitimate — it is v1's key button, for the
+         * participants who phone the office rather than use Forgot Password —
+         * and also the shape of a takeover attempt, which is exactly why it
+         * needs to be on the record rather than only in the participant's mail.
+         */
+        ActivityLogger::record(
+            'participant.password_reset_sent',
+            $user,
+            sprintf('A password reset link was sent to %s on their behalf.', $user->name),
+            [],
+            $request->user(),
+        );
 
         return back()->with('success', "A password reset link has been sent to {$user->email}.");
     }

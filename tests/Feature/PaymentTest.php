@@ -912,8 +912,8 @@ class PaymentTest extends TestCase
             ->post('/admin/users', [
                 'name' => 'Cashier One',
                 'email' => 'cashier@csc.gov.ph',
-                'password' => 'Password123',
-                'password_confirmation' => 'Password123',
+                'password' => 'Password12345',
+                'password_confirmation' => 'Password12345',
                 // A designation on top of the job they already hold, which is
                 // how v1 has it — not a role that replaces it.
                 'role' => Role::FieldOffice->value,
@@ -939,8 +939,8 @@ class PaymentTest extends TestCase
             ->post('/admin/users', [
                 'name' => 'Cashier Two',
                 'email' => 'cashier2@csc.gov.ph',
-                'password' => 'Password123',
-                'password_confirmation' => 'Password123',
+                'password' => 'Password12345',
+                'password_confirmation' => 'Password12345',
                 'role' => Role::CollectingOfficer->value,
             ])
             ->assertSessionHasErrors('role');

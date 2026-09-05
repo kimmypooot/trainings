@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { filteringClass, useFilters } from '@/useFilters';
 import PublicLayout from '@/Layouts/PublicLayout.vue';
 import PrivacyNoticeModal from '@/Components/PrivacyNoticeModal.vue';
 import AppBrandBackdrop from '@/Components/AppBrandBackdrop.vue';
@@ -8,11 +9,13 @@ import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
+import HeroPhotoStack from '@/Components/HeroPhotoStack.vue';
 import ProgramCard from '@/Components/ProgramCard.vue';
 import ProgramDetailModal from '@/Components/ProgramDetailModal.vue';
 
 const props = defineProps({
     stats: { type: Array, default: () => [] },
+    openProgramCount: { type: Number, default: 0 },
     programs: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
     filterOptions: { type: Object, default: () => ({ modes: [], categories: [], statuses: [] }) },
@@ -97,6 +100,55 @@ const features = [
  */
 const hasStats = computed(() => props.stats.length > 0);
 
+/*
+ * The hero's photographs.
+ *
+ * Content, so it lives here beside the seals rather than inside the component
+ * that draws it — swapping a photograph should not mean opening a component
+ * that owns angles and shadows.
+ *
+ * The alt text is written for someone who cannot see the stack, and so
+ * describes what the photograph shows rather than restating "photo of
+ * training". These are decorative in the strict sense — nothing here is
+ * information the page states nowhere else — but a real description costs one
+ * line and an empty alt on three large images tells a screen reader the hero is
+ * emptier than it is.
+ *
+ * The class on each is its place in the stack: position, size, tilt, and
+ * z-order. Later entries sit on top of earlier ones.
+ */
+const heroPhotos = [
+    {
+        src: '/images/training-01.jpg',
+        alt: 'Participants at a Civil Service Commission training session',
+        className: 'top-0 left-0 z-10 w-[60%] aspect-4/3 -rotate-6',
+    },
+    {
+        src: '/images/training-02.jpg',
+        alt: 'A resource speaker addressing a room of government personnel',
+        className: 'top-[16%] right-0 z-20 w-[56%] aspect-3/4 rotate-5',
+    },
+    {
+        src: '/images/training-03.jpg',
+        alt: 'Certificates being awarded at the close of a training program',
+        className: 'bottom-0 left-[10%] z-30 w-[62%] aspect-4/3 -rotate-2',
+    },
+];
+
+/*
+ * Whether the hero has a right-hand column at all.
+ *
+ * The photographs are files an office drops in and swaps around, so "the markup
+ * lists three" and "three exist" are different claims. HeroPhotoStack reports
+ * back when every one of them has failed to load, and the hero then falls back
+ * to the centred single column it was before — the same rule hasStats applies
+ * to the figures band: an absent thing is not drawn, and nothing is arranged
+ * around the space where it would have been. A left-aligned headline with an
+ * empty half beside it reads as a page that failed to load.
+ */
+const photosLoaded = ref(true);
+const showPhotos = computed(() => heroPhotos.length > 0 && photosLoaded.value);
+
 // The figures band sizes its grid to what actually survived the controller,
 // so a withheld figure leaves no gap.
 const statsColumns = computed(
@@ -125,45 +177,40 @@ const selected = ref(null);
  * It reloads '/' rather than a catalogue route, so `only` is doing real work
  * here: without it every keystroke would also re-ship the stats block and the
  * whole hero payload to repaint five cards.
+ *
+ * This was a hand-rolled debounce — a `let searchDebounce`, a `setTimeout` and
+ * a `router.get`, the exact twelve lines `useFilters` exists to stop being
+ * written a thirteenth time — and it was missing the half that matters most on
+ * a phone. Nothing on screen changed between the keystroke and the response, so
+ * on mobile data the grid sat there looking like a finished result that simply
+ * did not match what had been typed. `filtering` goes true on the keystroke,
+ * not when the request leaves, and dims the results below.
+ *
+ * preserveScroll matters more here than on the admin lists it was written for:
+ * these results sit a full hero below the top of the page, so a scroll reset
+ * would throw the visitor back to the photograph.
  */
 const search = ref(props.filters.search ?? '');
 const mode = ref(props.filters.mode ?? '');
 const category = ref(props.filters.category ?? '');
 const status = ref(props.filters.status ?? '');
 
-// A filter change always starts from the first page; staying on, say, page 3 of
-// a narrowed search reads as "nothing found". preserveState keeps the fields
-// from flashing while the new result set loads, and preserveScroll matters more
-// here than it did on /programs — the results sit a full hero below the top of
-// the page, so a scroll reset would throw the visitor back to the photo.
-const applyFilters = () => {
-    router.get(
-        '/',
-        {
-            search: search.value.trim() || undefined,
-            mode: mode.value || undefined,
-            category: category.value || undefined,
-            status: status.value || undefined,
-            page: 1,
-        },
-        {
-            preserveState: true,
-            replace: true,
-            preserveScroll: true,
-            only: ['programs', 'filters', 'meta'],
-        }
-    );
-};
+const { filtering, apply } = useFilters({
+    url: '/',
+    only: ['programs', 'filters', 'meta'],
+    preserveScroll: true,
+    query: () => ({
+        search: search.value.trim() || undefined,
+        mode: mode.value || undefined,
+        category: category.value || undefined,
+        status: status.value || undefined,
+    }),
+});
 
 // Only the text box is debounced — a keystroke pauses while the dropdowns act
 // on click, where a 300ms lag reads as a missed tap.
-let searchDebounce;
-watch(search, () => {
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(applyFilters, 300);
-});
-
-watch([mode, category, status], applyFilters);
+watch(search, () => apply());
+watch([mode, category, status], () => apply({ immediate: true }));
 
 const hasActiveFilters = computed(
     () => search.value.trim() !== '' || Boolean(mode.value || category.value || status.value)
@@ -175,6 +222,27 @@ const clearFilters = () => {
     category.value = '';
     status.value = '';
 };
+
+/*
+ * The three dropdowns fold away on a phone, and this is why.
+ *
+ * One field per row below `sm` put roughly 350px of controls between the
+ * section heading and the first program card — a visitor scrolled past the
+ * whole apparatus for narrowing a list before being shown the list. Search
+ * stays out because it is the one control someone arrives intending to use;
+ * the rest open on request.
+ *
+ * Nothing folds at `sm` and above, where the row is two or four columns wide
+ * and costs one line of the page.
+ */
+const filtersOpen = ref(false);
+
+// What the fold is hiding, so a collapsed panel can still say that it is
+// narrowing the list. Without it a visitor who filtered, scrolled, and came
+// back sees a short catalogue and no reason for it.
+const foldedFilterCount = computed(
+    () => [mode.value, category.value, status.value].filter(Boolean).length
+);
 
 /*
  * Page links, built here rather than from a server-side paginator payload.
@@ -236,7 +304,10 @@ const pages = computed(() => {
             name="description"
             content="Browse and register for training programs offered by the Civil Service Commission, keep your certificates in one place, and check in to events with your own QR code."
         />
-        <meta property="og:site_name" content="CSC RO VIII - Training Information Management System" />
+        <meta
+            property="og:site_name"
+            :content="`${office.short_name} - Training Information Management System`"
+        />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="CSC TIMS - Training Information Management System" />
         <meta
@@ -259,10 +330,7 @@ const pages = computed(() => {
         <meta property="og:image" :content="origin + '/images/cscbg_facade.jpeg'" />
         <meta property="og:image:width" content="1920" />
         <meta property="og:image:height" content="1440" />
-        <meta
-            property="og:image:alt"
-            content="The Civil Service Commission Regional Office VIII building"
-        />
+        <meta property="og:image:alt" :content="`The ${office.name} building`" />
         <meta name="twitter:card" content="summary_large_image" />
         <link rel="canonical" :href="origin + '/'" />
     </Head>
@@ -287,41 +355,133 @@ const pages = computed(() => {
                 the generous top padding that used to sit here pushed the block
                 back toward the middle on short viewports, so it now hugs the
                 upper portion instead.
+
+                It is max-w-7xl in the two-column case, matching every section
+                below it. The hero was the one band on the page with its own
+                width, so the headline started a hundred pixels inboard of
+                "Programs we are offering" — a misalignment invisible on either
+                screen alone but read as drift while scrolling between them. The
+                single-column fallback stays narrower on purpose: centred copy
+                needs a short measure, not a full-width one.
             -->
             <div
-                class="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-start px-4 pt-14 pb-16 text-center sm:px-6 sm:pt-22 sm:pb-16 lg:px-8"
+                class="relative mx-auto flex w-full flex-1 flex-col justify-start px-4 pt-14 pb-16 sm:px-6 sm:pt-22 sm:pb-16 lg:px-8"
+                :class="showPhotos ? 'max-w-7xl' : 'max-w-4xl'"
             >
-                <!-- Official seals -->
-                <div class="mb-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6">
-                    <img
-                        v-for="seal in seals"
-                        :key="seal.src"
-                        :src="seal.src"
-                        :alt="seal.alt"
-                        decoding="async"
-                        class="h-14 w-auto drop-shadow-md sm:h-20"
-                    />
-                </div>
+                <!--
+                    One column or two, decided by whether the photographs are
+                    actually there. The copy only goes left-aligned in the
+                    two-column case: left-aligned text under centred seals with
+                    nothing to its right is just misaligned.
+                -->
+                <div
+                    class="grid items-center gap-10"
+                    :class="showPhotos ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-14' : ''"
+                >
+                    <div :class="showPhotos ? 'text-center lg:text-left' : 'text-center'">
+                        <!-- Official seals -->
+                        <div
+                            class="mb-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6"
+                            :class="showPhotos ? 'lg:justify-start' : ''"
+                        >
+                            <img
+                                v-for="seal in seals"
+                                :key="seal.src"
+                                :src="seal.src"
+                                :alt="seal.alt"
+                                decoding="async"
+                                class="h-14 w-auto drop-shadow-md sm:h-20"
+                            />
+                        </div>
 
-                <h1 class="text-3xl leading-tight font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-                    Training Information
-                    <span class="block font-semibold text-white/85">Management System</span>
-                </h1>
+                        <h1 class="text-3xl leading-tight font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+                            Training Information
+                            <span class="block font-semibold text-white/85">Management System</span>
+                        </h1>
 
-                <p class="mx-auto mt-6 max-w-xl text-base leading-relaxed text-pretty text-white/85 sm:text-lg">
-                    Create your account to register for training programs offered by the Commission, keep your
-                    certificates in one place, and check in to events with your own QR code.
-                </p>
+                        <p
+                            class="mx-auto mt-6 max-w-xl text-base leading-relaxed text-pretty text-white/85 sm:text-lg"
+                            :class="showPhotos ? 'lg:mx-0' : ''"
+                        >
+                            Create your account to register for training programs offered by the Commission, keep
+                            your certificates in one place, and check in to events with your own QR code.
+                        </p>
 
-                <div class="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-                    <AppButton href="/register" size="lg" on-dark>Create your account</AppButton>
+                        <div
+                            class="mt-10 flex flex-col justify-center gap-3 sm:flex-row"
+                            :class="showPhotos ? 'lg:justify-start' : ''"
+                        >
+                            <AppButton href="/register" size="lg" on-dark>Create your account</AppButton>
+                            <!--
+                                Points at #upcoming, not #programs. "Learn More" next to
+                                "Create your account" is asking what is on offer, and
+                                #programs is the feature grid — the anchor used to skip
+                                the actual programs entirely.
+                            -->
+                            <AppButton href="/#upcoming" variant="ghost" size="lg" on-dark>
+                                See our programs
+                            </AppButton>
+                        </div>
+
+                        <!--
+                            The hero's one live fact, and the reason the
+                            photographs are allowed to take the whole right-hand
+                            column: without this line a visitor cannot tell from
+                            the first screen whether there is anything to
+                            register for, and has to scroll a full viewport to
+                            find out. It is withheld rather than shown as a zero
+                            — "0 programs open" under a button saying "create
+                            your account" is an argument against doing so.
+                        -->
+                        <p
+                            v-if="openProgramCount > 0"
+                            class="mt-6 flex items-center justify-center gap-2.5 text-sm text-white/85"
+                            :class="showPhotos ? 'lg:justify-start' : ''"
+                        >
+                            <span class="relative flex size-2.5" aria-hidden="true">
+                                <span class="absolute inline-flex size-full animate-ping rounded-full bg-white/60" />
+                                <span class="relative inline-flex size-2.5 rounded-full bg-white" />
+                            </span>
+                            <Link
+                                href="/#upcoming"
+                                class="font-semibold text-white underline underline-offset-4 hover:text-white/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                            >
+                                {{ openProgramCount }}
+                                {{ openProgramCount === 1 ? 'program' : 'programs' }} open for registration
+                            </Link>
+                        </p>
+                    </div>
+
                     <!--
-                        Points at #upcoming, not #programs. "Learn More" next to
-                        "Create your account" is asking what is on offer, and
-                        #programs is the feature grid — the anchor used to skip
-                        the actual programs entirely.
+                        The photographs come last in the DOM, so on a phone they
+                        sit below the call to action rather than pushing it under
+                        the fold — the stacking order is the accessibility
+                        decision here, not the column order.
+
+                        And below `lg` they are not drawn at all. The stack is
+                        `aspect-4/5 w-full max-w-sm`, so on any phone wider than
+                        384px it is a 480px block — half a viewport of
+                        decoration between the call to action and the wave, on
+                        the screen with the least room for it. It exists to be
+                        the right-hand column of a two-column composition, and
+                        below `lg` there is no such composition: the grid
+                        collapses and the stack becomes a tall thing in the
+                        middle of the page.
+
+                        Hidden in CSS rather than v-if'd, and the two halves of
+                        that are deliberate: `hidden` keeps `showPhotos` (and so
+                        the two-column classes, which are all `lg:`-prefixed)
+                        answering the same question it always did, and the
+                        images' own `loading="lazy"` means a display:none
+                        ancestor never intersects the viewport, so a phone does
+                        not download three photographs it will not show.
                     -->
-                    <AppButton href="/#upcoming" variant="ghost" size="lg" on-dark>See our programs</AppButton>
+                    <HeroPhotoStack
+                        v-if="showPhotos"
+                        class="hidden lg:block"
+                        :photos="heroPhotos"
+                        @empty="photosLoaded = false"
+                    />
                 </div>
             </div>
 
@@ -348,7 +508,7 @@ const pages = computed(() => {
             "Programs" link (/#upcoming) into a dead anchor on exactly the days
             a visitor most needed to be told there was nothing scheduled.
         -->
-        <section id="upcoming" class="bg-white py-20 lg:py-24">
+        <section id="upcoming" class="bg-white py-14 sm:py-20 lg:py-24">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="mx-auto max-w-2xl text-center">
                     <!-- Small red eyebrow keeps this the single red accent of the block -->
@@ -368,7 +528,7 @@ const pages = computed(() => {
                 </div>
 
                 <!-- Filters -->
-                <div class="mt-12 rounded-2xl border border-csc-line bg-csc-blue-tint p-5 sm:p-6">
+                <div class="mt-10 rounded-2xl border border-csc-line bg-csc-blue-tint p-5 sm:mt-12 sm:p-6">
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <AppInput
                             v-model="search"
@@ -376,24 +536,79 @@ const pages = computed(() => {
                             type="search"
                             placeholder="Title, code, or venue"
                         />
-                        <AppSelect
-                            v-model="status"
-                            label="Registration"
-                            :options="filterOptions.statuses"
-                            placeholder="Any status"
-                        />
-                        <AppSelect
-                            v-model="category"
-                            label="Curriculum"
-                            :options="filterOptions.categories"
-                            placeholder="Any curriculum"
-                        />
-                        <AppSelect
-                            v-model="mode"
-                            label="Mode"
-                            :options="filterOptions.modes"
-                            placeholder="Any mode"
-                        />
+
+                        <!--
+                            The fold, phones only. See foldedFilterCount.
+
+                            `contents` rather than a wrapper with its own
+                            layout: the three selects have to stay direct
+                            children of the grid at `sm` and above, or they lose
+                            the two- and four-column row and stack again — which
+                            is the exact thing being fixed. Below `sm` the
+                            wrapper is `hidden` when closed, and `display:
+                            contents` is what lets one element be both.
+
+                            Only the dynamic class sets a display; a static
+                            `contents` alongside a conditional `hidden` would
+                            leave two display utilities from the same Tailwind
+                            layer fighting, and which one wins is decided by
+                            stylesheet order rather than by anything readable
+                            here.
+                        -->
+                        <button
+                            type="button"
+                            class="flex w-full items-center justify-between gap-2 rounded-lg border border-csc-line bg-white px-4 py-3 text-sm font-semibold text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue sm:hidden"
+                            :aria-expanded="filtersOpen"
+                            aria-controls="catalogue-filters"
+                            @click="filtersOpen = !filtersOpen"
+                        >
+                            <span class="flex items-center gap-2">
+                                <!--
+                                    "More filters", not the three field names.
+                                    Spelled out it wraps to two lines at 320px,
+                                    and the search box directly above it is a
+                                    filter too — so naming only these three
+                                    implies the box above is something else.
+                                -->
+                                More filters
+                                <span
+                                    v-if="foldedFilterCount"
+                                    class="inline-flex size-5 items-center justify-center rounded-full bg-csc-blue text-2xs font-semibold text-white"
+                                >
+                                    {{ foldedFilterCount }}
+                                </span>
+                            </span>
+                            <AppIcon
+                                name="chevron-down"
+                                size="sm"
+                                class="shrink-0 transition-transform duration-200"
+                                :class="filtersOpen ? 'rotate-180' : ''"
+                            />
+                        </button>
+
+                        <div
+                            id="catalogue-filters"
+                            :class="filtersOpen ? 'contents' : 'hidden sm:contents'"
+                        >
+                            <AppSelect
+                                v-model="status"
+                                label="Registration"
+                                :options="filterOptions.statuses"
+                                placeholder="Any status"
+                            />
+                            <AppSelect
+                                v-model="category"
+                                label="Curriculum"
+                                :options="filterOptions.categories"
+                                placeholder="Any curriculum"
+                            />
+                            <AppSelect
+                                v-model="mode"
+                                label="Mode"
+                                :options="filterOptions.modes"
+                                placeholder="Any mode"
+                            />
+                        </div>
                     </div>
 
                     <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -420,8 +635,23 @@ const pages = computed(() => {
                     </div>
                 </div>
 
-                <!-- Results -->
-                <div v-if="programs.length" class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <!--
+                    Results.
+
+                    `aria-busy` and the dim go on the results region and never on
+                    the controls, which stay live — the house rule from
+                    useFilters. Dimmed rather than swapped for a skeleton
+                    because a filtered visit is a *narrowing* of what is already
+                    on screen: the cards showing are the best available
+                    approximation of the cards arriving, and blanking them loses
+                    the reader's place for nothing.
+                -->
+                <div
+                    v-if="programs.length"
+                    class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+                    :class="filteringClass(filtering)"
+                    :aria-busy="filtering"
+                >
                     <ProgramCard
                         v-for="program in programs"
                         :key="program.id"
@@ -441,7 +671,9 @@ const pages = computed(() => {
                 -->
                 <div
                     v-else
-                    class="mx-auto mt-10 max-w-xl rounded-2xl border border-csc-line bg-csc-blue-tint px-8 py-12 text-center"
+                    class="mx-auto mt-10 max-w-xl rounded-2xl border border-csc-line bg-csc-blue-tint px-6 py-10 text-center sm:px-8 sm:py-12"
+                    :class="filteringClass(filtering)"
+                    :aria-busy="filtering"
                 >
                     <span class="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-white">
                         <svg class="size-6 text-csc-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -492,10 +724,24 @@ const pages = computed(() => {
                     </template>
                 </div>
 
-                <!-- Pagination -->
+                <!--
+                    Pagination.
+
+                    Two shapes for one control. The numbered window is a
+                    pointer affordance: up to nine 36px-tall targets, which on a
+                    390px screen wraps into two rows of digits and asks a thumb
+                    to hit a control well under the 44px minimum. Below `sm` the
+                    numbers are hidden — not removed, so nothing about the
+                    windowing logic changes — and what remains is the pair of
+                    controls a phone is actually aiming for, with a plain
+                    statement of where they are between them.
+
+                    `py-3` below `sm` is what carries every one of these to
+                    44px; the desktop row keeps its tighter `py-2`.
+                -->
                 <nav
                     v-if="meta.last_page > 1"
-                    class="mt-12 flex flex-wrap items-center justify-center gap-2"
+                    class="mt-10 flex flex-wrap items-center justify-center gap-2 sm:mt-12"
                     aria-label="Pagination"
                 >
                     <Link
@@ -504,38 +750,52 @@ const pages = computed(() => {
                         :data="pageLink(meta.current_page - 1)"
                         :only="['programs', 'filters', 'meta']"
                         preserve-scroll
-                        class="rounded-lg border border-csc-line px-4 py-2 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded-lg border border-csc-line px-4 py-3 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue sm:py-2"
                     >
                         Previous
                     </Link>
-                    <template v-for="(n, i) in pages" :key="n ?? `gap-${i}`">
-                        <!-- A gap in the window. Not focusable, not a control. -->
-                        <span v-if="n === null" class="px-2 text-sm text-csc-ink-subtle" aria-hidden="true">…</span>
-                        <Link
-                            v-else
-                            href="/"
-                            :data="pageLink(n)"
-                            :only="['programs', 'filters', 'meta']"
-                            preserve-scroll
-                            class="rounded-lg border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            :class="
-                                n === meta.current_page
-                                    ? 'border-csc-blue bg-csc-blue text-white'
-                                    : 'border-csc-line text-csc-blue hover:bg-csc-blue-tint'
-                            "
-                            :aria-current="n === meta.current_page ? 'page' : undefined"
-                            :aria-label="`Page ${n}`"
-                        >
-                            {{ n }}
-                        </Link>
-                    </template>
+
+                    <!--
+                        Phones only, and aria-hidden: the same fact is already
+                        announced by the "Showing … page x of y" status line
+                        above the results, and a screen reader does not need it
+                        twice with the page's controls in between.
+                    -->
+                    <span class="px-2 text-sm text-csc-ink-muted sm:hidden" aria-hidden="true">
+                        Page {{ meta.current_page }} of {{ meta.last_page }}
+                    </span>
+
+                    <div class="hidden flex-wrap items-center justify-center gap-2 sm:flex">
+                        <template v-for="(n, i) in pages" :key="n ?? `gap-${i}`">
+                            <!-- A gap in the window. Not focusable, not a control. -->
+                            <span v-if="n === null" class="px-2 text-sm text-csc-ink-subtle" aria-hidden="true">…</span>
+                            <Link
+                                v-else
+                                href="/"
+                                :data="pageLink(n)"
+                                :only="['programs', 'filters', 'meta']"
+                                preserve-scroll
+                                class="rounded-lg border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                                :class="
+                                    n === meta.current_page
+                                        ? 'border-csc-blue bg-csc-blue text-white'
+                                        : 'border-csc-line text-csc-blue hover:bg-csc-blue-tint'
+                                "
+                                :aria-current="n === meta.current_page ? 'page' : undefined"
+                                :aria-label="`Page ${n}`"
+                            >
+                                {{ n }}
+                            </Link>
+                        </template>
+                    </div>
+
                     <Link
                         v-if="meta.current_page < meta.last_page"
                         href="/"
                         :data="pageLink(meta.current_page + 1)"
                         :only="['programs', 'filters', 'meta']"
                         preserve-scroll
-                        class="rounded-lg border border-csc-line px-4 py-2 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                        class="rounded-lg border border-csc-line px-4 py-3 text-sm font-semibold text-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue sm:py-2"
                     >
                         Next
                     </Link>
@@ -556,7 +816,7 @@ const pages = computed(() => {
             here — to a grid of feature tiles — for anyone holding an old
             bookmark. Renamed to what it is.
         -->
-        <section id="features" class="bg-csc-blue-tint py-20 lg:py-24">
+        <section id="features" class="bg-csc-blue-tint py-14 sm:py-20 lg:py-24">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="mx-auto max-w-2xl text-center">
                     <h2 class="text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
@@ -567,7 +827,7 @@ const pages = computed(() => {
                     </p>
                 </div>
 
-                <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="mt-10 grid gap-6 sm:mt-14 sm:grid-cols-2 lg:grid-cols-4">
                     <Link
                         v-for="feature in features"
                         :key="feature.title"
@@ -607,12 +867,28 @@ const pages = computed(() => {
                             Sign in required
                         </span>
 
+                        <!--
+                            Visible at rest, not revealed on hover.
+
+                            It was `opacity-0 group-hover:opacity-100`, which on
+                            a touch screen never fires — so a phone paid the
+                            `pt-5` of layout for a row it could never be shown,
+                            four cards in a column. Hover now moves the arrow
+                            instead of conjuring the label, which is an
+                            enhancement rather than the disclosure itself;
+                            `ProgramCard` reads the same way, so the two kinds of
+                            card on this page agree about what a card promises.
+                        -->
                         <span
-                            class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-semibold text-csc-blue opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
+                            class="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-semibold text-csc-blue"
                             aria-hidden="true"
                         >
                             Learn more
-                            <AppIcon name="arrow-forward" size="sm" />
+                            <AppIcon
+                                name="arrow-forward"
+                                size="sm"
+                                class="transition-transform duration-200 group-hover:translate-x-1"
+                            />
                         </span>
                     </Link>
                 </div>
@@ -634,7 +910,7 @@ const pages = computed(() => {
             would go dead on exactly the deployments that have the least other
             context to offer.
         -->
-        <section id="about" class="bg-white py-20 lg:py-24">
+        <section id="about" class="bg-white py-14 sm:py-20 lg:py-24">
             <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div class="mx-auto max-w-3xl">
                     <p class="inline-flex items-center gap-3 text-xs font-semibold tracking-widest text-csc-red-ink uppercase">
@@ -681,7 +957,7 @@ const pages = computed(() => {
             number of figures that survived, so three figures do not sit in a
             four-column grid with a hole where the fourth would be.
         -->
-        <section v-if="hasStats" class="bg-csc-blue py-14">
+        <section v-if="hasStats" class="bg-csc-blue py-10 sm:py-14">
             <div
                 class="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:px-8"
                 :class="statsColumns"
@@ -693,8 +969,16 @@ const pages = computed(() => {
             </div>
         </section>
 
-        <!-- CTA -->
-        <section class="bg-csc-blue-tint py-20">
+        <!--
+            CTA.
+
+            Every band on this page steps its vertical padding up with the
+            viewport rather than carrying the desktop value everywhere. At a
+            flat py-20 the five sections spent roughly 800px of a phone on
+            nothing — the one screen where scroll is most expensive paying the
+            most for air.
+        -->
+        <section class="bg-csc-blue-tint py-14 sm:py-20">
             <div class="mx-auto max-w-3xl px-4 text-center sm:px-6 lg:px-8">
                 <h2 class="text-3xl font-semibold tracking-tight text-balance text-csc-blue sm:text-4xl">
                     Ready to sign up for your next training?

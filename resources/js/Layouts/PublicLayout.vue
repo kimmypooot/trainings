@@ -103,6 +103,27 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('scroll', onScroll);
     window.removeEventListener('keydown', onKeydown);
+
+    // Never leave the page locked behind us: the menu can be open at the moment
+    // a navigation replaces this layout, and the body style outlives it.
+    document.body.style.overflow = '';
+});
+
+/*
+ * The page behind an open menu does not scroll.
+ *
+ * The panel is anchored to a sticky header, so with the body still scrollable
+ * the menu stayed put while the hero slid underneath it — which reads as the
+ * menu having come loose from the page rather than as the page moving. Worse on
+ * a phone, where the gesture that opens the menu and the gesture that scrolls
+ * the page are the same one: a thumb drifting on its way to "Programs" moves
+ * the page under the tap.
+ *
+ * Same mechanism `AppModal` uses, deliberately. Two surfaces that cover the
+ * page should not have two different ways of holding it still.
+ */
+watch(menuOpen, (open) => {
+    document.body.style.overflow = open ? 'hidden' : '';
 });
 
 // A navigation always closes it. The in-page anchors do not remount this
@@ -125,30 +146,43 @@ watch(
             Skip to content
         </a>
 
-        <header class="sticky top-0 z-(--z-header)">
-            <!-- GOVPH-style official ribbon above the navigation bar -->
-            <div class="bg-csc-blue-deep">
-                <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1 sm:px-6 lg:px-8">
-                    <!--
-                        A link, not a label. The GOVPH pattern makes the
-                        Republic wordmark the way out to gov.ph, and a visitor
-                        checking whether a site is genuinely government is the
-                        exact person who tries to click it.
-                    -->
-                    <a
-                        href="https://www.gov.ph"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="rounded text-2xs font-medium tracking-widest text-white/70 uppercase transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                    >
-                        Republic of the Philippines
-                    </a>
-                    <p class="hidden text-2xs font-medium tracking-widest text-white/70 uppercase sm:block">
-                        Civil Service Commission
-                    </p>
-                </div>
-            </div>
+        <!--
+            The GOVPH official ribbon, deliberately *outside* the sticky header.
 
+            Both bars used to stick, so ~6rem of every viewport was permanently
+            spoken for — on a phone, where vertical space is scarcest and this
+            ribbon is the least useful thing occupying it. Its job is to say
+            "this is a government site" on arrival, which it still does in full;
+            the navigation is the half that has to remain reachable at the
+            bottom of a long page, so the navigation is the half that sticks.
+
+            Consequence to keep in mind: `[id] { scroll-margin-top }` in app.css
+            is sized against what actually sticks, and that is now the
+            navigation bar alone.
+        -->
+        <div class="bg-csc-blue-deep">
+            <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1 sm:px-6 lg:px-8">
+                <!--
+                    A link, not a label. The GOVPH pattern makes the
+                    Republic wordmark the way out to gov.ph, and a visitor
+                    checking whether a site is genuinely government is the
+                    exact person who tries to click it.
+                -->
+                <a
+                    href="https://www.gov.ph"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="rounded text-2xs font-medium tracking-widest text-white/70 uppercase transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                    Republic of the Philippines
+                </a>
+                <p class="hidden text-2xs font-medium tracking-widest text-white/70 uppercase sm:block">
+                    Civil Service Commission
+                </p>
+            </div>
+        </div>
+
+        <header class="sticky top-0 z-(--z-header)">
             <!-- Frosted glass once content scrolls under the navigation bar -->
             <div
                 class="border-b bg-white supports-[backdrop-filter]:bg-white/85 supports-[backdrop-filter]:backdrop-blur-md transition-shadow duration-200"

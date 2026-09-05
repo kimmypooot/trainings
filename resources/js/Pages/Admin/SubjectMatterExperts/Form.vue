@@ -1,7 +1,7 @@
 <script setup>
 /** Create or edit one subject matter expert. */
 import { computed } from 'vue';
-import { Head, useForm } from '@inertiajs/vue3';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
@@ -14,10 +14,18 @@ const props = defineProps({
 
 const isEdit = computed(() => Boolean(props.expert?.id));
 
+/*
+ * Most experts are the office's own staff, so this office is the useful
+ * default — but it was typed in as Regional Office VIII, which on any other
+ * deployment would seed the wrong organisation into every expert record
+ * created by someone who did not think to change it. Unlike the chrome
+ * elsewhere in Tier 1 this one is written to the database, so a wrong default
+ * outlives the page that offered it.
+ */
 const form = useForm({
     name: props.expert?.name ?? '',
     position: props.expert?.position ?? '',
-    organization: props.expert?.organization ?? 'Civil Service Commission RO VIII',
+    organization: props.expert?.organization ?? usePage().props.office.name,
     email: props.expert?.email ?? '',
     contact_number: props.expert?.contact_number ?? '',
     expertise: props.expert?.expertise ?? '',

@@ -34,7 +34,7 @@ const POLL_MS = 250;
  */
 const TIMEOUT_MS = 45000;
 
-const readCookie = (name) =>
+const readCookie = (name: string): string | null =>
     document.cookie
         .split('; ')
         .find((row) => row.startsWith(`${name}=`))
@@ -42,22 +42,22 @@ const readCookie = (name) =>
 
 // Cleared as soon as it is read: it is a one-shot signal, and leaving it set
 // would make the *next* download resolve instantly against a stale token.
-const clearCookie = (name) => {
+const clearCookie = (name: string): void => {
     document.cookie = `${name}=; Max-Age=0; path=/`;
 };
 
 export function useDownload() {
     /** The URL currently downloading, or null. Bind with `downloading === url`. */
-    const downloading = ref(null);
+    const downloading = ref<string | null>(null);
 
-    let poller = null;
-    let timeout = null;
+    let poller: ReturnType<typeof setInterval> | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const stop = () => {
         clearInterval(poller);
         clearTimeout(timeout);
-        poller = null;
-        timeout = null;
+        poller = undefined;
+        timeout = undefined;
         downloading.value = null;
     };
 
@@ -69,7 +69,7 @@ export function useDownload() {
      * *different* export supersedes the first: only one button can show a
      * pending state, and the newer click is the one the user is waiting on.
      */
-    const start = (url) => {
+    const start = (url: string) => {
         if (downloading.value === url) return;
 
         stop();

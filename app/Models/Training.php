@@ -15,8 +15,42 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
+/**
+ * What `casts()` below already does, said in a form Larastan can read.
+ *
+ * Larastan takes a model's casts from the `$casts` *property*; this codebase
+ * uses the `casts()` *method*, so every cast column resolves to its raw
+ * database type instead. On this model that made `starts_at` a string, and so
+ * every `->format()`, `->diffForHumans()` and date comparison on a training —
+ * the roster header, the catalogue, the certificates, the dashboard — read as
+ * a method call on a string. The same fix was already applied to User,
+ * ScanLink, Registration, Profile and ActivityLog for the same reason.
+ *
+ * This is a statement of existing behaviour, not a suppression: a genuinely
+ * wrong call on one of these still fails.
+ *
+ * Dates are `Carbon`, not `CarbonImmutable`: these are plain `datetime`
+ * casts and nothing in this application swaps Laravel's default date class.
+ * ScanLink's block says `CarbonImmutable` because its columns are cast
+ * `immutable_datetime` — the docblock has to follow the cast, not the import
+ * list.
+ *
+ * @property Carbon $starts_at
+ * @property Carbon|null $ends_at
+ * @property Carbon|null $registration_opens_at
+ * @property Carbon|null $registration_closes_at
+ * @property int|null $duration_days
+ * @property bool $payment_required
+ * @property bool $accepts_promissory
+ * @property bool $accepts_walk_ins
+ * @property bool $is_supervisory
+ * @property TrainingMode $mode
+ * @property TrainingLevel|null $level
+ * @property TrainingStatus $status
+ */
 #[Fillable([
     'title', 'slug', 'training_code', 'description', 'category', 'level', 'venue',
     'venue_details', 'meeting_link', 'mode', 'starts_at', 'ends_at', 'duration_days',

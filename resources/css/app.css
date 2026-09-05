@@ -205,12 +205,21 @@
 }
 
 /*
- * Anchor targets (/#programs, /#about, #contact) must land clear of the sticky
- * public header when a visitor jumps to them — 6.5rem clears the ~6rem shell
- * (GOVPH ribbon + navigation bar) with breathing room to spare.
+ * Anchor targets (/#upcoming, /#about, #contact) must land clear of whatever is
+ * stuck to the top of the viewport when a visitor jumps to them.
+ *
+ * 5rem, sized against the two sticky bars in this app: the public navigation
+ * bar (~3.75rem — py-2 around AppLogo's size-11 mark) and the signed-in shell's
+ * header (h-16, 4rem). It was 6.5rem, sized for the public header back when the
+ * GOVPH ribbon stuck too; the ribbon now scrolls away with the page, so that
+ * value left a heading floating well below the bar it was clearing.
+ *
+ * Err upward if either header grows. Over-clearing costs a little whitespace
+ * above the target; under-clearing tucks the heading behind the bar, which is
+ * the whole failure this exists to prevent.
  */
 [id] {
-    scroll-margin-top: 6.5rem;
+    scroll-margin-top: 5rem;
 }
 
 /*

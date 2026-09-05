@@ -331,6 +331,13 @@ const navGroups = [
                 icon: 'shield',
             },
             {
+                key: 'admin-office',
+                label: 'Office Details',
+                href: '/admin/office',
+                roles: ['superadmin'],
+                icon: 'building',
+            },
+            {
                 key: 'admin-maintenance',
                 label: 'Maintenance Mode',
                 href: '/admin/maintenance',
@@ -533,7 +540,7 @@ const confirmSignOut = () => {
                         />
                     </span>
                     <span v-if="!collapsed" class="leading-tight">
-                        <span class="block text-sm font-bold text-white">CSC RO VIII</span>
+                        <span class="block text-sm font-bold text-white">{{ page.props.office.short_name }}</span>
                         <span class="mt-0.5 block text-xs font-medium tracking-wide text-white/60">
                             TIMS
                         </span>

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppAlert from '@/Components/AppAlert.vue';
@@ -9,6 +9,8 @@ import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import { useFilters, filteringClass } from '@/useFilters';
 
@@ -16,6 +18,8 @@ const props = defineProps({
     users: { type: Object, required: true },
     filters: { type: Object, required: true },
     roles: { type: Array, required: true },
+    // The whole staff roll, not the filtered page — see the controller.
+    summary: { type: Object, required: true },
     // HRD sees the same directory without the controls — administering the
     // accounts is superadmin's. The routes enforce it; this keeps the page
     // from offering buttons that would 403.
@@ -42,6 +46,24 @@ const { filtering } = useFilters({
 
 const confirming = ref(null);
 const processing = ref(false);
+
+/*
+ * What can be done to one staff account, listed once for both layouts.
+ *
+ * An account cannot deactivate itself — signing yourself out of the system
+ * you administer is never the thing that was meant — so its own row offers
+ * the edit alone.
+ */
+const actionsFor = (user) => [
+    { label: 'Edit', icon: 'pencil', href: user.edit_url },
+    ...(user.is_self
+        ? []
+        : [
+              user.is_active
+                  ? { label: 'Deactivate', icon: 'lock', tone: 'danger', onClick: () => (confirming.value = user) }
+                  : { label: 'Activate', icon: 'check', tone: 'success', onClick: () => (confirming.value = user) },
+          ]),
+];
 
 const dialog = computed(() => {
     if (!confirming.value) return null;
@@ -84,6 +106,39 @@ const confirm = () => {
     <AuthenticatedLayout title="Users &amp; Roles" current="admin-users">
         <div class="mx-auto max-w-7xl space-y-5">
             <AppAlert v-if="error" tone="danger">{{ error }}</AppAlert>
+
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <AppStatTile label="Staff Accounts" :value="summary.total" icon="users" />
+                <AppStatTile
+                    label="Active"
+                    :value="summary.active"
+                    icon="check-circle"
+                    tone="success"
+                    :caption="
+                        summary.total - summary.active > 0
+                            ? `${summary.total - summary.active} deactivated`
+                            : 'Nobody locked out'
+                    "
+                />
+                <AppStatTile
+                    label="Collecting Officers"
+                    :value="summary.collectors"
+                    icon="card"
+                    caption="Hold the till by designation"
+                />
+                <!--
+                    An account created and never used is either an onboarding
+                    that stalled or a credential sitting unclaimed. Amber while
+                    there are any, because both want chasing.
+                -->
+                <AppStatTile
+                    label="Never Signed In"
+                    :value="summary.never_signed_in"
+                    icon="clock"
+                    :tone="summary.never_signed_in > 0 ? 'warning' : 'success'"
+                    :caption="summary.never_signed_in > 0 ? 'Created but never used' : 'Every account has been used'"
+                />
+            </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex flex-1 flex-col gap-3 sm:flex-row">
@@ -190,24 +245,7 @@ const confirm = () => {
                                     </td>
                                     <td class="px-5 py-3.5 text-right whitespace-nowrap">
                                         <span v-if="!canManage" class="text-xs text-csc-ink-subtle">—</span>
-                                        <Link
-                                            v-if="canManage"
-                                            :href="user.edit_url"
-                                            class="text-xs font-semibold text-csc-blue hover:underline"
-                                        >
-                                            Edit
-                                        </Link>
-                                        <template v-if="canManage && !user.is_self">
-                                            <span class="px-2 text-csc-line">|</span>
-                                            <button
-                                                type="button"
-                                                class="rounded text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                :class="user.is_active ? 'text-danger' : 'text-success'"
-                                                @click="confirming = user"
-                                            >
-                                                {{ user.is_active ? 'Deactivate' : 'Activate' }}
-                                            </button>
-                                        </template>
+                                        <AppRowActions v-else :actions="actionsFor(user)" />
                                     </td>
                                 </tr>
                             </tbody>
@@ -239,18 +277,7 @@ const confirm = () => {
                             </p>
                             <div class="mt-3 flex items-center justify-between border-t border-csc-line pt-3">
                                 <span class="text-xs text-csc-ink-subtle">{{ user.field_office ?? '—' }}</span>
-                                <span v-if="canManage" class="flex gap-3">
-                                    <Link :href="user.edit_url" class="text-xs font-semibold text-csc-blue">Edit</Link>
-                                    <button
-                                        v-if="!user.is_self"
-                                        type="button"
-                                        class="text-xs font-semibold"
-                                        :class="user.is_active ? 'text-danger' : 'text-success'"
-                                        @click="confirming = user"
-                                    >
-                                        {{ user.is_active ? 'Deactivate' : 'Activate' }}
-                                    </button>
-                                </span>
+                                <AppRowActions v-if="canManage" :actions="actionsFor(user)" layout="card" />
                             </div>
                         </li>
                     </ul>

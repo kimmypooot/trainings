@@ -35,6 +35,16 @@ class SubjectMatterExpert extends Model
         ];
     }
 
+    /**
+     * The runs this expert is assigned to.
+     *
+     * Annotated because the bare `BelongsToMany` hint resolves its rows to the
+     * base `Model`, so every read off one of them — `$training->title`,
+     * `->starts_at` — looks undefined to static analysis, and a `map()` over
+     * the collection is rejected on the callback's own parameter type.
+     *
+     * @return BelongsToMany<Training, $this>
+     */
     public function trainings(): BelongsToMany
     {
         // Table named explicitly — see the matching relation on Training.

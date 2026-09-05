@@ -5,13 +5,42 @@
  * Response rate leads because it is the number that decides whether the
  * averages on the next screen mean anything.
  */
+import { computed } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 
-defineProps({
+const props = defineProps({
     trainings: { type: Array, required: true },
+});
+
+/*
+ * The rows say how each run did; this says how the programme is doing.
+ *
+ * The overall rate is submissions over forms asked for across every run, not
+ * the mean of the per-run rates — a two-person run at 100% would otherwise
+ * count for as much as a two-hundred-person run at 40%, and the headline would
+ * flatter the office exactly when it should not.
+ *
+ * Derived on the client because the page already holds every row; this list is
+ * not paginated. If it grows a paginator these move to the controller.
+ */
+const summary = computed(() => {
+    const submissions = props.trainings.reduce((total, run) => total + run.submissions, 0);
+    const possible = props.trainings.reduce((total, run) => total + run.possible, 0);
+
+    return {
+        runs: props.trainings.length,
+        submissions,
+        possible,
+        rate: possible > 0 ? Math.round((submissions / possible) * 100) : null,
+        // Runs where nobody has replied at all. Distinct from a low rate: a
+        // zero usually means the day codes were never handed out, which is a
+        // fixable thing rather than a verdict on the session.
+        silent: props.trainings.filter((run) => run.submissions === 0).length,
+    };
 });
 </script>
 
@@ -33,7 +62,39 @@ defineProps({
                 />
             </AppCard>
 
-            <div v-else class="overflow-x-auto rounded-xl border border-csc-line bg-white">
+            <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <AppStatTile label="Runs Evaluated" :value="summary.runs" icon="calendar" />
+                <AppStatTile label="Submissions" :value="summary.submissions" icon="clipboard" />
+                <!--
+                    The bands are about whether the averages on the next screen
+                    can be trusted, which is what this page exists to tell you:
+                    below half the room, a run's rating is a handful of opinions.
+                -->
+                <AppStatTile
+                    label="Response Rate"
+                    :value="summary.rate === null ? '—' : `${summary.rate}%`"
+                    icon="analytics"
+                    :caption="`${summary.submissions} of ${summary.possible} forms asked for`"
+                    :tone="
+                        summary.rate === null
+                            ? 'brand'
+                            : summary.rate >= 70
+                              ? 'success'
+                              : summary.rate >= 50
+                                ? 'warning'
+                                : 'danger'
+                    "
+                />
+                <AppStatTile
+                    label="No Responses"
+                    :value="summary.silent"
+                    icon="warning"
+                    :tone="summary.silent > 0 ? 'warning' : 'success'"
+                    :caption="summary.silent > 0 ? 'Check the day codes were shared' : 'Every run has replies'"
+                />
+            </div>
+
+            <div v-if="trainings.length" class="overflow-x-auto rounded-xl border border-csc-line bg-white">
                 <table class="w-full min-w-3xl text-left text-sm">
                     <thead class="border-b border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
                         <tr>

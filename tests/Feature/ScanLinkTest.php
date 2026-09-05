@@ -13,6 +13,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Factories\ScanLinkFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
@@ -292,6 +293,98 @@ class ScanLinkTest extends TestCase
             ->assertJsonPath('results.0.status', 'duplicate');
 
         $this->assertSame(1, Attendance::count());
+    }
+
+    /**
+     * The same badge twice inside one payload, which is the case the batched
+     * arrival check could break.
+     *
+     * Resolving "who has already arrived" as one query before the loop is what
+     * stops the endpoint asking that question once per scan. The risk it
+     * introduces is precisely this: a snapshot taken before the loop does not
+     * know about the check-in the loop itself just performed, so a badge
+     * scanned twice in one flush would come back synced *twice* and the
+     * operator would be told two people arrived. The set is carried through the
+     * batch by reference for this reason.
+     */
+    public function test_a_badge_scanned_twice_in_one_batch_is_synced_then_duplicate(): void
+    {
+        [$link, , $registration] = $this->scenario();
+        $grant = $this->grantFor($link);
+
+        $at = CarbonImmutable::now()->toIso8601String();
+
+        $response = $this->postJson("/station/{$link->token}/sync", [
+            'scans' => [
+                ['client_id' => 'one', 'registration_id' => $registration->id, 'scanned_at' => $at],
+                ['client_id' => 'two', 'registration_id' => $registration->id, 'scanned_at' => $at],
+            ],
+        ], ['X-Scan-Grant' => $grant]);
+
+        $response->assertJsonPath('results.0.status', 'synced');
+        $response->assertJsonPath('results.1.status', 'duplicate');
+
+        $this->assertSame(1, Attendance::count());
+    }
+
+    /**
+     * The arrival check is one query for the batch, not one per scan.
+     *
+     * The endpoint accepts up to 500 scans, and a station flushes whatever a
+     * day offline produced — so anything done per scan sets the request's
+     * duration by how long the device was away from the network. That is the
+     * one request that must not time out: it is carrying attendance that exists
+     * nowhere else.
+     *
+     * Asserted against the query log rather than a timing, because a timing
+     * assertion on a busy machine is a flake generator. The `exists(` shape is
+     * what the removed per-scan check produced; its absence is the regression
+     * guard, and the count of the replacement is pinned at one.
+     */
+    public function test_the_arrival_check_does_not_grow_with_the_batch(): void
+    {
+        [$link, $training] = $this->scenario();
+        $grant = $this->grantFor($link);
+
+        $scans = [];
+
+        foreach (range(1, 12) as $n) {
+            $participant = User::factory()->create(['profile_completed_at' => now()]);
+            Profile::factory()->for($participant)->create();
+
+            $registration = Registration::factory()->approved()->create([
+                'user_id' => $participant->getKey(),
+                'training_id' => $training->getKey(),
+            ]);
+
+            $scans[] = [
+                'client_id' => "scan-{$n}",
+                'registration_id' => $registration->id,
+                'scanned_at' => CarbonImmutable::now()->toIso8601String(),
+            ];
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->postJson("/station/{$link->token}/sync", ['scans' => $scans], ['X-Scan-Grant' => $grant])
+            ->assertOk();
+
+        $queries = array_column(DB::getQueryLog(), 'query');
+        DB::disableQueryLog();
+
+        $lookups = array_filter(
+            $queries,
+            fn (string $query) => str_contains($query, 'from `attendances`')
+                && str_contains($query, '`time_in` is not null')
+        );
+
+        $this->assertCount(1, $lookups, 'the arrival set is resolved once for the whole batch');
+
+        $this->assertSame([], array_values(array_filter(
+            $queries,
+            fn (string $query) => str_contains($query, 'exists(select * from `attendances`')
+        )), 'the per-scan existence check is gone');
     }
 
     public function test_sync_requires_a_grant(): void
@@ -623,5 +716,135 @@ class ScanLinkTest extends TestCase
         // The row survives: it is the only record of who authorised a door.
         $this->assertNotNull($link->fresh()->revoked_at);
         $this->assertFalse($link->fresh()->isActive());
+    }
+
+    // --------------------------------------------------- who may cut a door
+
+    /*
+     * Revocation is deliberately broad — a phone goes missing mid-session and
+     * the person standing at the venue has to be able to kill the link without
+     * finding a superadmin — but it used to be *unbounded*: every staff role in
+     * the group could revoke any station in the region, including one another
+     * office was working a live door with, and nothing recorded that they had.
+     */
+
+    private function linkIssuedBy(User $issuer): ScanLink
+    {
+        return ScanLink::factory()->create([
+            'training_id' => Training::factory()->create()->getKey(),
+            'issued_by' => $issuer->getKey(),
+        ]);
+    }
+
+    public function test_a_field_office_cannot_revoke_another_offices_station(): void
+    {
+        $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();
+        $samar = FieldOffice::where('code', 'sfo')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::FieldOffice, $samar));
+
+        $this->actingAs($this->issuer(Role::FieldOffice, $leyte))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertNotFound();
+
+        $this->assertNull(
+            $link->fresh()->revoked_at,
+            'Another office’s station was revoked — that closes a door somebody is standing at.'
+        );
+    }
+
+    public function test_a_field_office_can_revoke_a_station_its_own_office_issued(): void
+    {
+        $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::FieldOffice, $leyte));
+
+        $this->actingAs($this->issuer(Role::FieldOffice, $leyte))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertRedirect();
+
+        $this->assertNotNull($link->fresh()->revoked_at);
+    }
+
+    /**
+     * A link issued by HRD reads the whole region, so it is not a branch
+     * office's to cut — the refusal is the correct answer, not an awkward one.
+     */
+    public function test_a_field_office_cannot_revoke_an_unscoped_station(): void
+    {
+        $leyte = FieldOffice::where('code', 'lfoi')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::Admin));
+
+        $this->actingAs($this->issuer(Role::FieldOffice, $leyte))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertNotFound();
+
+        $this->assertNull($link->fresh()->revoked_at);
+    }
+
+    public function test_hrd_can_still_revoke_any_station(): void
+    {
+        $samar = FieldOffice::where('code', 'sfo')->firstOrFail();
+
+        $link = $this->linkIssuedBy($this->issuer(Role::FieldOffice, $samar));
+
+        $this->actingAs($this->issuer(Role::Admin))
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertRedirect();
+
+        $this->assertNotNull($link->fresh()->revoked_at);
+    }
+
+    // ------------------------------------------------------- the audit trail
+
+    public function test_issuing_a_station_is_recorded(): void
+    {
+        $training = Training::factory()->create();
+        $issuer = $this->issuer();
+
+        $this->actingAs($issuer)
+            ->post("/admin/trainings/{$training->id}/scan-links", ['label' => 'Main door'])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'scan-link.issued',
+            'causer_id' => $issuer->getKey(),
+        ]);
+    }
+
+    public function test_revoking_a_station_is_recorded(): void
+    {
+        $link = $this->linkIssuedBy($this->issuer());
+        $actor = $this->issuer(Role::SuperAdmin);
+
+        $this->actingAs($actor)
+            ->delete("/admin/scan-links/{$link->id}")
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'scan-link.revoked',
+            'causer_id' => $actor->getKey(),
+        ]);
+    }
+
+    /**
+     * Two people reaching for the same kill switch is the normal case when a
+     * phone goes missing. The second must not move the timestamp, or the trail
+     * would say the door closed later than it did.
+     */
+    public function test_revoking_twice_does_not_move_the_revocation_time(): void
+    {
+        $link = $this->linkIssuedBy($this->issuer());
+        $actor = $this->issuer(Role::SuperAdmin);
+
+        $this->actingAs($actor)->delete("/admin/scan-links/{$link->id}")->assertRedirect();
+        $first = $link->fresh()->revoked_at;
+
+        $this->travel(5)->minutes();
+
+        $this->actingAs($actor)->delete("/admin/scan-links/{$link->id}")->assertRedirect();
+
+        $this->assertEquals($first, $link->fresh()->revoked_at);
     }
 }

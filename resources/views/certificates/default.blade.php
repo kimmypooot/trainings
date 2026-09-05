@@ -134,8 +134,28 @@
             <img class="seal" src="{{ $mark }}" alt="">
         @endif
 
-        <p class="issuer">Civil Service Commission</p>
-        <p class="office">Regional Office VIII &middot; Eastern Visayas</p>
+        {{--
+            The issuing office, from config rather than typed here.
+
+            This is the one place in the app where a wrong office name cannot
+            be corrected afterwards: a certificate is rendered once at release
+            and stored, so a template fix reaches new documents only and every
+            certificate already issued keeps whatever this said at the time.
+            Every other identity string in the app is recoverable; this one
+            hardens the moment it is printed.
+
+            The masthead used to read "Civil Service Commission" over
+            "Regional Office VIII · Eastern Visayas", with the office and the
+            region typed in. It is now the full office name over the region,
+            which keeps the same two-line hierarchy without needing a third
+            config key for the office name minus its "Civil Service
+            Commission" prefix. The region is omitted when unset, following
+            the rest of config/office.php — no region beats the wrong one.
+        --}}
+        <p class="issuer">{{ config('office.name') }}</p>
+        @if ($region = config('office.region'))
+            <p class="office">{{ $region }}</p>
+        @endif
 
         <h1 class="title">Certificate of Completion</h1>
         <div class="rule"></div>
@@ -164,7 +184,9 @@
             <td width="40%">
                 <div class="signature-line">
                     {{ $training->signatory_name ?: 'Authorized Signatory' }}<br>
-                    <span style="font-size: 10px; color: #6b7280;">Civil Service Commission RO VIII</span>
+                    @if ($shortName = config('office.short_name'))
+                        <span style="font-size: 10px; color: #6b7280;">{{ $shortName }}</span>
+                    @endif
                 </div>
             </td>
             <td width="30%" style="text-align: center;">

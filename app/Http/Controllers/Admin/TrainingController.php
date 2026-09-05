@@ -134,7 +134,66 @@ class TrainingController extends Controller
             // narrowed by the search box) so the tabs stay a stable map of the
             // catalogue; "All" carries the region-wide total.
             'tabs' => $this->statusTabs(),
+            'summary' => $this->summary(),
         ]);
+    }
+
+    /**
+     * The calendar at a glance — deliberately *not* a second set of status
+     * counts.
+     *
+     * The chips under this row already carry one per status, including the
+     * catalogue total on "All", so tiles for "All runs" and "Published" would
+     * be the same six numbers printed twice, three centimetres apart. What the
+     * chips cannot answer is *when*: a run's status says it is published, not
+     * whether it is happening this morning. So every figure here is about the
+     * schedule, and the two views compose instead of repeating.
+     *
+     * `running` is the one this page had no way to show at all. A run that has
+     * started and not finished is in neither the upcoming nor the finished
+     * bucket, and it is the one whose roster somebody is most likely to want
+     * today.
+     *
+     * Runs, never people: the catalogue is regional while participant figures
+     * are scoped to a field office, so a row mixing the two would need half of
+     * it to carry a "your office only" caveat — the exact confusion the notice
+     * above these tiles exists to prevent. People are counted on the dashboard
+     * and in the reports, where the scope is uniform.
+     *
+     * Not narrowed by the search box or the chips, for the same reason the
+     * tabs are not: `useFilters` does not reload it, so a filtered figure would
+     * go stale rather than follow.
+     *
+     * @return array<string, int>
+     */
+    private function summary(): array
+    {
+        $now = now();
+        $published = TrainingStatus::Published->value;
+        // A single-day run has no ends_at, so starts_at is its end.
+        $end = 'COALESCE(ends_at, starts_at)';
+
+        $row = (array) Training::query()->toBase()->selectRaw(
+            "SUM(CASE WHEN status = ? AND starts_at <= ? AND {$end} >= ? THEN 1 ELSE 0 END) as running,"
+            .' SUM(CASE WHEN status = ? AND starts_at > ? AND starts_at <= ? THEN 1 ELSE 0 END) as this_week,'
+            .' SUM(CASE WHEN status = ? AND starts_at > ? THEN 1 ELSE 0 END) as upcoming,'
+            // Finished but never closed out — the same backlog the dashboard
+            // names, surfaced where the rosters that clear it actually are.
+            ."SUM(CASE WHEN {$end} < ? AND status NOT IN (?, ?) THEN 1 ELSE 0 END) as ended",
+            [
+                $published, $now, $now,
+                $published, $now, $now->copy()->addWeek(),
+                $published, $now,
+                $now, TrainingStatus::Cancelled->value, TrainingStatus::Draft->value,
+            ],
+        )->first();
+
+        return [
+            'running' => (int) ($row['running'] ?? 0),
+            'this_week' => (int) ($row['this_week'] ?? 0),
+            'upcoming' => (int) ($row['upcoming'] ?? 0),
+            'ended' => (int) ($row['ended'] ?? 0),
+        ];
     }
 
     /**

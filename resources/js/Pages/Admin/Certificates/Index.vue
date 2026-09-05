@@ -10,7 +10,8 @@ import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppPagination from '@/Components/AppPagination.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import { useFilters, filteringClass } from '@/useFilters';
 import { useDownload } from '@/useDownload';
 
@@ -82,6 +83,25 @@ const copyVerifyUrl = async (certificate) => {
     copied.value = certificate.id;
     setTimeout(() => (copied.value = null), 2000);
 };
+
+/*
+ * What can be done with one certificate, listed once for both layouts — the
+ * card list had been missing the verify link entirely.
+ *
+ * Copying confirms itself by swapping icon, tone and label together for two
+ * seconds. Nothing else on screen changes when a link reaches the clipboard,
+ * so the control has to be the receipt.
+ */
+const actionsFor = (certificate) => [
+    // A file response, not an Inertia visit.
+    { label: 'Download', icon: 'download', href: certificate.download_url, external: true },
+    copied.value === certificate.id
+        ? { label: 'Copied', icon: 'check', tone: 'success', onClick: () => copyVerifyUrl(certificate) }
+        : { label: 'Copy verify link', icon: 'link', onClick: () => copyVerifyUrl(certificate) },
+    ...(props.can.resend
+        ? [{ label: 'Re-send', icon: 'envelope', onClick: () => (resending.value = certificate) }]
+        : []),
+];
 </script>
 
 <template>
@@ -96,10 +116,26 @@ const copyVerifyUrl = async (certificate) => {
             </AppAlert>
 
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <AppStat label="Issued" :value="stats.total" />
-                <AppStat label="Issued This Year" :value="stats.this_year" />
-                <AppStat label="Not Yet Emailed" :value="stats.not_emailed" />
-                <AppStat label="Public Verifications" :value="stats.verifications" />
+                <AppStatTile label="Issued" :value="stats.total" icon="certificate" />
+                <AppStatTile label="Issued This Year" :value="stats.this_year" icon="calendar" />
+                <!--
+                    The one figure on this row that is work rather than record,
+                    so it is the one allowed to change colour: amber while
+                    anything is undelivered, green once nothing is.
+                -->
+                <AppStatTile
+                    label="Not Yet Emailed"
+                    :value="stats.not_emailed"
+                    icon="envelope"
+                    :tone="stats.not_emailed > 0 ? 'warning' : 'success'"
+                    :caption="stats.not_emailed > 0 ? 'Waiting to be sent' : 'Every certificate delivered'"
+                />
+                <AppStatTile
+                    label="Public Verifications"
+                    :value="stats.verifications"
+                    icon="shield"
+                    caption="Lookups on the public checker"
+                />
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -208,30 +244,7 @@ const copyVerifyUrl = async (certificate) => {
                                         </p>
                                     </td>
                                     <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                        <a
-                                            :href="certificate.download_url"
-                                            class="text-xs font-semibold text-csc-blue hover:underline"
-                                        >
-                                            Download
-                                        </a>
-                                        <span class="px-2 text-csc-line">|</span>
-                                        <button
-                                            type="button"
-                                            class="rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                            @click="copyVerifyUrl(certificate)"
-                                        >
-                                            {{ copied === certificate.id ? 'Copied' : 'Copy verify link' }}
-                                        </button>
-                                        <template v-if="can.resend">
-                                            <span class="px-2 text-csc-line">|</span>
-                                            <button
-                                                type="button"
-                                                class="rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="resending = certificate"
-                                            >
-                                                Re-send
-                                            </button>
-                                        </template>
+                                        <AppRowActions :actions="actionsFor(certificate)" />
                                     </td>
                                 </tr>
                             </tbody>
@@ -260,21 +273,8 @@ const copyVerifyUrl = async (certificate) => {
                                 Not yet emailed
                             </p>
 
-                            <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 border-t border-csc-line pt-3">
-                                <a
-                                    :href="certificate.download_url"
-                                    class="text-xs font-semibold text-csc-blue hover:underline"
-                                >
-                                    Download
-                                </a>
-                                <button
-                                    v-if="can.resend"
-                                    type="button"
-                                    class="rounded text-xs font-semibold text-csc-blue hover:underline"
-                                    @click="resending = certificate"
-                                >
-                                    Re-send
-                                </button>
+                            <div class="mt-3 border-t border-csc-line pt-3">
+                                <AppRowActions :actions="actionsFor(certificate)" layout="card" />
                             </div>
                         </li>
                     </ul>

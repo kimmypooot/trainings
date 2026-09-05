@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Auth\Events\Lockout;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -38,6 +39,18 @@ class LoginController extends Controller
         $throttleKey = Str::transliterate(Str::lower($credentials['email']).'|'.$request->ip());
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            /*
+             * Fired by hand because this limiter is hand-rolled.
+             *
+             * Laravel raises Lockout from its own ThrottlesLogins trait, which
+             * this controller does not use — so without this line the one
+             * moment most worth recording produces no event at all, and
+             * RecordAuthenticationEvents never hears about it. A lockout is the
+             * clearest signal in the authentication log that an account is
+             * being attacked rather than that somebody forgot their password.
+             */
+            event(new Lockout($request));
+
             throw ValidationException::withMessages([
                 'form' => 'Too many login attempts. Please try again in '
                     .ceil(RateLimiter::availableIn($throttleKey) / 60).' minute(s).',

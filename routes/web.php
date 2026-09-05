@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\EvaluationController as AdminEvaluationController
 use App\Http\Controllers\Admin\ExportController as AdminExportController;
 use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeController;
 use App\Http\Controllers\Admin\MaintenanceController as AdminMaintenanceController;
+use App\Http\Controllers\Admin\OfficeSettingController as AdminOfficeSettingController;
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PhysicalOrRequestController as AdminPhysicalOrRequestController;
@@ -194,7 +195,12 @@ Route::get('/maintenance', fn () => Inertia::render('Maintenance', [
 ]))->name('maintenance');
 
 Route::get('/login', [LoginController::class, 'create'])->name('login');
-Route::post('/login', [LoginController::class, 'store'])->name('login.store');
+Route::post('/login', [LoginController::class, 'store'])
+    // Per address. LoginController throttles per email|ip, which caps attempts
+    // against one account and none at all on one address walking a list — which
+    // is what credential stuffing is. Both are needed; neither replaces the other.
+    ->middleware('throttle:login')
+    ->name('login.store');
 
 Route::get('/register', [RegisterController::class, 'create'])->name('register');
 // Throttled like every other unauthenticated state-change endpoint here —
@@ -527,6 +533,23 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             // screen that flips it back.
             Route::get('/maintenance', [AdminMaintenanceController::class, 'index'])->name('maintenance');
             Route::post('/maintenance', [AdminMaintenanceController::class, 'update'])->name('maintenance.update');
+
+            /*
+             * The office's own identity — name, address, contacts, region, and
+             * the certificate number prefix.
+             *
+             * Superadmin for the same reason as the maintenance switch: this is
+             * what the site calls itself in its footer, in every email it sends
+             * and on every certificate it issues, and a certificate is rendered
+             * once and stored, so a wrong value here outlives its correction.
+             * Not an operational setting a training officer should reach
+             * between two registrations.
+             *
+             * These were .env settings, which meant changing the office
+             * telephone number needed a shell and a config:cache clear.
+             */
+            Route::get('/office', [AdminOfficeSettingController::class, 'index'])->name('office');
+            Route::post('/office', [AdminOfficeSettingController::class, 'update'])->name('office.update');
         });
 
         /*
@@ -611,6 +634,21 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('field-offices.update');
             Route::post('/field-offices/{fieldOffice}/toggle', [AdminFieldOfficeController::class, 'toggle'])
                 ->name('field-offices.toggle');
+
+            /*
+             * Deleting an office sits one role above managing them.
+             *
+             * Every other action here is reversible — an office deactivated by
+             * mistake is reactivated. This one is not, so it is superadmin's,
+             * the same bar as the maintenance switch and the office's own
+             * identity. The controller refuses outright for any office that
+             * participants or staff are still attached to, whoever asks: both
+             * foreign keys are nullOnDelete, so the database would blank those
+             * links rather than object.
+             */
+            Route::delete('/field-offices/{fieldOffice}', [AdminFieldOfficeController::class, 'destroy'])
+                ->middleware(EnsureUserIsStaff::class.':superadmin')
+                ->name('field-offices.destroy');
 
             /*
              * Subject matter experts. Reference data in the same sense a field
@@ -731,38 +769,49 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
          * — see ExportScopingTest, which is the guard on that.
          */
         Route::get('/analytics', AdminAnalyticsController::class)->name('analytics');
-        Route::get('/exports/participants', [AdminExportController::class, 'participants'])
-            ->name('exports.participants');
-        Route::get('/exports/certificates', [AdminExportController::class, 'certificates'])
-            ->name('exports.certificates');
-        Route::get('/exports/registrations', [AdminExportController::class, 'registrations'])
-            ->name('exports.registrations');
-        // One participant's whole record, for when someone asks what they have
-        // attended. Office-scoped in the controller like the directory itself.
-        Route::get('/exports/participants/{user}/history', [AdminExportController::class, 'participantHistory'])
-            ->name('exports.participant-history');
-        Route::get('/exports/trainings/{training}/roster', [AdminExportController::class, 'roster'])
-            ->name('exports.roster');
-        // The affected-participants list for a rescheduled run, with the fee
-        // state that decides each case. Office-scoped in the controller like
-        // every other export here.
-        Route::get('/exports/trainings/{training}/affected', [AdminExportController::class, 'affected'])
-            ->name('exports.affected');
-        Route::get('/exports/payments', [AdminExportController::class, 'payments'])
-            ->name('exports.payments');
-        // Per-training revenue, with the PRIME-HRM discounts identified.
-        // Gated on the collecting-officer designation inside the controller,
-        // like the payments export it sits beside.
-        Route::get('/exports/trainings/{training}/revenue', [AdminExportController::class, 'revenue'])
-            ->name('exports.revenue');
-        // The analytics report exports. They share the ReportScope parser with
-        // the analytics page, so a download and the screen it came from always
-        // cover the same trainings; the revenue one is gated on the
-        // collecting-officer designation inside the controller.
-        Route::get('/exports/reports/revenue', [AdminExportController::class, 'revenueReport'])
-            ->name('exports.reports.revenue');
-        Route::get('/exports/reports/breakdown', [AdminExportController::class, 'breakdownReport'])
-            ->name('exports.reports.breakdown');
+
+        /*
+         * Every export below is throttled tighter than the rest of the admin
+         * area: each runs a full-table query and streams it, and the page
+         * hands the download to a plain <a href> and forgets about it, so the
+         * cost is invisible from the browser. Twenty a minute is far more than
+         * useDownload.js will let a person start by clicking, and far less
+         * than a loop.
+         */
+        Route::middleware('throttle:exports')->group(function () {
+            Route::get('/exports/participants', [AdminExportController::class, 'participants'])
+                ->name('exports.participants');
+            Route::get('/exports/certificates', [AdminExportController::class, 'certificates'])
+                ->name('exports.certificates');
+            Route::get('/exports/registrations', [AdminExportController::class, 'registrations'])
+                ->name('exports.registrations');
+            // One participant's whole record, for when someone asks what they have
+            // attended. Office-scoped in the controller like the directory itself.
+            Route::get('/exports/participants/{user}/history', [AdminExportController::class, 'participantHistory'])
+                ->name('exports.participant-history');
+            Route::get('/exports/trainings/{training}/roster', [AdminExportController::class, 'roster'])
+                ->name('exports.roster');
+            // The affected-participants list for a rescheduled run, with the fee
+            // state that decides each case. Office-scoped in the controller like
+            // every other export here.
+            Route::get('/exports/trainings/{training}/affected', [AdminExportController::class, 'affected'])
+                ->name('exports.affected');
+            Route::get('/exports/payments', [AdminExportController::class, 'payments'])
+                ->name('exports.payments');
+            // Per-training revenue, with the PRIME-HRM discounts identified.
+            // Gated on the collecting-officer designation inside the controller,
+            // like the payments export it sits beside.
+            Route::get('/exports/trainings/{training}/revenue', [AdminExportController::class, 'revenue'])
+                ->name('exports.revenue');
+            // The analytics report exports. They share the ReportScope parser with
+            // the analytics page, so a download and the screen it came from always
+            // cover the same trainings; the revenue one is gated on the
+            // collecting-officer designation inside the controller.
+            Route::get('/exports/reports/revenue', [AdminExportController::class, 'revenueReport'])
+                ->name('exports.reports.revenue');
+            Route::get('/exports/reports/breakdown', [AdminExportController::class, 'breakdownReport'])
+                ->name('exports.reports.breakdown');
+        });
 
         /*
          * The participants desk, ported from v1's admin/hrd/participants page.
@@ -961,8 +1010,37 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
     Route::get('/my/qr', [QrCodeController::class, 'show'])->name('qr.show');
     Route::get('/my/qr.png', [QrCodeController::class, 'image'])->name('qr.image');
     Route::post('/my/qr/regenerate', [QrCodeController::class, 'regenerate'])->name('qr.regenerate');
+});
 
-    // Where a scanned code lands; the controller restricts it to staff.
+/*
+ * Where a scanned participant badge lands.
+ *
+ * These are staff routes and now say so. They used to sit inside the
+ * participant group above with nothing but an isStaff() check inside the
+ * controller, and that check was coarser than every other attendance route in
+ * this file — with two consequences, both of which were reachable:
+ *
+ *  - `management` is deliberately named out of the attendance group further up
+ *    ("it reads rosters and reports and records nothing"), and
+ *    POST /admin/registrations/{id}/attendance duly refuses it with a 403. This
+ *    door did not, so an oversight role could record attendance through it.
+ *  - the controller applied no field-office scope, so a field office could
+ *    scan, read and check in another office's participant — the exact thing
+ *    AttendanceController::authorizeOffice exists to prevent.
+ *
+ * So the role list is the same one the rest of the venue work carries, and the
+ * controller re-resolves the participant against the actor's office.
+ *
+ * The paths and route names are unchanged, deliberately. Moving them under the
+ * /admin prefix would have been tidier and would have broken every badge
+ * already in circulation: the QR code encodes route('scan'), and codes are
+ * printed and carried. Fixing who may open a door is not a reason to invalidate
+ * the keys.
+ */
+Route::middleware([
+    'auth',
+    EnsureUserIsStaff::class.':field-office|collecting-officer|admin|superadmin',
+])->group(function () {
     Route::get('/scan/{token}', [QrCodeController::class, 'scan'])->name('scan');
     Route::post('/scan/{token}/check-in', [QrCodeController::class, 'checkIn'])->name('scan.check-in');
 });

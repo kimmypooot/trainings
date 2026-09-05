@@ -10,7 +10,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import { formatDateRange } from '@/dateRange';
 
@@ -72,9 +72,29 @@ const format = (value) => (value === null || value === undefined ? '—' : value
             </AppCard>
 
             <div class="grid gap-3 sm:grid-cols-3">
-                <AppStat label="Trainings" :value="expert.trainings_count" />
-                <AppStat label="Evaluations" :value="summary.responses" />
-                <AppStat label="Overall Rating" :value="format(summary.average)" />
+                <AppStatTile label="Trainings" :value="expert.trainings_count" icon="calendar" />
+                <AppStatTile label="Evaluations" :value="summary.responses" icon="clipboard" />
+                <!--
+                    The one figure here that is a verdict rather than a count,
+                    so it is the one that carries a tone. Four and above is the
+                    band the office treats as good; below three is the one worth
+                    a conversation. An expert with no responses yet gets neither.
+                -->
+                <AppStatTile
+                    label="Overall Rating"
+                    :value="format(summary.average)"
+                    icon="analytics"
+                    :tone="
+                        summary.responses === 0
+                            ? 'brand'
+                            : summary.average >= 4
+                              ? 'success'
+                              : summary.average >= 3
+                                ? 'warning'
+                                : 'danger'
+                    "
+                    :caption="summary.responses === 0 ? 'No responses yet' : 'Out of 5'"
+                />
             </div>
 
             <AppCard

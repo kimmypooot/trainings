@@ -8,12 +8,33 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppModal from '@/Components/AppModal.vue';
+import AppDonutChart from '@/Components/AppDonutChart.vue';
+import AppIcon from '@/Components/AppIcon.vue';
 import AppSkeleton from '@/Components/AppSkeleton.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
+import { formatCount, formatMoney, formatMoneyCompact } from '@/charts';
 import { formatDateRange } from '@/dateRange';
 
+/**
+ * The staff landing page.
+ *
+ * It used to be four counts and two lists — how much exists, and what is
+ * booked — which answered "how big is this" and nothing else. The four
+ * questions it answers now, in the order the page reads:
+ *
+ *   What is happening?      the KPI row, month to date against last month
+ *   What needs me?          the queue strip, only queues this role can clear
+ *   Where is it stuck?      the registration pipeline
+ *   What is at risk?        under-filled runs, and finished ones not closed out
+ *
+ * It deliberately does not restate the analytics report. Registrations by
+ * month, by category, by office, the demographic cuts and revenue per training
+ * all live there; anything here that needs a year of context to read belongs
+ * there too. See DashboardMetrics for the same split stated from the data end.
+ */
 const props = defineProps({
-    stats: { type: Object, required: true },
+    metrics: { type: Object, required: true },
+    totals: { type: Object, required: true },
     scopedTo: { type: String, default: null },
     modalLimit: { type: Number, default: 50 },
     upcoming: { type: Array, required: true },
@@ -23,26 +44,82 @@ const props = defineProps({
     awaitingCompletionList: { type: Array, default: null },
 });
 
+const formats = {
+    count: formatCount,
+    money: formatMoney,
+    percent: (value) => `${value}%`,
+};
+
 /*
- * A count is the natural handle for the list behind it. Trainings and
- * participants already have index pages worth landing on; registrations does
- * not, so that one opens a dialog rather than earning a page of its own.
+ * A KPI's headline figure.
  *
- * Drafts used to hold the fourth slot. It was the least urgent number on a page
- * whose reader is looking for work, and it is still a click away under
- * Trainings — the queue depth is what belongs in a tile. A role with no such
- * queue gets a three-tile row rather than a zero that reads as "all clear".
+ * Money is shown compact — ₱1.2M rather than ₱1,248,300.00. At display size
+ * the full figure wraps to two lines and the tile stops being scannable, and
+ * the exact peso is a question for the payments register, not for a tile whose
+ * job is "more or less than last month". A rate with no window to measure
+ * (nothing ended, so nothing could be completed) shows an em dash: 0% would be
+ * a claim that work was left undone.
  */
-const tiles = computed(() =>
-    [
-        { label: 'Published', value: props.stats.published, href: '/admin/trainings?status=published' },
-        { label: 'Participants', value: props.stats.participants, href: '/admin/participants' },
-        { label: 'Registrations', value: props.stats.registrations, modal: 'registrations', prop: 'registrationsList' },
-        props.stats.requests === null
-            ? null
-            : { label: 'Pending Requests', value: props.stats.requests, href: '/admin/requests' },
-    ].filter(Boolean)
-);
+const headline = (kpi) => {
+    if (kpi.value === null) return '—';
+    if (kpi.format === 'money') return formatMoneyCompact(kpi.value);
+
+    return formats[kpi.format](kpi.value);
+};
+
+/*
+ * The comparison chip.
+ *
+ * Three shapes, because three things can be true. A rate moves in *points*
+ * (a percentage change of a percentage is ambiguous — "up 8%" from 80% could
+ * be 88% or 86.4%). A figure with nothing behind it did not rise by any
+ * percentage, it started, so it says so rather than printing +100%. Everything
+ * else is a percentage against the same stretch of last month.
+ */
+const comparison = (kpi) => {
+    const delta = kpi.delta;
+
+    if (!delta) return null;
+
+    const previous = kpi.format === 'money' ? formatMoneyCompact(delta.previous) : formatCount(delta.previous);
+
+    if ('points' in delta) {
+        const sign = delta.points > 0 ? '+' : '';
+
+        return {
+            direction: delta.direction,
+            text: delta.points === 0 ? 'No change' : `${sign}${delta.points} pts`,
+            caption: `from ${delta.previous}%`,
+        };
+    }
+
+    if (delta.percent === null) {
+        return {
+            direction: delta.direction,
+            text: delta.direction === 'up' ? 'New' : 'No change',
+            caption: `nothing in ${props.metrics.period.comparison}`,
+        };
+    }
+
+    const sign = delta.percent > 0 ? '+' : '';
+
+    return {
+        direction: delta.direction,
+        text: delta.percent === 0 ? 'No change' : `${sign}${delta.percent}%`,
+        caption: `vs ${previous} in ${props.metrics.period.comparison}`,
+    };
+};
+
+/** True when every queue this role owns is empty. */
+const allClear = computed(() => props.metrics.attention.every((item) => item.count === 0));
+
+/*
+ * The donut's own total counts every status, including cancelled and rejected
+ * — which is right for the chart (they are part of the picture) and wrong for
+ * the figure in the hole, where the reader expects the live number the rest of
+ * the page uses.
+ */
+const pipelineTotal = computed(() => formatCount(props.totals.registrations));
 
 // Which dialog is open, or null. One at a time by construction.
 const openModal = ref(null);
@@ -96,30 +173,198 @@ const capped = (rows, total) => rows?.length >= props.modalLimit && total > prop
             </AppAlert>
 
             <!--
-                The dashboard's numbers are today's; analytics is the same
-                domain over time, and until now nothing on this page pointed at
-                it. Staff-wide, matching the nav item's own role list.
+                The period this page is about, the size of the operation, and
+                the way through to the report. One line, because none of the
+                three is the reason anybody opened the dashboard — but the KPI
+                row underneath is meaningless without the first of them.
+
+                The inventory counts were four tiles of their own until this
+                change. They barely move between visits, so they are stated
+                once here and linked, and the row below is given over to the
+                figures that do move.
             -->
-            <div class="flex justify-end">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold text-csc-ink">
+                        {{ metrics.period.label }}
+                        <span class="font-normal text-csc-ink-subtle">
+                            · first {{ metrics.period.days }} day{{ metrics.period.days === 1 ? '' : 's' }}
+                        </span>
+                    </p>
+                    <p class="mt-0.5 text-xs text-csc-ink-subtle">
+                        <Link href="/admin/participants" class="font-medium text-csc-blue hover:underline">
+                            {{ totals.participants }} participants
+                        </Link>
+                        ·
+                        <Link
+                            href="/admin/trainings?status=published"
+                            class="font-medium text-csc-blue hover:underline"
+                        >
+                            {{ totals.published }} published trainings
+                        </Link>
+                    </p>
+                </div>
+
                 <AppButton href="/admin/analytics" size="sm" variant="ghost" icon="analytics">
                     View Analytics
                 </AppButton>
             </div>
 
+            <!--
+                Two per row on a phone rather than one: these are the figures
+                the page exists for, and a single column pushes the fourth of
+                them two screens down.
+            -->
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <AppStat
-                    v-for="tile in tiles"
-                    :key="tile.label"
-                    :label="tile.label"
-                    :value="tile.value"
-                    :href="tile.href"
-                    :action="Boolean(tile.modal)"
-                    @click="tile.modal && show(tile.modal, tile.prop)"
+                <AppStatTile
+                    v-for="kpi in metrics.kpis"
+                    :key="kpi.key"
+                    :label="kpi.label"
+                    :value="headline(kpi)"
+                    :caption="kpi.caption"
+                    :icon="kpi.icon"
+                    :tone="kpi.tone"
+                    :spark="kpi.spark"
+                    :delta="comparison(kpi)"
                 />
             </div>
 
+            <!--
+                The work, before anything describing it.
+
+                Every queue this role can clear, zeros included — an empty
+                queue is worth confirming, and a strip that reorders itself
+                between visits cannot be learned. Queues the role cannot act on
+                are absent rather than greyed: DashboardMetrics drops them.
+            -->
             <AppCard
-                title="Needs Attention"
+                title="Needs Your Attention"
+                :subtitle="
+                    allClear
+                        ? 'Every queue you can act on is clear.'
+                        : 'Open items waiting on someone at your role.'
+                "
+            >
+                <ul class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <li v-for="item in metrics.attention" :key="item.key">
+                        <Link
+                            :href="item.href"
+                            class="flex items-center gap-3 rounded-lg border p-3 transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                            :class="
+                                item.count > 0
+                                    ? 'border-warning/30 bg-warning-soft/50 hover:border-warning'
+                                    : 'border-csc-line hover:border-csc-blue/40'
+                            "
+                        >
+                            <!--
+                                Icon and colour together, never colour alone:
+                                a cleared queue reads as cleared in greyscale.
+                            -->
+                            <span
+                                class="grid size-8 shrink-0 place-items-center rounded-lg"
+                                :class="item.count > 0 ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success'"
+                                aria-hidden="true"
+                            >
+                                <AppIcon :name="item.count > 0 ? 'clock' : 'check'" size="sm" />
+                            </span>
+                            <span class="min-w-0">
+                                <span
+                                    class="block text-lg font-bold"
+                                    :class="item.count > 0 ? 'text-warning' : 'text-csc-ink-subtle'"
+                                >
+                                    {{ item.count }}
+                                </span>
+                                <span class="block text-xs text-csc-ink-muted">{{ item.label }}</span>
+                            </span>
+                        </Link>
+                    </li>
+                </ul>
+            </AppCard>
+
+            <div class="grid gap-5 lg:grid-cols-2">
+                <!--
+                    Where registrations are sitting. Not a history — a queue
+                    depth per stage, which is why it is on this page and the
+                    monthly curve is on the report.
+                -->
+                <AppCard
+                    title="Registration Pipeline"
+                    subtitle="Every registration by stage. The centre counts only those holding a seat — cancelled and rejected are in the chart but not in that figure."
+                >
+                    <template #action>
+                        <AppButton size="sm" variant="ghost" @click="show('registrations', 'registrationsList')">
+                            Recent
+                        </AppButton>
+                    </template>
+
+                    <AppDonutChart
+                        :rows="metrics.pipeline"
+                        :center-value="pipelineTotal"
+                        center-label="Holding a seat"
+                        empty-text="No registrations yet."
+                    />
+                </AppCard>
+
+                <!--
+                    The runs that are not filling, emptiest first. A to-do list
+                    rather than a census, so it is capped and each row opens the
+                    roster it is about.
+                -->
+                <AppCard
+                    title="Capacity Watch"
+                    subtitle="Published upcoming runs with the most seats left."
+                    :padded="metrics.capacity.length > 0"
+                >
+                    <ul v-if="metrics.capacity.length" class="divide-y divide-csc-line">
+                        <li v-for="run in metrics.capacity" :key="run.label" class="py-3">
+                            <div class="flex items-baseline justify-between gap-3">
+                                <Link
+                                    :href="run.href"
+                                    class="min-w-0 truncate text-sm font-medium text-csc-blue hover:underline"
+                                >
+                                    {{ run.label }}
+                                </Link>
+                                <span
+                                    class="shrink-0 text-xs font-semibold"
+                                    :class="run.count < 50 ? 'text-warning' : 'text-csc-ink-subtle'"
+                                >
+                                    {{ run.registered }} / {{ run.capacity }}
+                                </span>
+                            </div>
+                            <!--
+                                The meter spans the row and the reading sits
+                                under it. Squeezed into a column beside the bar
+                                it wrapped to two lines and every row came out a
+                                different height.
+                            -->
+                            <div
+                                aria-hidden="true"
+                                class="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-csc-line"
+                            >
+                                <div
+                                    class="h-full rounded-full"
+                                    :class="run.count < 50 ? 'bg-warning' : 'bg-csc-blue'"
+                                    :style="{ width: `${Math.max(run.count, 1.5)}%` }"
+                                />
+                            </div>
+                            <p class="mt-1 text-2xs text-csc-ink-subtle">
+                                {{ run.count }}% filled · starts {{ run.starts_at }}
+                            </p>
+                        </li>
+                    </ul>
+
+                    <AppEmptyState
+                        v-else
+                        compact
+                        title="Nothing to watch"
+                        description="No published upcoming run has a capacity set, so there is no fill to measure."
+                        icon="calendar"
+                    />
+                </AppCard>
+            </div>
+
+            <AppCard
+                title="Awaiting Completion"
                 subtitle="Finished trainings with participants not yet marked complete"
                 :padded="awaitingCompletion.length > 0"
             >
@@ -296,10 +541,10 @@ const capped = (rows, total) => rows?.length >= props.modalLimit && total > prop
                 to tell otherwise from inside the dialog.
             -->
             <p
-                v-if="capped(registrationsList, stats.registrations)"
+                v-if="capped(registrationsList, totals.registrations)"
                 class="mt-4 border-t border-csc-line pt-4 text-xs text-csc-ink-subtle"
             >
-                Showing the {{ modalLimit }} most recent of {{ stats.registrations }}. Open a training's roster for
+                Showing the {{ modalLimit }} most recent of {{ totals.registrations }}. Open a training's roster for
                 the full list.
             </p>
 
@@ -319,7 +564,7 @@ const capped = (rows, total) => rows?.length >= props.modalLimit && total > prop
 
         <AppModal
             :open="openModal === 'awaiting'"
-            title="Needs Attention"
+            title="Awaiting Completion"
             subtitle="Finished trainings with participants not yet marked complete"
             size="lg"
             @close="openModal = null"

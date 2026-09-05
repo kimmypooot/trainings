@@ -58,7 +58,9 @@ class PhysicalOrRequestTest extends TestCase
      * A verified, receipted payment on a paid training — the only shape that
      * can be mailed a physical OR.
      */
-    private function receiptedPayment(User $participant): Payment
+    /** The OR number is a parameter because `or_number` is unique — two receipted
+     * payments in one test need two of them. */
+    private function receiptedPayment(User $participant, string $orNumber = 'OR-2026-10001'): Payment
     {
         return Payment::factory()->verified()->create([
             'user_id' => $participant->getKey(),
@@ -66,7 +68,7 @@ class PhysicalOrRequestTest extends TestCase
                 'payment_required' => true,
                 'payment_amount' => 1500,
             ])->getKey(),
-            'or_number' => 'OR-2026-10001',
+            'or_number' => $orNumber,
             'collecting_officer_id' => $this->officer(Role::CollectingOfficer)->getKey(),
         ]);
     }
@@ -173,6 +175,65 @@ class PhysicalOrRequestTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page->component('My/Payments')
                 ->where('payments.0.can_request_physical_or', false));
+    }
+
+    /**
+     * The gate follows `office.psgc_region`, so another office's deployment
+     * gates on its own region.
+     *
+     * This was `str_contains($region, 'VIII')` written into Profile — correct
+     * in exactly one deployment. Everywhere else nobody matched, so every
+     * participant read as an outsider and the whole region was offered courier
+     * delivery of a receipt they could have collected at the counter. It was
+     * silent: no error, no wrong page, just unexpected postage.
+     */
+    public function test_the_region_gate_follows_the_configured_office(): void
+    {
+        config(['office.psgc_region' => 'Region V (Bicol Region)']);
+
+        // Local to a Bicol office, so the option is refused.
+        $local = $this->participant('Region V (Bicol Region)');
+        $localPayment = $this->receiptedPayment($local);
+
+        $this->actingAs($local)
+            ->post("/my/payments/{$localPayment->id}/physical-or", [])
+            ->assertSessionHasErrors('physical_or');
+
+        $this->assertSame(0, PhysicalOrRequest::count());
+
+        // An Eastern Visayas participant is now the outsider.
+        $this->flushSession();
+
+        $visitor = $this->participant('Region VIII (Eastern Visayas)');
+        $visitorPayment = $this->receiptedPayment($visitor, 'OR-2026-10002');
+
+        $this->actingAs($visitor)
+            ->post("/my/payments/{$visitorPayment->id}/physical-or", [])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, PhysicalOrRequest::count());
+    }
+
+    /**
+     * Roman numerals are prefixes of one another, which is why the match is
+     * word-bounded rather than a substring test.
+     *
+     * "REGION VIII" contains "VII". Generalising the old check by swapping the
+     * numeral in would have made a Region VII office treat every Region VIII
+     * participant as local — the same silent failure, one region over.
+     */
+    public function test_a_neighbouring_roman_numeral_is_not_treated_as_local(): void
+    {
+        config(['office.psgc_region' => 'Region VII (Central Visayas)']);
+
+        $participant = $this->participant('Region VIII (Eastern Visayas)');
+        $payment = $this->receiptedPayment($participant);
+
+        $this->actingAs($participant)
+            ->post("/my/payments/{$payment->id}/physical-or", [])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, PhysicalOrRequest::count());
     }
 
     // --- Duplicates ------------------------------------------------------

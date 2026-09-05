@@ -16,8 +16,8 @@ use Illuminate\Validation\ValidationException;
  * The physical-OR delivery pipeline: filing a request and walking it from
  * "please mail me my receipt" to "delivered".
  *
- * A participant outside Region VIII can ask for a physical copy of their
- * official receipt. That is not a payment workflow — the training fee was
+ * A participant outside the region this office serves can ask for a physical
+ * copy of their official receipt. That is not a payment workflow — the fee was
  * already settled — so it deliberately lives beside, not inside,
  * PaymentService. The only money involved is a courier fee, paid separately
  * via GCash and verified against a screenshot.
@@ -78,7 +78,7 @@ class PhysicalOrRequestService
             // do not pay for postage. Fails open on a missing profile region.
             if (! $user->profile?->isOutsideCscRegion()) {
                 throw ValidationException::withMessages([
-                    'physical_or' => 'This option is for participants outside Region VIII.',
+                    'physical_or' => 'This option is for participants outside '.config('office.region').'.',
                 ]);
             }
 

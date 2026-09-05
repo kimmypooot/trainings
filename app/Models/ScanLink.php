@@ -12,6 +12,25 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
+ * @property bool $is_test
+ * @property CarbonImmutable $expires_at
+ * @property CarbonImmutable|null $revoked_at
+ * @property CarbonImmutable|null $last_used_at
+ * @property-read Training $training
+ * @property-read User $issuer
+ *
+ * Larastan reads casts from the `$casts` property, not from the `casts()`
+ * method this model uses, so without these the three datetimes resolve to the
+ * column's `string` and every `->format()` and `->isFuture()` on them reads as
+ * a method call on a string — the same problem `User` documents for its `role`.
+ * The relations are declared for the same reason: a `BelongsTo` resolves to the
+ * generic `Model`, so `$link->training->title` looked like an undefined
+ * property. Both are statements of what the code already does, not
+ * suppressions — a wrong call on any of them still fails here.
+ *
+ * `training` and `issuer` are non-nullable on purpose: both foreign keys are
+ * `NOT NULL` and cascade on delete, so a link cannot outlive either.
+ *
  * A shareable, expiring grant to scan one training's door.
  *
  * The credential is deliberately two halves — see the migration for why. This

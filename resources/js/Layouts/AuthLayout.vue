@@ -1,6 +1,7 @@
 <script setup>
 import { useId } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import AppBrandBackdrop from '@/Components/AppBrandBackdrop.vue';
 import AppLogo from '@/Components/AppLogo.vue';
 
 /**
@@ -11,6 +12,12 @@ import AppLogo from '@/Components/AppLogo.vue';
  * tagline, and benefit bullets differ — so the copy comes in as props and the
  * form rides the default slot. The pattern's SVG id is per-instance (useId) so
  * two auth screens can never collide on the defs reference.
+ *
+ * Heights are `dvh`, not `vh`. On a phone `100vh` is the viewport with the
+ * browser's own chrome subtracted *as if it were hidden*, so a full-height
+ * column is taller than what is actually on screen and the page gains a scroll
+ * it does not need — on the shortest screen here, enough to push the Sign in
+ * button under the address bar. `dvh` tracks the live viewport instead.
  */
 defineProps({
     headline: { type: String, required: true },
@@ -23,59 +30,50 @@ const patternId = useId();
 </script>
 
 <template>
-    <div class="min-h-screen lg:grid lg:grid-cols-2">
+    <div class="min-h-dvh lg:grid lg:grid-cols-2">
         <!-- Left: branding. Hidden below lg. -->
-        <aside class="relative hidden overflow-hidden lg:flex lg:min-h-screen lg:flex-col lg:justify-center">
+        <aside class="relative hidden overflow-hidden lg:flex lg:min-h-dvh lg:flex-col lg:justify-center">
             <!--
-                The media condition is load-bearing, not decoration. This aside
-                is `hidden lg:flex`, but display:none does not stop a browser
-                fetching an <img> inside it — every phone was pulling the full
-                facade photo for a panel it would never show. Both sources are
-                gated at the same breakpoint the panel appears at, so below lg
-                there is no candidate to fetch at all.
+                The shared backdrop, not a local copy of it.
+
+                This panel used to hand-roll the facade: a <picture> with two
+                media-gated <source>s, and beside it an inline
+                `linear-gradient(160deg, …)` whose three stops were
+                character-for-character AppBrandBackdrop's `full` — the exact
+                duplication that component was extracted to prevent, and the
+                reason its own comment warns about "a three-stop gradient with
+                three slightly different angles in it".
+
+                The media gating went with it, and it turns out never to have
+                saved the bytes it was written for. `app.blade.php` carries an
+                unconditional `<link rel="preload" as="image"
+                fetchpriority="high">` for the facade — it is in the shared
+                shell, so it fires on /login and /register exactly as it does on
+                the landing page, and a preload fetches whether or not anything
+                uses it. So a phone opening the sign-in screen was already
+                pulling the full photograph at high priority and then painting a
+                flat blue band over the top of it: the download happened, and
+                the only thing the gating achieved was throwing it away.
+
+                Measured on /register at a 310px viewport:
+                `performance.getEntriesByType('resource')` shows exactly one
+                entry for cscbg_facade.webp, 429KB, `initiatorType: "link"` —
+                the preload. Neither this panel's <img> nor the strip's issues a
+                request of its own; both draw on that single copy. The bytes
+                were being spent either way, and now they are spent on
+                something.
             -->
-            <picture class="absolute inset-0" aria-hidden="true">
-                <source
-                    media="(min-width: 1024px)"
-                    srcset="/images/cscbg_facade.webp"
-                    type="image/webp"
-                />
-                <source media="(min-width: 1024px)" srcset="/images/cscbg_facade.jpeg" type="image/jpeg" />
-                <!--
-                    A 1x1 transparent GIF, inline. The <img> is the fallback
-                    every <picture> must carry, so it cannot simply be dropped —
-                    and a src-less <img> is what the browser treats as broken.
-                    Below lg this resolves to 43 bytes that were already in the
-                    document instead of a photograph.
-                -->
-                <img
-                    src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
-                    alt=""
-                    decoding="async"
-                    class="absolute inset-0 size-full object-cover"
-                />
-            </picture>
-            <div
-                class="absolute inset-0"
-                style="
-                    background: linear-gradient(
-                        160deg,
-                        color-mix(in srgb, var(--color-csc-blue-deep) 93%, transparent) 0%,
-                        color-mix(in srgb, var(--color-csc-blue) 87%, transparent) 55%,
-                        color-mix(in srgb, var(--color-csc-blue-deep) 95%, transparent) 100%
-                    );
-                "
-                aria-hidden="true"
-            />
-            <svg class="pointer-events-none absolute inset-0 size-full opacity-[0.08]" aria-hidden="true">
-                <defs>
-                    <pattern :id="patternId" width="64" height="64" patternUnits="userSpaceOnUse">
-                        <circle cx="32" cy="32" r="18" fill="none" stroke="white" stroke-width="1" />
-                        <path d="M0 32h64M32 0v64" stroke="white" stroke-width="0.5" />
-                    </pattern>
-                </defs>
-                <rect width="100%" height="100%" :fill="`url(#${patternId})`" />
-            </svg>
+            <AppBrandBackdrop>
+                <svg class="pointer-events-none absolute inset-0 size-full opacity-[0.08]" aria-hidden="true">
+                    <defs>
+                        <pattern :id="patternId" width="64" height="64" patternUnits="userSpaceOnUse">
+                            <circle cx="32" cy="32" r="18" fill="none" stroke="white" stroke-width="1" />
+                            <path d="M0 32h64M32 0v64" stroke="white" stroke-width="0.5" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" :fill="`url(#${patternId})`" />
+                </svg>
+            </AppBrandBackdrop>
 
             <div class="relative px-12 py-16 xl:px-20">
                 <Link
@@ -119,22 +117,54 @@ const patternId = useId();
             since three ticked bullets above a form is a scroll cost on a small
             screen where the form itself is the point.
         -->
-        <div class="bg-csc-blue px-4 py-6 sm:px-6 lg:hidden">
-            <Link
-                href="/"
-                class="inline-block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
-            >
-                <AppLogo variant="light" size="md" />
-                <span class="sr-only">Back to CSC TIMS home</span>
-            </Link>
+        <div class="relative overflow-hidden bg-csc-blue px-4 py-7 sm:px-6 sm:py-8 lg:hidden">
+            <!--
+                The facade, on a phone too.
 
-            <p class="mt-4 max-w-prose text-sm leading-relaxed text-pretty text-white/85">
-                {{ tagline }}
-            </p>
+                This strip was a flat `bg-csc-blue`, so the office appeared on
+                the landing page's hero and then vanished the moment a visitor
+                tapped Sign in — the same building, the same brand, two
+                different-looking products one tap apart. VerifyLookup's band
+                already made this argument in its own comment and it holds here:
+                a plain coloured band is the one backdrop that could belong to
+                anybody, and the building is the Commission identifying itself
+                on the screen where a visitor is about to type a password.
+
+                `medium`, not `full`, and the object-position matched to
+                VerifyLookup's band rather than picked by eye — both for the
+                reasons AppBrandBackdrop documents. At `full` a strip this
+                shallow is almost entirely the darkest stop, which is an
+                expensive way to redraw the blue rectangle this is replacing;
+                and dead centre on this photograph is blank wall, so a short
+                band biased upward is what catches the roofline and the
+                entrance. `medium` sits at 76% against a 72% floor, and the
+                white/85 tagline over it is the same pairing already shipping on
+                that band.
+
+                `bg-csc-blue` stays underneath deliberately: the wash is
+                semi-transparent, so if the photograph ever fails to load this
+                falls back to the brand blue it used to be rather than to
+                whatever is behind it.
+            -->
+            <AppBrandBackdrop object-position="center 38%" wash="medium" />
+
+            <div class="relative">
+                <Link
+                    href="/"
+                    class="inline-block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+                >
+                    <AppLogo variant="light" size="md" />
+                    <span class="sr-only">Back to CSC TIMS home</span>
+                </Link>
+
+                <p class="mt-4 max-w-prose text-sm leading-relaxed text-pretty text-white/85">
+                    {{ tagline }}
+                </p>
+            </div>
         </div>
 
         <!-- Right: form -->
-        <main class="flex items-center justify-center bg-white px-4 py-12 sm:px-6 lg:min-h-screen lg:px-12 lg:py-16">
+        <main class="flex items-center justify-center bg-white px-4 py-10 sm:px-6 sm:py-12 lg:min-h-dvh lg:px-12 lg:py-16">
             <div class="w-full max-w-md">
                 <slot />
             </div>

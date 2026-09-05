@@ -336,6 +336,27 @@ class RegistrationService
                     'user.profile',
                     fn ($profile) => $profile->where('field_office_id', $fieldOfficeId)
                 ))
+                /*
+                 * The same order the preview walks, and for the same reason.
+                 *
+                 * Seats in the target are handed out as this loop advances, so
+                 * the order *is* the allocation rule. This had none at all —
+                 * it took whatever the engine returned — while
+                 * RescheduleService::affected() sorted by registered_at to
+                 * promise "first registered, first seated". Against a target
+                 * with fewer seats than the batch, the two disagreed about who
+                 * got them: the screen named one set of people as movable and
+                 * the transfer moved another, reporting the difference as
+                 * skipped. Somebody then stays on a run that is not happening,
+                 * having been shown a list that said otherwise.
+                 *
+                 * `id` breaks the tie because `registered_at` is only
+                 * second-resolution: two people registering in the same second
+                 * is ordinary, and without a tiebreak the sort is not a total
+                 * order and the two sides can still diverge.
+                 */
+                ->orderBy('registered_at')
+                ->orderBy('id')
                 ->lockForUpdate()
                 ->get();
 

@@ -34,7 +34,7 @@ class SendTrainingReminders extends Command
                 ->where('status', RegistrationStatus::Approved)
                 ->chunkById(100, function ($registrations) use ($training, &$sent) {
                     foreach ($registrations as $registration) {
-                        $registration->user?->notify(new TrainingReminder($training));
+                        $registration->user->notify(new TrainingReminder($training));
                         $sent++;
                     }
                 });

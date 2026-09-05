@@ -26,8 +26,8 @@ class ChangePasswordTest extends TestCase
     {
         $this->post('/change-password', [
             'current_password' => 'password',
-            'password' => 'NewPass123',
-            'password_confirmation' => 'NewPass123',
+            'password' => 'NewPassword123',
+            'password_confirmation' => 'NewPassword123',
         ])->assertRedirect('/login');
     }
 
@@ -37,11 +37,11 @@ class ChangePasswordTest extends TestCase
 
         $this->actingAs($user)->post('/change-password', [
             'current_password' => 'password',
-            'password' => 'NewPass123',
-            'password_confirmation' => 'NewPass123',
+            'password' => 'NewPassword123',
+            'password_confirmation' => 'NewPassword123',
         ])->assertSessionHas('success');
 
-        $this->assertTrue(Hash::check('NewPass123', $user->fresh()->password));
+        $this->assertTrue(Hash::check('NewPassword123', $user->fresh()->password));
     }
 
     public function test_the_current_password_must_be_correct(): void
@@ -52,8 +52,8 @@ class ChangePasswordTest extends TestCase
             ->from('/dashboard')
             ->post('/change-password', [
                 'current_password' => 'not-the-password',
-                'password' => 'NewPass123',
-                'password_confirmation' => 'NewPass123',
+                'password' => 'NewPassword123',
+                'password_confirmation' => 'NewPassword123',
             ])
             ->assertRedirect('/dashboard')
             ->assertSessionHasErrors('current_password');
@@ -80,7 +80,7 @@ class ChangePasswordTest extends TestCase
 
         $this->actingAs($user)->post('/change-password', [
             'current_password' => 'password',
-            'password' => 'NewPass123',
+            'password' => 'NewPassword123',
             'password_confirmation' => 'Different123',
         ])->assertSessionHasErrors('password');
     }
@@ -276,8 +276,8 @@ class ChangePasswordTest extends TestCase
 
         $this->actingAs($user)->post('/change-password', [
             'current_password' => 'password',
-            'password' => 'NewPass123',
-            'password_confirmation' => 'NewPass123',
+            'password' => 'NewPassword123',
+            'password_confirmation' => 'NewPassword123',
         ]);
 
         Notification::assertSentTo(
@@ -323,8 +323,8 @@ class ChangePasswordTest extends TestCase
 
         $this->actingAs($user)->post('/change-password', [
             'current_password' => 'wrong-password',
-            'password' => 'NewPass123',
-            'password_confirmation' => 'NewPass123',
+            'password' => 'NewPassword123',
+            'password_confirmation' => 'NewPassword123',
         ])->assertSessionHasErrors('current_password');
 
         Notification::assertNothingSent();

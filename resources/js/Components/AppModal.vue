@@ -8,6 +8,16 @@ import AppIcon from '@/Components/AppIcon.vue';
  * PrivacyNoticeModal stays separate on purpose: consent has no decline path, so
  * it must not close on Escape or a backdrop click. This one does both, which is
  * the right behaviour for everything else.
+ *
+ * It centres at every width. Below `sm` it used to dock to the bottom edge as a
+ * sheet — a fine pattern for a long form, and the wrong one for what this
+ * component is mostly used for: short confirmations, where the question lands
+ * under the reader's thumb instead of under their eye and reads as a page that
+ * failed to lay out rather than as a dialog. The height cap is in `dvh` and the
+ * body scrolls inside it, so a tall dialog on a short phone still fits without
+ * the dock; `overflow-y-auto` on the backdrop is the fallback for the case that
+ * cannot fit — a header and footer taller than the viewport — so the buttons
+ * stay reachable rather than being clipped off both ends by `items-center`.
  */
 const props = defineProps({
     open: { type: Boolean, default: false },
@@ -115,7 +125,7 @@ onBeforeUnmount(release);
         >
             <div
                 v-if="open"
-                class="fixed inset-0 z-(--z-modal) flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+                class="fixed inset-0 z-(--z-modal) flex items-center justify-center overflow-y-auto bg-black/60 p-4"
                 @click.self="close"
             >
                 <div
@@ -124,7 +134,7 @@ onBeforeUnmount(release);
                     aria-modal="true"
                     :aria-labelledby="title ? titleId : undefined"
                     tabindex="-1"
-                    class="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl focus:outline-none sm:rounded-2xl"
+                    class="my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
                     :class="width"
                 >
                     <header

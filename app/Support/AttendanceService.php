@@ -145,6 +145,10 @@ class AttendanceService
 
             $date = $days[$day - 1]['date'];
 
+            $previous = Attendance::where('registration_id', $registration->getKey())
+                ->where('training_day', $day)
+                ->value('status');
+
             $attendance = self::write($registration, $day, $date, [
                 'status' => $status,
                 'remarks' => $remarks,
@@ -155,6 +159,43 @@ class AttendanceService
             ]);
 
             self::syncRegistrationAttendance($registration);
+
+            /*
+             * The hand-marked path is logged; the scanned one is not, and the
+             * asymmetry is deliberate.
+             *
+             * Attendance rows already answer "who recorded this and when" —
+             * `recorded_by`, `time_in` and the timestamps are on every row — so
+             * a scan is not an unrecorded event. What the rows cannot show is a
+             * *decision*: a Present that a member of staff turned into Absent,
+             * or an Excused granted after the fact. That is what a dispute is
+             * ever about, and it is what this captures.
+             *
+             * Logging every check-in instead would add a row per scan per
+             * participant per day — thousands over one large event — and bury
+             * the handful of overrides inside them. That is precisely the
+             * volume problem LoginController's comment describes for v1's
+             * login rows, where the decisions worth auditing were lost in the
+             * noise of the ones that were not.
+             */
+            ActivityLogger::recordTransition(
+                'attendance.marked',
+                $registration,
+                $previous instanceof AttendanceStatus ? $previous : ($previous ? AttendanceStatus::tryFrom($previous) : null),
+                $status,
+                sprintf(
+                    '%s — day %d marked %s by hand.',
+                    $registration->user->name,
+                    $day,
+                    $status->label(),
+                ),
+                [
+                    'training_id' => $training->getKey(),
+                    'training_day' => $day,
+                    'remarks' => $remarks,
+                ],
+                $recordedBy,
+            );
 
             return $attendance;
         });

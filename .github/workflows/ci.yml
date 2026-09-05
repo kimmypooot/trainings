@@ -1,5 +1,11 @@
 # Runs the guards this repo already carries, on every push and pull request.
 #
+# Eight gates now: two dependency audits, Pint, the generated-enum check,
+# PHPStan, PHPUnit, vue-tsc, Vitest and the Vite build. The audits are the only
+# two that can fail without anybody touching the code — an advisory is
+# published, not committed — which is exactly why they belong on every run
+# rather than in somebody's memory.
+#
 # The suite has always existed — 48 feature test files, ~855 test methods, and
 # the named invariant guards (ExportScopingTest, FieldOfficeScopingTest,
 # ScanLinkTest, TrustProxiesTest) that CLAUDE.md points at as the enforcement
@@ -75,6 +81,13 @@ jobs:
           cp .env.example .env
           php artisan key:generate
 
+      # Supply chain. Both are clean today; nothing would have said so when that
+      # changed, and a newly disclosed Laravel advisory would have landed
+      # silently. Advisories are the one CI failure that can appear without
+      # anybody touching the code, which is exactly why it belongs here.
+      - name: Audit PHP dependencies
+        run: composer audit --no-interaction
+
       - name: Check formatting
         run: vendor/bin/pint --test
 
@@ -85,8 +98,8 @@ jobs:
         run: php artisan tims:types --check
 
       # Level 5 against phpstan-baseline.neon, so this reports only what is
-      # newly broken rather than the 1,239 pre-existing Eloquent-generics
-      # findings the baseline records.
+      # newly broken rather than the pre-existing Eloquent-generics findings the
+      # baseline records (919 at the last regeneration; see CLAUDE.md).
       - name: Static analysis
         run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
@@ -128,6 +141,11 @@ jobs:
       # this repo's own development platform anyway.
       - name: Install JS dependencies
         run: npm ci
+
+      # --audit-level=high so a low-severity advisory in a build-only tool does
+      # not block a security fix from shipping.
+      - name: Audit JS dependencies
+        run: npm audit --audit-level=high
 
       # Type checking across the Inertia boundary. Currently this only reads
       # files that opt in (.ts, or <script setup lang="ts">), which is what makes

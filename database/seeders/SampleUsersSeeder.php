@@ -33,6 +33,21 @@ class SampleUsersSeeder extends Seeder
     public const SEED_ENV = 'SAMPLE_USERS_SEED';
 
     /**
+     * A counter that makes each seeded email unique without asking the database
+     * once per account — see uniqueEmail().
+     *
+     * Started from the highest existing user id in run(), which is read exactly
+     * once. That keeps both properties this seeder needs and which pull in
+     * opposite directions: an *additive* run (the seeder is meant to be run
+     * repeatedly to grow a dataset) must not reissue addresses the last run
+     * already used, and a *replay* — same seed, users cleared first — must
+     * reproduce them precisely. Reading the maximum once satisfies the first
+     * without making the number of Faker draws depend on database state, which
+     * is what broke the second.
+     */
+    private int $accountsIssued = 0;
+
+    /**
      * How many of each role to create, as [min, max].
      *
      * Participants dominate deliberately: that is the shape of the real system,
@@ -65,6 +80,10 @@ class SampleUsersSeeder extends Seeder
         }
 
         $seed = $this->applySeed(self::SEED_ENV);
+
+        // Read once, before any account is minted, so the count of Faker draws
+        // per account stays fixed. See the property's own note.
+        $this->accountsIssued = (int) User::max('id');
 
         $offices = FieldOffice::active()->pluck('id');
 
@@ -188,14 +207,34 @@ class SampleUsersSeeder extends Seeder
         $slug = Str::slug(Str::of($name)->explode(' ')->first() ?: 'user');
         $domain = $role === Role::Participant ? 'example.com' : 'csc.gov.ph';
 
-        // The suffix comes from Faker rather than Str::random(), which draws on
-        // random_bytes and would ignore the seed — leaving a "reproducible" run
-        // that quietly produced different addresses every time.
-        do {
-            $email = sprintf('%s.%s@%s', $slug, Str::lower(fake()->bothify('??##')), $domain);
-        } while (User::where('email', $email)->exists());
-
-        return $email;
+        /*
+         * The suffix comes from Faker rather than Str::random(), which draws on
+         * random_bytes and would ignore the seed — leaving a "reproducible" run
+         * that quietly produced different addresses every time.
+         *
+         * It also draws *exactly once* per account, which is the part that
+         * matters and the part this used to get wrong. It was a
+         * `do { … } while (User::where('email', $email)->exists())` loop, so a
+         * collision spent an extra draw and shifted every subsequent value in
+         * the run — and whether a collision happened depended on rows already in
+         * the table. That made "same seed, same dataset" a claim the seeder
+         * could not keep: the number of draws was a function of database state,
+         * not of the seed. It is the reason
+         * SampleUsersSeederTest::test_the_faker_seed_makes_a_run_reproducible
+         * failed intermittently, and only in a full-suite run, where earlier
+         * tests had left rows behind.
+         *
+         * A monotonic counter makes the address unique by construction instead.
+         * Faker still supplies the flavour, the count of draws is now fixed at
+         * one, and uniqueness no longer asks the database anything.
+         */
+        return sprintf(
+            '%s.%s%02d@%s',
+            $slug,
+            Str::lower(fake()->bothify('??')),
+            ++$this->accountsIssued,
+            $domain,
+        );
     }
 
     /**

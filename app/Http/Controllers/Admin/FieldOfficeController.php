@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\PaymentStatus;
+use App\Enums\Role;
 use App\Http\Controllers\Controller;
 use App\Models\FieldOffice;
 use App\Models\Payment;
 use App\Models\Registration;
+use App\Support\ActivityLogger;
 use App\Support\RevenueService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -17,7 +19,7 @@ use Inertia\Response;
 
 class FieldOfficeController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         // Both counts, because the row renders both. `users_count` was read
         // below without being loaded, which Eloquent answers with null rather
@@ -40,9 +42,17 @@ class FieldOfficeController extends Controller
                 'is_active' => $office->is_active,
                 'participants' => $office->profiles_count,
                 'staff' => $office->users_count,
+                // An office nobody is attached to can be removed outright; one
+                // with people on it can only be deactivated. Sent per row so
+                // the screen can say which, and why, rather than leaving a
+                // superadmin to discover it by pressing the button.
+                'can_delete' => $office->profiles_count === 0 && $office->users_count === 0,
                 'view_url' => route('admin.field-offices.show', $office),
                 'edit_url' => route('admin.field-offices.edit', $office),
             ])->all(),
+            // Deleting is not reversible, so it is held one role above the rest
+            // of this screen — see the destroy() docblock.
+            'canDelete' => $request->user()->role === Role::SuperAdmin,
             'types' => collect(FieldOffice::TYPES)
                 ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
                 ->values()
@@ -184,8 +194,9 @@ class FieldOfficeController extends Controller
     }
 
     /**
-     * Offices are deactivated rather than deleted — participant profiles point
-     * at them, and history must stay readable.
+     * An office anyone is attached to is deactivated rather than deleted —
+     * participant profiles point at them, and history must stay readable. An
+     * office nobody is attached to can be removed outright; see destroy().
      */
     public function toggle(FieldOffice $fieldOffice): RedirectResponse
     {
@@ -195,6 +206,76 @@ class FieldOfficeController extends Controller
             'success',
             "“{$fieldOffice->name}” is now ".($fieldOffice->is_active ? 'active' : 'inactive').'.'
         );
+    }
+
+    /**
+     * Remove an office nothing points at.
+     *
+     * Deactivate-never-delete is the right rule for a row with people attached,
+     * and it was applied to every row — which left no way at all to remove one
+     * created by mistake. A deployment being set up for a new region has a
+     * whole list of offices belonging to somebody else, and an office typed in
+     * wrongly five minutes ago has no history to protect; both could only ever
+     * be deactivated, so they stayed in the database and in the audit trail for
+     * good.
+     *
+     * The bound is attachment, not age. Both foreign keys are `nullOnDelete`,
+     * so deleting an office anyone points at would silently blank the link
+     * rather than refuse: participants would lose the office on their profile
+     * with nothing recording it, and a field-office staff member would lose the
+     * assignment their whole view is scoped by — `scopedFieldOfficeId()` then
+     * resolves to 0 and matches nothing, so their account keeps working while
+     * showing them an empty system. That is exactly the kind of quiet wrong
+     * this codebase keeps having to dig out, so it is refused here instead.
+     *
+     * Superadmin only, unlike the rest of this screen: creating and editing an
+     * office is administration, removing one is not reversible.
+     */
+    public function destroy(Request $request, FieldOffice $fieldOffice): RedirectResponse
+    {
+        $fieldOffice->loadCount(['profiles', 'users']);
+
+        if ($fieldOffice->profiles_count > 0 || $fieldOffice->users_count > 0) {
+            return back()->with('error', sprintf(
+                '“%s” cannot be deleted — %s and %s are still assigned to it. Deactivate it instead, which stops it being chosen on new profiles while keeping existing records readable.',
+                $fieldOffice->name,
+                $this->countPhrase($fieldOffice->profiles_count, 'participant'),
+                $this->countPhrase($fieldOffice->users_count, 'staff member'),
+            ));
+        }
+
+        // Captured before the row goes: an audit entry naming an id nobody can
+        // look up afterwards is not a record of anything.
+        $office = [
+            'code' => $fieldOffice->code,
+            'name' => $fieldOffice->name,
+            'type' => $fieldOffice->type,
+            'province' => $fieldOffice->province,
+        ];
+
+        $fieldOffice->delete();
+
+        ActivityLogger::record(
+            'field-office.deleted',
+            null,
+            "Field office “{$office['name']}” was deleted. Nothing was assigned to it.",
+            $office,
+            $request->user(),
+        );
+
+        return redirect()
+            ->route('admin.field-offices.index')
+            ->with('success', "“{$office['name']}” has been deleted.");
+    }
+
+    /** "3 participants", "1 staff member", "no participants". */
+    private function countPhrase(int $count, string $noun): string
+    {
+        return match (true) {
+            $count === 0 => "no {$noun}s",
+            $count === 1 => "1 {$noun}",
+            default => "{$count} {$noun}s",
+        };
     }
 
     /**
