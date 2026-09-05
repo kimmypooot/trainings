@@ -263,4 +263,167 @@ class GoogleAvatarImportTest extends TestCase
 
         Queue::assertNothingPushed();
     }
+
+    /*
+     * The participant's own button.
+     *
+     * The command above exists because a participant could not recover a lost
+     * import on their own. These cover the half that means they no longer have
+     * to ask the office.
+     */
+
+    public function test_a_participant_can_sync_the_photo_from_google(): void
+    {
+        Storage::fake(ProfilePhotoController::DISK);
+        Http::fake([self::URL => Http::response($this->fakeImageBytes())]);
+
+        $user = $this->participant([
+            'google_id' => 'g-1',
+            'google_avatar_url' => self::URL,
+        ]);
+
+        $this->actingAs($user)->post('/profile/photo/google')
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $path = $user->refresh()->avatar_path;
+
+        $this->assertNotNull($path);
+        Storage::disk(ProfilePhotoController::DISK)->assertExists($path);
+    }
+
+    /**
+     * Unlike the queued import, this one is the participant asking — so it
+     * replaces rather than refusing, and the old file does not linger.
+     */
+    public function test_the_sync_replaces_an_existing_photo_and_drops_the_old_file(): void
+    {
+        Storage::fake(ProfilePhotoController::DISK);
+        Http::fake([self::URL => Http::response($this->fakeImageBytes())]);
+
+        $old = AvatarImageService::storeBytes(
+            $this->fakeImageBytes(),
+            'avatars',
+            ProfilePhotoController::DISK
+        );
+
+        $user = $this->participant([
+            'google_id' => 'g-1',
+            'google_avatar_url' => self::URL,
+            'avatar_path' => $old,
+        ]);
+
+        $this->actingAs($user)->post('/profile/photo/google')->assertSessionHas('success');
+
+        $this->assertNotSame($old, $user->refresh()->avatar_path);
+        Storage::disk(ProfilePhotoController::DISK)->assertMissing($old);
+    }
+
+    /**
+     * The whole reason this is synchronous and swaps last: a dead Google host
+     * must leave the participant exactly as they were, never on initials.
+     */
+    public function test_a_failed_sync_leaves_the_current_photo_untouched(): void
+    {
+        Storage::fake(ProfilePhotoController::DISK);
+        Http::fake([self::URL => Http::response('', 500)]);
+
+        $existing = AvatarImageService::storeBytes(
+            $this->fakeImageBytes(),
+            'avatars',
+            ProfilePhotoController::DISK
+        );
+
+        $user = $this->participant([
+            'google_id' => 'g-1',
+            'google_avatar_url' => self::URL,
+            'avatar_path' => $existing,
+        ]);
+
+        $this->actingAs($user)->post('/profile/photo/google')
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertSame($existing, $user->refresh()->avatar_path);
+        Storage::disk(ProfilePhotoController::DISK)->assertExists($existing);
+    }
+
+    public function test_the_sync_refuses_an_account_with_no_google_connection(): void
+    {
+        Http::fake();
+
+        $user = $this->participant();
+
+        $this->actingAs($user)->post('/profile/photo/google')->assertSessionHas('error');
+
+        $this->assertNull($user->refresh()->avatar_path);
+        Http::assertNothingSent();
+    }
+
+    public function test_the_sync_refuses_a_google_account_carrying_no_photo(): void
+    {
+        Http::fake();
+
+        $user = $this->participant(['google_id' => 'g-1', 'google_avatar_url' => null]);
+
+        $this->actingAs($user)->post('/profile/photo/google')->assertSessionHas('error');
+
+        Http::assertNothingSent();
+    }
+
+    /**
+     * The stored URL is not user input, but it is the one value this endpoint
+     * hands to the server's own HTTP client — so the allow-list has to hold
+     * here as well as in the job, which is the reason both read it from
+     * GoogleAvatarFetcher rather than each carrying a copy.
+     */
+    public function test_the_sync_refuses_a_url_that_is_not_googles(): void
+    {
+        Storage::fake(ProfilePhotoController::DISK);
+        Http::fake();
+
+        $user = $this->participant([
+            'google_id' => 'g-1',
+            'google_avatar_url' => 'https://169.254.169.254/latest/meta-data/',
+        ]);
+
+        $this->actingAs($user)->post('/profile/photo/google')->assertSessionHas('error');
+
+        $this->assertNull($user->refresh()->avatar_path);
+        Http::assertNothingSent();
+    }
+
+    public function test_the_sync_needs_a_signed_in_account(): void
+    {
+        Http::fake();
+
+        $this->post('/profile/photo/google')->assertRedirect('/login');
+
+        Http::assertNothingSent();
+    }
+
+    /**
+     * The card offers the button from this prop, so it has to mean "there is
+     * something to fetch" rather than merely "Google is connected".
+     */
+    public function test_the_profile_offers_the_button_only_when_there_is_a_photo_to_fetch(): void
+    {
+        $connectedWithPhoto = $this->participant([
+            'google_id' => 'g-1',
+            'google_avatar_url' => self::URL,
+        ]);
+
+        $this->actingAs($connectedWithPhoto)->get('/profile')
+            ->assertInertia(fn ($page) => $page->where('user.google_photo_available', true));
+
+        $this->flushSession();
+
+        $connectedWithout = $this->participant([
+            'google_id' => 'g-2',
+            'google_avatar_url' => null,
+        ]);
+
+        $this->actingAs($connectedWithout)->get('/profile')
+            ->assertInertia(fn ($page) => $page->where('user.google_photo_available', false));
+    }
 }
