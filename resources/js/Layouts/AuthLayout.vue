@@ -11,6 +11,12 @@ import AppLogo from '@/Components/AppLogo.vue';
  * tagline, and benefit bullets differ — so the copy comes in as props and the
  * form rides the default slot. The pattern's SVG id is per-instance (useId) so
  * two auth screens can never collide on the defs reference.
+ *
+ * Heights are `dvh`, not `vh`. On a phone `100vh` is the viewport with the
+ * browser's own chrome subtracted *as if it were hidden*, so a full-height
+ * column is taller than what is actually on screen and the page gains a scroll
+ * it does not need — on the shortest screen here, enough to push the Sign in
+ * button under the address bar. `dvh` tracks the live viewport instead.
  */
 defineProps({
     headline: { type: String, required: true },
@@ -23,9 +29,9 @@ const patternId = useId();
 </script>
 
 <template>
-    <div class="min-h-screen lg:grid lg:grid-cols-2">
+    <div class="min-h-dvh lg:grid lg:grid-cols-2">
         <!-- Left: branding. Hidden below lg. -->
-        <aside class="relative hidden overflow-hidden lg:flex lg:min-h-screen lg:flex-col lg:justify-center">
+        <aside class="relative hidden overflow-hidden lg:flex lg:min-h-dvh lg:flex-col lg:justify-center">
             <!--
                 The media condition is load-bearing, not decoration. This aside
                 is `hidden lg:flex`, but display:none does not stop a browser
@@ -134,7 +140,7 @@ const patternId = useId();
         </div>
 
         <!-- Right: form -->
-        <main class="flex items-center justify-center bg-white px-4 py-12 sm:px-6 lg:min-h-screen lg:px-12 lg:py-16">
+        <main class="flex items-center justify-center bg-white px-4 py-10 sm:px-6 sm:py-12 lg:min-h-dvh lg:px-12 lg:py-16">
             <div class="w-full max-w-md">
                 <slot />
             </div>

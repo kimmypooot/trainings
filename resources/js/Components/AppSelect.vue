@@ -72,7 +72,7 @@ const describedBy = computed(() => {
                 :disabled="disabled"
                 :aria-invalid="error ? 'true' : undefined"
                 :aria-describedby="describedBy"
-                class="w-full appearance-none rounded-lg border bg-white py-2.5 pr-10 pl-4 text-sm text-csc-ink transition-colors duration-150 focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink-subtle"
+                class="w-full appearance-none rounded-lg border bg-white py-2.5 pr-10 pl-4 text-base text-csc-ink transition-colors duration-150 focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink-subtle sm:text-sm"
                 :class="
                     error
                         ? 'border-csc-red-ink focus:outline-csc-red-ink'

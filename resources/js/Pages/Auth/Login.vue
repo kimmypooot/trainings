@@ -336,8 +336,7 @@ const submit = () => {
                     </Link>
                     and
                     <Link href="/privacy-policy" class="font-medium text-csc-blue transition-colors hover:text-csc-red-ink">
-                        Privacy Policy </Link
-                    >.
+                        Privacy Policy</Link>.
                 </p>
     </AuthLayout>
 </template>

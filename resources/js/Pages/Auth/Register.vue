@@ -259,7 +259,7 @@ const submit = () => {
                                 </Link>
                                 and
                                 <Link href="/privacy-policy" class="font-medium text-csc-blue hover:text-csc-red-ink">
-                                    Privacy Policy </Link
+                                    Privacy Policy</Link
                                 >, and consent to the processing of my personal data.
                             </span>
                         </label>
