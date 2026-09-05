@@ -242,6 +242,19 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile/photo/{user}', [ProfilePhotoController::class, 'show'])->name('profile.photo.show');
     Route::post('/profile/photo', [ProfilePhotoController::class, 'update'])->name('profile.photo.update');
     Route::delete('/profile/photo', [ProfilePhotoController::class, 'destroy'])->name('profile.photo.destroy');
+
+    /*
+     * Re-import the photo from the linked Google account.
+     *
+     * Throttled where the other two photo routes are not, because this is the
+     * one that makes the *server* issue an outbound request: the upload spends
+     * the caller's own bandwidth, this spends ours, once per press. Ten a
+     * minute is far past deliberate use and well short of a way to point this
+     * office's egress at anything.
+     */
+    Route::post('/profile/photo/google', [ProfilePhotoController::class, 'syncFromGoogle'])
+        ->middleware('throttle:10,1')
+        ->name('profile.photo.google');
 });
 
 /*

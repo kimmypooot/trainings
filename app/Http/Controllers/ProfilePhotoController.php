@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Support\AvatarImageService;
+use App\Support\GoogleAvatarFetcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -63,10 +64,71 @@ class ProfilePhotoController extends Controller
     }
 
     /**
+     * Take the photo from the linked Google account again, on request.
+     *
+     * The automatic import runs once, when the identity is first attached, and
+     * that is deliberate — see App\Jobs\ImportGoogleAvatar. It left one thing
+     * unreachable, and ImportGoogleAvatarCommand's own docblock names it: if
+     * the queued import is dispatched and never runs (no worker, a flushed
+     * queue), nothing retries it, because the "already attached" state that
+     * gates the dispatch is exactly what the next sign-in sees. A participant
+     * could not recover from that on their own — disconnecting and
+     * reconnecting would re-import, but disconnecting is refused when Google
+     * is the only way in, which is true of precisely the accounts created
+     * through it. The office had a command; the participant now has a button.
+     *
+     * Synchronous, unlike the import at sign-in, and the difference is the
+     * point: nothing is waiting on the sign-in round trip, whereas here
+     * somebody has pressed a button and is watching the avatar. Queued, the
+     * honest flash would be "we will get to it", and on a deployment whose
+     * worker is down that is the same silent nothing this exists to undo.
+     *
+     * The old file is deleted only after the new one is stored, so a dead
+     * Google host leaves the participant exactly as they were rather than
+     * with no photo at all — which is the trap in doing this by clearing the
+     * slot first and letting the job fill it.
+     */
+    public function syncFromGoogle(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        // Two different situations behind one refusal, so they get two
+        // different sentences: the card offers this button only when there is
+        // something to fetch, so reaching here at all means the state moved
+        // under the page (Google disconnected in another tab) or the request
+        // was made by hand.
+        if (! $user->hasGoogleAccount()) {
+            return back()->with('error', 'Connect a Google account first.');
+        }
+
+        if (blank($user->google_avatar_url)) {
+            return back()->with('error', 'There is no photo on your connected Google account.');
+        }
+
+        $path = GoogleAvatarFetcher::fetch($user->google_avatar_url, $user->getKey());
+
+        // Deliberately not an exception. The remote host is not the
+        // participant's problem to debug, and their existing photo is
+        // untouched, so the honest report is that it did not work.
+        if ($path === null) {
+            return back()->with('error', 'Your Google photo could not be fetched. Please try again, or upload one.');
+        }
+
+        $previous = $user->avatar_path;
+
+        $user->forceFill(['avatar_path' => $path])->save();
+
+        $this->deleteStoredPhoto($previous);
+
+        return back()->with('success', 'Your profile photo has been synced from Google.');
+    }
+
+    /**
      * Remove the photo and fall back to initials.
      *
-     * It stays removed. The Google photo is imported once, when the account is
-     * connected, so there is nothing left to put it back on the next sign-in.
+     * It stays removed — nothing puts it back on the next sign-in. The Google
+     * photo is imported once, when the account is connected, and after that
+     * only a deliberate press of Sync from Google returns it.
      */
     public function destroy(Request $request): RedirectResponse
     {

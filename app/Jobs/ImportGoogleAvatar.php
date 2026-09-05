@@ -4,13 +4,10 @@ namespace App\Jobs;
 
 use App\Http\Controllers\ProfilePhotoController;
 use App\Models\User;
-use App\Support\AvatarImageService;
+use App\Support\GoogleAvatarFetcher;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 /**
  * Take a copy of the photo on a newly connected Google account.
@@ -28,6 +25,12 @@ use Throwable;
  *  - Re-syncing on every sign-in would fight the participant's own choice.
  *    Importing once means "remove my photo" stays removed.
  *
+ * That last point is about what happens *automatically*. A participant asking
+ * for the photo again is not the system overriding them, and there is now a
+ * button for it — see ProfilePhotoController::syncFromGoogle, which does the
+ * same import synchronously because somebody is watching the avatar when they
+ * press it.
+ *
  * Queued so a slow fetch never sits inside the sign-in round trip. Failure is
  * not an error worth surfacing — the participant simply has initials until
  * they upload something.
@@ -35,9 +38,6 @@ use Throwable;
 class ImportGoogleAvatar implements ShouldQueue
 {
     use Queueable;
-
-    /** A photo far larger than this is not a profile picture. */
-    private const MAX_BYTES = 5 * 1024 * 1024;
 
     public int $tries = 3;
 
@@ -57,36 +57,9 @@ class ImportGoogleAvatar implements ShouldQueue
             return;
         }
 
-        if (! self::isGoogleUrl($this->url)) {
-            Log::warning('Refused a non-Google avatar URL', ['user_id' => $this->userId]);
+        $path = GoogleAvatarFetcher::fetch($this->url, $this->userId);
 
-            return;
-        }
-
-        try {
-            $response = Http::timeout(10)->get($this->url);
-        } catch (Throwable $e) {
-            Log::info('Google avatar fetch failed', ['user_id' => $this->userId, 'exception' => $e]);
-
-            return;
-        }
-
-        if (! $response->successful() || strlen($response->body()) > self::MAX_BYTES) {
-            return;
-        }
-
-        try {
-            $path = AvatarImageService::storeBytes(
-                $response->body(),
-                'avatars',
-                ProfilePhotoController::DISK
-            );
-        } catch (Throwable $e) {
-            Log::info('Google avatar could not be processed', [
-                'user_id' => $this->userId,
-                'exception' => $e,
-            ]);
-
+        if ($path === null) {
             return;
         }
 
@@ -102,29 +75,5 @@ class ImportGoogleAvatar implements ShouldQueue
         }
 
         $user->forceFill(['avatar_path' => $path])->save();
-    }
-
-    /**
-     * Whether this is a URL Google would actually have given us.
-     *
-     * The URL arrives inside an OAuth response rather than from a user, so it
-     * is not attacker-controlled in the ordinary case — but this job fetches
-     * it from the server, and a request-forgery gadget that only fires on a
-     * compromised OAuth response is still a gadget. Cheaper to pin the host
-     * than to reason about it.
-     */
-    private static function isGoogleUrl(string $url): bool
-    {
-        $parts = parse_url($url);
-
-        if (($parts['scheme'] ?? null) !== 'https' || blank($parts['host'] ?? null)) {
-            return false;
-        }
-
-        $host = mb_strtolower($parts['host']);
-
-        return $host === 'googleusercontent.com'
-            || str_ends_with($host, '.googleusercontent.com')
-            || str_ends_with($host, '.google.com');
     }
 }

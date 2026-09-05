@@ -74,6 +74,12 @@ class ProfileController extends Controller
                 // finding out by being turned down.
                 'has_password' => $user->hasPassword(),
                 'google_configured' => filled(config('services.google.client_id')),
+                // Whether Sync from Google has anything to fetch. Connected is
+                // not enough on its own — an account can be linked to a Google
+                // identity that carries no photo, and a button that can only
+                // ever answer "there is no photo on your Google account" is a
+                // worse way to say so than not offering it.
+                'google_photo_available' => $user->hasGoogleAccount() && filled($user->google_avatar_url),
             ],
             'profile' => $user->profile ? [
                 ...$user->profile->only([
