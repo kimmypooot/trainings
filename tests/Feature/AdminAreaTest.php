@@ -59,7 +59,11 @@ class AdminAreaTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->component('Admin/Dashboard')
-                ->has('stats')
+                // `stats` until the page grew its analytics: the inventory
+                // counts are `totals` now and the moving figures are `metrics`.
+                // AdminDashboardMetricsTest is where those are checked.
+                ->has('totals')
+                ->has('metrics')
                 ->has('upcoming')
             );
     }

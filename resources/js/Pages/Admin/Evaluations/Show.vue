@@ -12,7 +12,7 @@ import { computed, ref } from 'vue';
 import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 
@@ -100,9 +100,9 @@ const ratedOn = (assignment) => {
             </AppCard>
 
             <div class="grid gap-3 sm:grid-cols-3">
-                <AppStat label="Submissions" :value="results.submissions" />
-                <AppStat label="Participants" :value="results.expected_responses" />
-                <AppStat label="Experts Assigned" :value="assignments.length" />
+                <AppStatTile label="Submissions" :value="results.submissions" icon="clipboard" />
+                <AppStatTile label="Participants" :value="results.expected_responses" icon="users" />
+                <AppStatTile label="Experts Assigned" :value="assignments.length" icon="user" />
             </div>
 
             <AppCard title="Panel">

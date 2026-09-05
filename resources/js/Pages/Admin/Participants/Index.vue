@@ -11,8 +11,10 @@ import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
 import AppSelect from '@/Components/AppSelect.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
+import { percent } from '@/charts';
 import { useFilters, filteringClass } from '@/useFilters';
 import { useDownload } from '@/useDownload';
 
@@ -28,6 +30,17 @@ const props = defineProps({
 
 const page = usePage();
 const error = computed(() => page.props.errors?.participant);
+
+/*
+ * Share of the whole directory, for the captions under the tiles.
+ *
+ * A bare count says how many; the share says whether that is most of them or a
+ * handful, which is the thing being read off a summary row. `percent()` guards
+ * the empty set, so a fresh install shows 0% rather than dividing by nothing.
+ */
+const percentOf = (value, total) => percent(value, total, 0);
+
+const unverified = computed(() => props.stats.total - props.stats.verified);
 
 const search = ref(props.filters.search ?? '');
 const status = ref(props.filters.status ?? '');
@@ -68,6 +81,26 @@ const processing = ref(false);
 const ask = (action, participant) => {
     confirming.value = { action, participant };
 };
+
+/*
+ * What can be done to one participant, listed once for both layouts.
+ *
+ * The card list used to omit View — the name above it links to the same
+ * place — but it is listed here rather than special-cased, because a set that
+ * differs by layout is the drift this component exists to stop.
+ */
+const actionsFor = (participant) => [
+    { label: 'View', icon: 'eye', href: participant.url },
+    ...(props.can.manage
+        ? [
+              { label: 'Edit', icon: 'pencil', href: `/admin/participants/${participant.id}/edit` },
+              { label: 'Reset password', icon: 'key', onClick: () => ask('reset', participant) },
+              participant.is_active
+                  ? { label: 'Deactivate', icon: 'lock', tone: 'danger', onClick: () => ask('toggle', participant) }
+                  : { label: 'Activate', icon: 'check', tone: 'success', onClick: () => ask('toggle', participant) },
+          ]
+        : []),
+];
 
 const dialog = computed(() => {
     if (!confirming.value) return null;
@@ -130,11 +163,30 @@ const confirm = () => {
                 Showing participants assigned to <strong>{{ scopedTo }}</strong> only.
             </AppAlert>
 
+            <!--
+                Tone carries meaning here, never decoration: a figure is
+                brand-coloured unless it is telling you something is good or
+                wants looking at. So "Deactivated" is neutral — it is an
+                administrative state, not a problem — while an unverified
+                address is a participant who cannot be reached.
+            -->
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <AppStat label="Total Participants" :value="stats.total" />
-                <AppStat label="Active Accounts" :value="stats.active" />
-                <AppStat label="Verified Emails" :value="stats.verified" />
-                <AppStat label="Deactivated" :value="stats.deactivated" />
+                <AppStatTile label="Total Participants" :value="stats.total" icon="users" />
+                <AppStatTile
+                    label="Active Accounts"
+                    :value="stats.active"
+                    icon="check-circle"
+                    tone="success"
+                    :caption="`${percentOf(stats.active, stats.total)} of the directory`"
+                />
+                <AppStatTile
+                    label="Verified Emails"
+                    :value="stats.verified"
+                    icon="envelope"
+                    :tone="stats.total > 0 && stats.verified < stats.total ? 'warning' : 'success'"
+                    :caption="unverified > 0 ? `${unverified} not yet verified` : 'All addresses confirmed'"
+                />
+                <AppStatTile label="Deactivated" :value="stats.deactivated" icon="lock" />
             </div>
 
             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -274,38 +326,7 @@ const confirm = () => {
                                         </p>
                                     </td>
                                     <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                        <Link
-                                            :href="participant.url"
-                                            class="text-xs font-semibold text-csc-blue hover:underline"
-                                        >
-                                            View
-                                        </Link>
-                                        <template v-if="can.manage">
-                                            <span class="px-2 text-csc-line">|</span>
-                                            <Link
-                                                :href="`/admin/participants/${participant.id}/edit`"
-                                                class="text-xs font-semibold text-csc-blue hover:underline"
-                                            >
-                                                Edit
-                                            </Link>
-                                            <span class="px-2 text-csc-line">|</span>
-                                            <button
-                                                type="button"
-                                                class="rounded text-xs font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                @click="ask('reset', participant)"
-                                            >
-                                                Reset password
-                                            </button>
-                                            <span class="px-2 text-csc-line">|</span>
-                                            <button
-                                                type="button"
-                                                class="rounded text-xs font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                                :class="participant.is_active ? 'text-danger' : 'text-success'"
-                                                @click="ask('toggle', participant)"
-                                            >
-                                                {{ participant.is_active ? 'Deactivate' : 'Activate' }}
-                                            </button>
-                                        </template>
+                                        <AppRowActions :actions="actionsFor(participant)" />
                                     </td>
                                 </tr>
                             </tbody>
@@ -345,28 +366,8 @@ const confirm = () => {
                                 {{ participant.settled_registrations }} settled
                             </p>
 
-                            <div v-if="can.manage" class="mt-3 flex flex-wrap gap-x-4 gap-y-2 border-t border-csc-line pt-3">
-                                <Link
-                                    :href="`/admin/participants/${participant.id}/edit`"
-                                    class="text-xs font-semibold text-csc-blue hover:underline"
-                                >
-                                    Edit
-                                </Link>
-                                <button
-                                    type="button"
-                                    class="rounded text-xs font-semibold text-csc-blue hover:underline"
-                                    @click="ask('reset', participant)"
-                                >
-                                    Reset password
-                                </button>
-                                <button
-                                    type="button"
-                                    class="rounded text-xs font-semibold"
-                                    :class="participant.is_active ? 'text-danger' : 'text-success'"
-                                    @click="ask('toggle', participant)"
-                                >
-                                    {{ participant.is_active ? 'Deactivate' : 'Activate' }}
-                                </button>
+                            <div class="mt-3 border-t border-csc-line pt-3">
+                                <AppRowActions :actions="actionsFor(participant)" layout="card" />
                             </div>
                         </li>
                     </ul>

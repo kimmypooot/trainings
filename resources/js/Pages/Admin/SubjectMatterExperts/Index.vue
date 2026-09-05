@@ -13,14 +13,63 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
+import AppBarList from '@/Components/AppBarList.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 
-defineProps({
+const props = defineProps({
     experts: { type: Array, required: true },
 });
 
+/*
+ * Derived from `experts`, which the page already holds in full — this list is
+ * not paginated, so no query is added. The average is weighted by how many
+ * responses each expert has: a mean of the per-expert means lets somebody with
+ * a single five-star form pull the region's figure as hard as somebody with
+ * ninety, which is the classic way a rating summary ends up wrong.
+ */
+const summary = computed(() => {
+    const rated = props.experts.filter((expert) => expert.responses > 0);
+    const responses = rated.reduce((total, expert) => total + expert.responses, 0);
+    const weighted = rated.reduce((total, expert) => total + expert.average * expert.responses, 0);
+
+    return {
+        experts: props.experts.length,
+        active: props.experts.filter((expert) => expert.is_active).length,
+        responses,
+        average: responses > 0 ? weighted / responses : null,
+    };
+});
+
+/*
+ * Who is actually being asked to deliver, largest first.
+ *
+ * Assignments rather than ratings: a rating chart would rank people by a
+ * number several of them have too few responses to earn, and the table already
+ * carries the rating beside its response count where that caveat is visible.
+ */
+const byTrainings = computed(() =>
+    [...props.experts]
+        .filter((expert) => expert.trainings > 0)
+        .map((expert) => ({ label: expert.name, count: expert.trainings }))
+        .sort((a, b) => b.count - a.count)
+);
+
 const confirming = ref(null);
 const processing = ref(false);
+
+/*
+ * The same three the field-office index offers, in the same order — this page
+ * mirrors that one deliberately, and View was the one it was missing.
+ */
+const actionsFor = (expert) => [
+    { label: 'View', icon: 'eye', href: expert.view_url },
+    { label: 'Edit', icon: 'pencil', href: expert.edit_url },
+    expert.is_active
+        ? { label: 'Deactivate', icon: 'lock', tone: 'danger', onClick: () => (confirming.value = expert) }
+        : { label: 'Reactivate', icon: 'check', tone: 'success', onClick: () => (confirming.value = expert) },
+];
 
 const dialog = computed(() => {
     if (!confirming.value) return null;
@@ -89,6 +138,52 @@ const rating = (expert) => (expert.average === null ? '—' : expert.average.toF
             </AppCard>
 
             <template v-else>
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <AppStatTile label="Experts" :value="summary.experts" icon="users" />
+                    <AppStatTile
+                        label="Available"
+                        :value="summary.active"
+                        icon="check-circle"
+                        tone="success"
+                        :caption="
+                            summary.experts - summary.active > 0
+                                ? `${summary.experts - summary.active} deactivated`
+                                : 'All can be assigned'
+                        "
+                    />
+                    <AppStatTile label="Evaluations" :value="summary.responses" icon="clipboard" />
+                    <!--
+                        Tone follows the same bands the expert's own page uses,
+                        so a rating does not mean one thing here and another
+                        one click away.
+                    -->
+                    <AppStatTile
+                        label="Average Rating"
+                        :value="summary.average === null ? '—' : summary.average.toFixed(1)"
+                        icon="analytics"
+                        :tone="
+                            summary.average === null
+                                ? 'brand'
+                                : summary.average >= 4
+                                  ? 'success'
+                                  : summary.average >= 3
+                                    ? 'warning'
+                                    : 'danger'
+                        "
+                        :caption="summary.average === null ? 'No responses yet' : 'Weighted across all responses'"
+                    />
+                </div>
+
+                <AppCard
+                    v-if="byTrainings.length"
+                    title="Assignments per Expert"
+                    subtitle="How the delivery load is spread. Ratings stay in the table, where each one sits beside the number of responses it rests on."
+                    collapsible
+                    remember-as="smes-assignments"
+                >
+                    <AppBarList :rows="byTrainings" label-width="14rem" :limit="10" />
+                </AppCard>
+
                 <div class="hidden overflow-hidden rounded-xl border border-csc-line bg-white md:block">
                     <table class="w-full text-left text-sm">
                         <thead class="border-b border-csc-line bg-csc-blue-tint/60 text-xs uppercase">
@@ -136,19 +231,7 @@ const rating = (expert) => (expert.average === null ? '—' : expert.average.toF
                                     </span>
                                 </td>
                                 <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                    <Link
-                                        :href="expert.edit_url"
-                                        class="text-xs font-semibold text-csc-blue hover:underline"
-                                    >
-                                        Edit
-                                    </Link>
-                                    <button
-                                        type="button"
-                                        class="ml-3 text-xs font-semibold text-csc-ink-muted hover:underline"
-                                        @click="confirming = expert"
-                                    >
-                                        {{ expert.is_active ? 'Deactivate' : 'Reactivate' }}
-                                    </button>
+                                    <AppRowActions :actions="actionsFor(expert)" />
                                 </td>
                             </tr>
                         </tbody>
@@ -182,20 +265,8 @@ const rating = (expert) => (expert.average === null ? '—' : expert.average.toF
                                 </dd>
                             </div>
                         </dl>
-                        <div class="mt-3 flex gap-3">
-                            <Link
-                                :href="expert.edit_url"
-                                class="text-xs font-semibold text-csc-blue hover:underline"
-                            >
-                                Edit
-                            </Link>
-                            <button
-                                type="button"
-                                class="text-xs font-semibold text-csc-ink-muted hover:underline"
-                                @click="confirming = expert"
-                            >
-                                {{ expert.is_active ? 'Deactivate' : 'Reactivate' }}
-                            </button>
+                        <div class="mt-3">
+                            <AppRowActions :actions="actionsFor(expert)" layout="card" />
                         </div>
                     </AppCard>
                 </div>

@@ -9,7 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
-use App\Support\PendingActionCounter;
+use App\Support\DashboardMetrics;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -54,7 +54,32 @@ class DashboardController extends Controller
         );
 
         return Inertia::render('Admin/Dashboard', [
-            'stats' => [
+            /*
+             * The analytics half of the page: month-to-date against the same
+             * stretch of last month, the queues with work in them, where
+             * registrations are stuck, and which runs are not filling.
+             *
+             * Sent with the page rather than deferred, unlike the analytics
+             * overview. That one defers because a dozen aggregates — several
+             * of which pull whole tables into PHP — were holding the shell
+             * hostage. These are a fixed handful of indexed aggregate queries,
+             * and this is the page every staff member lands on: a skeleton on
+             * every sign-in to save a few milliseconds is a worse trade than
+             * the milliseconds.
+             */
+            'metrics' => DashboardMetrics::for($request->user()),
+
+            /*
+             * How big the operation is, as against how it is moving.
+             *
+             * These three were the dashboard's headline tiles and are now a
+             * single line of context above the KPIs — they are inventory, they
+             * barely change between visits, and each of them was taking a
+             * quarter of the most valuable row on the page to say so. The
+             * registration total still earns its keep: the recent-registrations
+             * dialog needs it to say whether it is showing everything.
+             */
+            'totals' => [
                 'published' => Training::where('status', TrainingStatus::Published)->count(),
                 // People counts are scoped; the training catalogue is regional
                 // and stays the same for everyone.
@@ -64,18 +89,6 @@ class DashboardController extends Controller
                 'registrations' => $scopeToOffice(
                     Registration::whereIn('status', RegistrationStatus::occupying()), 'user.profile'
                 )->count(),
-                /*
-                 * The one tile that is work rather than inventory.
-                 *
-                 * The other three say how much exists; a staff member opening
-                 * this page wants to know what is waiting on them, and until
-                 * now the only place that number appeared was the sidebar
-                 * badge. Taken from PendingActionCounter so the tile and the
-                 * badge can never disagree, and null for a role with no such
-                 * queue rather than a zero that reads as "all clear" — see the
-                 * template, which drops the tile entirely in that case.
-                 */
-                'requests' => PendingActionCounter::for($request->user())['admin-requests'] ?? null,
             ],
             'scopedTo' => $request->user()->fieldOffice?->name,
             // So a dialog can say it is showing a capped slice rather than

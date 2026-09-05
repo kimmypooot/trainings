@@ -68,12 +68,30 @@ export const icons = {
     // beside prose, where there is no tinted container to supply the shape.
     info: 'M12 16v-4M12 8h.01M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z',
     clock: 'M12 8v4l2.5 2.5M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z',
-    eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z',
+    // The lid *and* the pupil. The outline on its own is a pointed ellipse,
+    // which reads as an eye at 24px and as a rugby ball at the 16px the row
+    // actions draw it — and that is the size it is used at most.
+    eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12ZM12 9.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z',
     'eye-off': 'M4 20 20 4',
     plus: 'M12 5v14M5 12h14',
     download: 'M12 4v11m0 0 4-4m-4 4-4-4M5 19h14',
     print: 'M7 8V3h10v5M7 18h10v3H7zM4 8h16a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3v-4H7v4H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z',
     upload: 'M12 16V4m0 0L8 8m4-4 4 4M4 20h16',
+    // Row actions. Both are drawn as one path with subpaths, as `print` and
+    // `clipboard` are, so they keep the 1.8 stroke of the set rather than
+    // reading heavier than the icons sitting beside them in an action group.
+    pencil: 'M4 20l.9-3.7L15.7 5.5a2 2 0 0 1 2.8 2.8L7.7 19.1 4 20Z',
+    // Distinct from `lock`, which is the state an account is put into.
+    // This one is the credential being handed back.
+    key: 'M15.5 4a4.5 4.5 0 1 1-4.4 5.5L4 16.6V20h3.4l.9-.9v-1.9h1.9l1.3-1.3v-1.9h1.9l1.1-1.1A4.5 4.5 0 0 1 15.5 4ZM16.8 8.2h.01',
+    trash: 'M5 7h14M10 4h4a1 1 0 0 1 1 1v2H9V5a1 1 0 0 1 1-1ZM6.6 7l.8 12.1a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9L17.4 7',
+    /*
+     * Direction of travel, for a figure set beside the period before it. The
+     * elbow at the end is the arrowhead drawn in the same stroke as the line —
+     * a filled triangle would be the only solid shape in the set.
+     */
+    'trend-up': 'M4 16l5-5 3 3 7-7M20 7h-4M20 7v4',
+    'trend-down': 'M4 8l5 5 3-3 7 7M20 17h-4M20 17v-4',
     // Board plus clip, drawn as one path so it keeps the 1.8 stroke of the set.
     clipboard: 'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6.5A1.5 1.5 0 0 0 5 7.5v12A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 6H16',
     search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM20 20l-4.05-4.05',

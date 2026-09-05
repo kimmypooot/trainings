@@ -8,7 +8,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
@@ -208,10 +208,20 @@ const submitSettings = () =>
     <AuthenticatedLayout title="Physical OR Requests" current="admin-physical-or">
         <div class="mx-auto max-w-7xl space-y-5">
             <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-                <AppStat :value="counts.payment_verification_pending ?? 0" label="Awaiting fee verification" />
-                <AppStat :value="openTotal" label="Open requests" />
-                <AppStat :value="counts.shipped ?? 0" label="In transit" />
-                <AppStat :value="counts.delivered ?? 0" label="Delivered" />
+                <AppStatTile
+                    :value="counts.payment_verification_pending ?? 0"
+                    label="Awaiting Fee Verification"
+                    icon="clock"
+                    :tone="(counts.payment_verification_pending ?? 0) > 0 ? 'warning' : 'success'"
+                />
+                <AppStatTile :value="openTotal" label="Open Requests" icon="document" />
+                <AppStatTile :value="counts.shipped ?? 0" label="In Transit" icon="arrow-forward" />
+                <AppStatTile
+                    :value="counts.delivered ?? 0"
+                    label="Delivered"
+                    icon="check-circle"
+                    tone="success"
+                />
             </div>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">

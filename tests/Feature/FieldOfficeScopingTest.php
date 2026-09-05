@@ -271,10 +271,13 @@ class FieldOfficeScopingTest extends TestCase
             ->get('/admin')
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('stats.participants', 1)
-                ->where('stats.registrations', 1)
+                ->where('totals.participants', 1)
+                ->where('totals.registrations', 1)
                 // The training catalogue is regional, so it is not scoped.
-                ->where('stats.published', 1)
+                ->where('totals.published', 1)
+                // The moving figures carry the same scope as the inventory
+                // ones. AdminDashboardMetricsTest covers the rest of them.
+                ->where('metrics.kpis.0.value', 1)
             );
     }
 

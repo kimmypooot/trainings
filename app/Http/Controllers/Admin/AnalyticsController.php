@@ -456,9 +456,10 @@ class AnalyticsController extends Controller
                 // The full span, not just the month: two runs of the same
                 // course four weeks apart both read "Foundations — Mar 2026"
                 // and the picker gave no way to tell which one was selected.
-                'label' => $training->starts_at
-                    ? $training->title.' — '.$training->dateRange()
-                    : $training->title,
+                // `starts_at` is NOT NULL, so the null branch this used to
+                // carry could never be taken — it only looked defensive
+                // because the column was resolving as a string.
+                'label' => $training->title.' — '.$training->dateRange(),
             ])
             ->values()
             ->all();
@@ -603,7 +604,7 @@ class AnalyticsController extends Controller
                 ->flatMap(fn (Registration $registration) => $registration->payments)
                 ->filter(fn (Payment $payment) => $payment->status === PaymentStatus::Verified);
 
-            $key = $training->starts_at?->format('Y-m') ?? '';
+            $key = $training->starts_at->format('Y-m');
 
             if (! array_key_exists($key, $rows)) {
                 continue;

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppButton from '@/Components/AppButton.vue';
@@ -8,6 +8,8 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppPagination from '@/Components/AppPagination.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import { spansMultipleDays } from '@/dateRange';
 import { useFilters, filteringClass } from '@/useFilters';
 
@@ -15,6 +17,8 @@ const props = defineProps({
     trainings: { type: Object, required: true },
     filters: { type: Object, required: true },
     tabs: { type: Array, required: true },
+    // The whole catalogue, not the filtered page — see the controller.
+    summary: { type: Object, required: true },
     /** `manage` is the pen: create and edit. Reading a roster needs neither. */
     can: { type: Object, default: () => ({}) },
     /** The office every head on this page belongs to, or null for the region. */
@@ -39,6 +43,15 @@ const { filtering, apply } = useFilters({
 watch(search, () => apply());
 watch(status, () => apply({ immediate: true }));
 
+/*
+ * What can be done with one run, listed once for both layouts. The roster is
+ * the destination for anyone; the pen is `can.manage`.
+ */
+const actionsFor = (training) => [
+    { label: 'Roster', icon: 'users', href: training.roster_url },
+    ...(props.can.manage ? [{ label: 'Edit', icon: 'pencil', href: training.edit_url }] : []),
+];
+
 const tones = {
     draft: 'bg-csc-blue-tint text-csc-ink',
     published: 'bg-success-soft text-success',
@@ -47,9 +60,19 @@ const tones = {
     cancelled: 'bg-danger-soft text-danger',
 };
 
-// Totals for the table footer. The per-training "registered" figure is the
-// sum of its paid + promissory + pending buckets, so summing again across
-// rows never double-counts; free and cancelled are counted apart.
+/*
+ * Totals for the table footer, over the rows on screen.
+ *
+ * These are the *page's* totals, not the catalogue's — the list is paginated
+ * 25 at a time and this sums `trainings.data`. The footer says so now; it
+ * previously read "Totals", which invited it to be taken for the region's, and
+ * the comment here claimed as much. The catalogue-wide figures are the tiles
+ * above, which come from the server.
+ *
+ * The per-training "registered" figure is the sum of its paid + promissory +
+ * pending buckets, so summing again across rows never double-counts; free and
+ * cancelled are counted apart.
+ */
 const totals = computed(() => {
     const sum = (key) => props.trainings.data.reduce((acc, training) => acc + (training[key] ?? 0), 0);
 
@@ -92,6 +115,41 @@ const totals = computed(() => {
                 Participant counts are for <strong>{{ scopedTo }}</strong> only. Every training in the region is
                 listed.
             </AppAlert>
+
+            <!--
+                When, not what — the chips below already carry one count per
+                status, so a tile for "Published" would be the same number
+                twice. These answer the question the chips cannot: a run's
+                status says it is published, not whether it is happening this
+                morning.
+
+                Runs, never people. The catalogue is regional while participant
+                counts are scoped to a field office, so a row mixing the two
+                would need a "your office only" caveat on half of it — which is
+                exactly the confusion the notice above exists to prevent.
+            -->
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <AppStatTile
+                    label="Running Now"
+                    :value="summary.running"
+                    icon="clock"
+                    :tone="summary.running > 0 ? 'warning' : 'brand'"
+                    :caption="summary.running > 0 ? 'Attendance is being taken' : 'Nothing in session'"
+                />
+                <AppStatTile
+                    label="Starts This Week"
+                    :value="summary.this_week"
+                    icon="calendar"
+                    caption="Next seven days"
+                />
+                <AppStatTile label="Upcoming" :value="summary.upcoming" icon="arrow-forward" />
+                <AppStatTile
+                    label="Ended"
+                    :value="summary.ended"
+                    icon="check-circle"
+                    caption="Rosters ready to close out"
+                />
+            </div>
 
             <div class="flex flex-wrap gap-2" role="tablist" aria-label="Filter trainings by status">
                 <button
@@ -189,26 +247,20 @@ const totals = computed(() => {
                                     <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink-muted">{{ training.free }}</td>
                                     <td class="px-5 py-3.5 text-right tabular-nums text-csc-ink-muted">{{ training.cancelled }}</td>
                                     <td class="px-5 py-3.5 text-right whitespace-nowrap">
-                                        <Link :href="training.roster_url" class="text-xs font-semibold text-csc-blue hover:underline">
-                                            Roster
-                                        </Link>
-                                        <template v-if="can.manage">
-                                            <span class="px-2 text-csc-line">|</span>
-                                            <Link :href="training.edit_url" class="text-xs font-semibold text-csc-blue hover:underline">
-                                                Edit
-                                            </Link>
-                                        </template>
+                                        <AppRowActions :actions="actionsFor(training)" />
                                     </td>
                                 </tr>
                             </tbody>
                             <!-- The footer spans the label columns, then one cell per
-                                 payment bucket so a glance at the page gives the
-                                 totals without opening any roster — the region's,
-                                 or this office's where the rows are scoped. -->
+                                 payment bucket so a glance gives the totals without
+                                 opening any roster. These cover the rows on screen,
+                                 which is 25 of a paginated catalogue — the label
+                                 says so, because "Totals" beside a paginator reads
+                                 as the whole set. -->
                             <tfoot class="border-t border-csc-line bg-csc-blue-tint/60">
                                 <tr>
                                     <td colspan="2" class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-csc-ink-muted">
-                                        Totals
+                                        Totals · this page
                                     </td>
                                     <td class="px-5 py-3 text-right font-semibold text-csc-ink">{{ totals.registered }}</td>
                                     <td class="px-5 py-3 text-right tabular-nums font-semibold text-csc-ink">{{ totals.paid }}</td>
@@ -273,17 +325,8 @@ const totals = computed(() => {
                                     <dd class="tabular-nums text-csc-ink-muted">{{ training.cancelled }}</dd>
                                 </div>
                             </dl>
-                            <div class="mt-3 flex items-center justify-between border-t border-csc-line pt-3">
-                                <span class="flex gap-3">
-                                    <Link :href="training.roster_url" class="text-xs font-semibold text-csc-blue">Roster</Link>
-                                    <Link
-                                        v-if="can.manage"
-                                        :href="training.edit_url"
-                                        class="text-xs font-semibold text-csc-blue"
-                                    >
-                                        Edit
-                                    </Link>
-                                </span>
+                            <div class="mt-3 border-t border-csc-line pt-3">
+                                <AppRowActions :actions="actionsFor(training)" layout="card" />
                             </div>
                         </li>
                     </ul>

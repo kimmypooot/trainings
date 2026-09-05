@@ -41,6 +41,7 @@ class UserController extends Controller
 
         return Inertia::render('Admin/Users/Index', [
             'canManage' => $canManage,
+            'summary' => $this->summary(),
             'users' => $users->through(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -67,6 +68,43 @@ class UserController extends Controller
             'filters' => ['search' => $search, 'role' => $role],
             'roles' => self::roleOptions(),
         ]);
+    }
+
+    /**
+     * The directory at a glance, over the whole of it.
+     *
+     * Deliberately not narrowed by the search box or the role filter: this is
+     * the shape of the staff roll, and a header figure that moved with the
+     * filters would be answering a different question every keystroke — and
+     * `useFilters` does not reload it, so it would go stale rather than
+     * follow. The list below is what narrows.
+     *
+     * One conditional-aggregate query rather than four counts. "Never signed
+     * in" is the figure worth having that nothing else on the page shows: an
+     * account created and never used is either an onboarding that stalled or a
+     * credential sitting unclaimed, and both want chasing.
+     *
+     * @return array<string, int>
+     */
+    private function summary(): array
+    {
+        $row = (array) User::query()
+            ->whereIn('role', array_map(fn (Role $role) => $role->value, Role::staff()))
+            ->toBase()
+            ->selectRaw(
+                'COUNT(*) as total,'
+                .' SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,'
+                .' SUM(CASE WHEN is_collecting_officer = 1 THEN 1 ELSE 0 END) as collectors,'
+                .' SUM(CASE WHEN last_login_at IS NULL THEN 1 ELSE 0 END) as never_signed_in'
+            )
+            ->first();
+
+        return [
+            'total' => (int) ($row['total'] ?? 0),
+            'active' => (int) ($row['active'] ?? 0),
+            'collectors' => (int) ($row['collectors'] ?? 0),
+            'never_signed_in' => (int) ($row['never_signed_in'] ?? 0),
+        ];
     }
 
     public function create(): Response

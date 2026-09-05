@@ -9,7 +9,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import { formatDateRange } from '@/dateRange';
 
 const props = defineProps({
@@ -177,10 +177,20 @@ const confirm = () => {
             </AppAlert>
 
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <AppStat label="Total Registrations" :value="trainingStats.total" />
-                <AppStat label="Fees Settled" :value="trainingStats.settled" />
-                <AppStat label="Awaiting Payment" :value="trainingStats.awaiting_payment" />
-                <AppStat label="Promissory Notes" :value="trainingStats.promissory" />
+                <AppStatTile label="Total Registrations" :value="trainingStats.total" icon="list" />
+                <AppStatTile
+                    label="Fees Settled"
+                    :value="trainingStats.settled"
+                    icon="check-circle"
+                    tone="success"
+                />
+                <AppStatTile
+                    label="Awaiting Payment"
+                    :value="trainingStats.awaiting_payment"
+                    icon="clock"
+                    :tone="trainingStats.awaiting_payment > 0 ? 'warning' : 'success'"
+                />
+                <AppStatTile label="Promissory Notes" :value="trainingStats.promissory" icon="document" />
             </div>
 
             <template v-if="participant.profile">

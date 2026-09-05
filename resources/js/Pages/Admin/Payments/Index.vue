@@ -9,7 +9,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import AppSelect from '@/Components/AppSelect.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
@@ -409,10 +409,39 @@ const rejectRefund = (refund) => {
             <!-- What is in motion right now, for the officer and end-of-day
                  reconciliation alike. Amounts lead, counts ride along. -->
             <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-                <AppStat :value="peso(summary.pending?.amount ?? 0)" :label="`Pending · ${summary.pending?.count ?? 0} payment(s)`" />
-                <AppStat :value="peso(summary.verified?.amount ?? 0)" :label="`Collected · ${summary.verified?.count ?? 0} verified`" />
-                <AppStat :value="peso(summary.rejected?.amount ?? 0)" :label="`Rejected · ${summary.rejected?.count ?? 0}`" />
-                <AppStat :value="peso(openRefunds.amount)" :label="`Open refunds · ${openRefunds.count}`" />
+                <!--
+                    The count moves out of the label and into the caption. It
+                    was reading as part of the tile's name — "Pending · 9
+                    payment(s)" — where a glance took the 9 for the figure and
+                    the amount beside it for something else.
+                -->
+                <AppStatTile
+                    label="Pending"
+                    :value="peso(summary.pending?.amount ?? 0)"
+                    :caption="`${summary.pending?.count ?? 0} payment${(summary.pending?.count ?? 0) === 1 ? '' : 's'} to verify`"
+                    icon="clock"
+                    :tone="(summary.pending?.count ?? 0) > 0 ? 'warning' : 'success'"
+                />
+                <AppStatTile
+                    label="Collected"
+                    :value="peso(summary.verified?.amount ?? 0)"
+                    :caption="`${summary.verified?.count ?? 0} verified`"
+                    icon="card"
+                    tone="success"
+                />
+                <AppStatTile
+                    label="Rejected"
+                    :value="peso(summary.rejected?.amount ?? 0)"
+                    :caption="`${summary.rejected?.count ?? 0} turned down`"
+                    icon="close"
+                />
+                <AppStatTile
+                    label="Open Refunds"
+                    :value="peso(openRefunds.amount)"
+                    :caption="`${openRefunds.count} still in the pipeline`"
+                    icon="arrow-left"
+                    :tone="openRefunds.count > 0 ? 'warning' : 'success'"
+                />
             </div>
 
             <template v-if="active === 'payments'">
@@ -650,7 +679,19 @@ const rejectRefund = (refund) => {
                                                     {{ payment.remarks }}
                                                 </p>
                                             </td>
-                                            <td class="px-5 py-3.5 text-right whitespace-nowrap">
+                                            <!--
+                                                The one action cell that is not
+                                                AppRowActions, and deliberately.
+                                                Verify and Reject are the decision
+                                                this screen exists for and they move
+                                                money, so they stay full labelled
+                                                buttons; "No proof" beside them is a
+                                                status, not an action. An icon-only
+                                                row here would hide the two controls
+                                                that most need to be unmistakable.
+                                            -->
+                                            <td class="px-5 py-3.5 whitespace-nowrap">
+                                              <div class="flex items-center justify-end gap-2">
                                                 <a
                                                     v-if="payment.proof_url"
                                                     :href="payment.proof_url"
@@ -675,10 +716,6 @@ const rejectRefund = (refund) => {
                                                     No proof
                                                 </span>
                                                 <template v-if="payment.status === 'pending'">
-                                                    <span
-                                                        v-if="payment.proof_url || payment.proof_missing"
-                                                        class="px-2 text-csc-line"
-                                                    >|</span>
                                                     <AppButton size="sm" icon="check" @click="startVerifying(payment)">
                                                         Verify
                                                     </AppButton>
@@ -686,6 +723,7 @@ const rejectRefund = (refund) => {
                                                         Reject
                                                     </AppButton>
                                                 </template>
+                                              </div>
                                             </td>
                                         </tr>
                                     </tbody>
