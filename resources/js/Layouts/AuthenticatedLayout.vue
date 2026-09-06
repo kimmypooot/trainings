@@ -96,9 +96,30 @@ const navGroups = [
                 label: 'Dashboard',
                 href: '/admin',
                 primary: true,
-                // Collecting officers reach /admin too — they are staff, they
-                // just have no business in the roster or participant directory,
-                // which is why they are not in STAFF_ROLES.
+                /*
+                 * Collecting officers reach /admin too — they are staff. They
+                 * are outside STAFF_ROLES because that list drives the nav rows
+                 * for *managing* trainings and participants, which is not their
+                 * job; it is not a statement about what they may read.
+                 *
+                 * This comment used to say they had "no business in the roster
+                 * or participant directory", and that was wrong twice over. It
+                 * contradicted the note on isStaff seventy lines above, which
+                 * says they read the directory and the catalogue — that is what
+                 * the header search reaches — and it contradicted the routes
+                 * themselves, where the participants desk is introduced with
+                 * "reading the directory is every staff role's — a collecting
+                 * officer needs to look someone up as much as HRD does". They
+                 * reach the roster and the certificate register as well, both
+                 * deliberately: the register is open because the office fields
+                 * "where is my certificate?" on whichever phone rings.
+                 *
+                 * The pattern across the admin group is read-open,
+                 * act-narrowed. Editing a profile, mailing a reset, releasing a
+                 * certificate and converting a request are each gated; looking
+                 * things up is not. A wrong comment about who may read what is
+                 * how somebody ends up "fixing" a gate that was never a gap.
+                 */
                 roles: [...STAFF_ROLES, 'collecting-officer'],
                 icon: 'home',
             },
