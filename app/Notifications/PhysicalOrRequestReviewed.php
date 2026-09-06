@@ -17,6 +17,11 @@ class PhysicalOrRequestReviewed extends ParticipantNotification
 {
     public function __construct(private readonly PhysicalOrRequest $request) {}
 
+    public function kind(): string
+    {
+        return 'receipt';
+    }
+
     public function title(object $notifiable): string
     {
         return match ($this->request->status) {

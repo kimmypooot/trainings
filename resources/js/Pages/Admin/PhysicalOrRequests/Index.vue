@@ -10,6 +10,7 @@ import AppInput from '@/Components/AppInput.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import AppStatTile from '@/Components/AppStatTile.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppFilterChips from '@/Components/AppFilterChips.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
@@ -49,9 +50,12 @@ const { filtering, apply } = useFilters({
 watch(search, () => apply());
 watch(statusFilter, () => apply({ immediate: true }));
 
-const filterBy = (status) => {
-    statusFilter.value = status;
-};
+// The stage chips and their counts, paired once. `counts` covers the whole
+// queue rather than the filtered page — that is the point of a chip, see
+// AppFilterChips — so it is not reloaded with the rows.
+const stageChips = computed(() =>
+    props.statuses.map((status) => ({ ...status, count: props.counts[status.value] ?? 0 }))
+);
 
 const openTotal = computed(() =>
     Object.entries(props.counts)
@@ -238,27 +242,11 @@ const submitSettings = () =>
                 </AppButton>
             </div>
 
-            <div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by status">
-                <button
-                    v-for="status in statuses"
-                    :key="status.value"
-                    type="button"
-                    role="tab"
-                    :aria-selected="statusFilter === status.value"
-                    class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        statusFilter === status.value
-                            ? 'bg-csc-blue text-white shadow-sm'
-                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                    "
-                    @click="filterBy(status.value)"
-                >
-                    {{ status.label }}
-                    <span class="ml-1 text-xs" :class="statusFilter === status.value ? 'text-white/80' : 'text-csc-ink-subtle'">
-                        {{ counts[status.value] ?? 0 }}
-                    </span>
-                </button>
-            </div>
+            <AppFilterChips
+                v-model="statusFilter"
+                :options="stageChips"
+                aria-label="Filter physical OR requests by stage"
+            />
 
             <!--
                  The results dim while a filtered visit is out. The controls above stay

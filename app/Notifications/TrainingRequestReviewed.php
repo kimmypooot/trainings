@@ -9,6 +9,11 @@ class TrainingRequestReviewed extends ParticipantNotification
 {
     public function __construct(private readonly TrainingRequest $request) {}
 
+    public function kind(): string
+    {
+        return 'document';
+    }
+
     public function title(object $notifiable): string
     {
         return $this->request->status === RequestStatus::Approved

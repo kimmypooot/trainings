@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppBadge from '@/Components/AppBadge.vue';
@@ -76,13 +76,19 @@ const earnedLine = computed(() => {
                                 <AppIcon name="certificate" size="lg" />
                             </span>
 
+                            <!--
+                                A Link: the training page is in-app, and a plain
+                                anchor here was a full document reload to move
+                                one screen sideways. The download below is
+                                rightly still an anchor — that one is a file.
+                            -->
                             <h3 class="mt-4 text-base leading-snug font-semibold text-csc-blue">
-                                <a
+                                <Link
                                     :href="certificate.training_url"
                                     class="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                 >
                                     {{ certificate.title }}
-                                </a>
+                                </Link>
                             </h3>
 
                             <!--
@@ -140,12 +146,12 @@ const earnedLine = computed(() => {
                     >
                         <div class="min-w-0">
                             <h3 class="text-sm font-semibold text-csc-ink">
-                                <a
+                                <Link
                                     :href="item.url"
                                     class="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                 >
                                     {{ item.title }}
-                                </a>
+                                </Link>
                             </h3>
                             <p class="mt-1 text-xs text-csc-ink-subtle">Completed {{ item.completed_at }}</p>
                         </div>

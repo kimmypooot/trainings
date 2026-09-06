@@ -11,6 +11,8 @@ import AppTextarea from '@/Components/AppTextarea.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import AppFileField from '@/Components/AppFileField.vue';
 import AppModal from '@/Components/AppModal.vue';
 import { formatDateRange } from '@/dateRange';
@@ -28,6 +30,65 @@ const props = defineProps({
 // post their original receipt. Typed in as Regional Office VIII, it would have
 // sent another region's participants' documents to the wrong province.
 const office = computed(() => usePage().props.office);
+
+/*
+ * What the money adds up to.
+ *
+ * The page listed every fee owed and every payment made and totalled neither,
+ * so a participant on four trainings had to add the fees up themselves to
+ * answer the only question they came here with — how much do I owe. The
+ * amounts are already on the page; nothing is fetched for these.
+ *
+ * Three figures, in the order the question is asked: what is owed, what is
+ * waiting on CSC, and what is settled. Nothing here restates a control, which
+ * is the test — this page has no filters, and the section headings say what a
+ * list *is*, not what it comes to.
+ */
+const owed = computed(() =>
+    props.awaitingPayment.reduce((sum, item) => sum + Number(item.amount), 0)
+);
+
+const underReview = computed(() =>
+    props.payments
+        .filter((payment) => payment.status === 'pending')
+        .reduce((sum, payment) => sum + Number(payment.amount), 0)
+);
+
+const verified = computed(() =>
+    props.payments
+        .filter((payment) => payment.status === 'verified')
+        .reduce((sum, payment) => sum + Number(payment.amount), 0)
+);
+
+/*
+ * What each row offers, built once.
+ *
+ * "View proof" was a bare underlined anchor sitting beside two ghost buttons —
+ * three controls in three different weights on one line, with the least
+ * important of them styled as the only piece of body text. AppRowActions gives
+ * them one shape, the same one the admin screens use, and the card layout keeps
+ * every label visible because this is read on a phone as often as not.
+ *
+ * The proof link stays an `external` action: it is a file served by a download
+ * controller, and Inertia would try to render the PDF as a page.
+ */
+const paymentActions = (payment) => {
+    const actions = [];
+
+    if (payment.proof_url) {
+        actions.push({ label: 'View proof', icon: 'eye', href: payment.proof_url, external: true });
+    }
+
+    if (payment.can_request_refund) {
+        actions.push({ label: 'Request refund', icon: 'arrow-left', onClick: () => startRefund(payment) });
+    }
+
+    if (payment.can_request_physical_or) {
+        actions.push({ label: 'Request physical OR', icon: 'document', onClick: () => startPhysicalOr(payment) });
+    }
+
+    return actions;
+};
 
 const paying = ref(null);
 
@@ -183,6 +244,50 @@ const submitPhysicalOr = () =>
 
     <AuthenticatedLayout title="Payments" current="payments">
         <div class="mx-auto max-w-5xl space-y-5">
+            <!--
+                Two abreast on a phone and three once there is a row for them.
+                "Awaiting review" is amber only when there is something in it —
+                a standing amber tile reading nought teaches the reader to stop
+                looking at the row.
+            -->
+            <div
+                v-if="awaitingPayment.length || payments.length"
+                class="grid grid-cols-2 gap-3 sm:grid-cols-3"
+            >
+                <AppStatTile
+                    label="Owed"
+                    :value="'PHP ' + money(owed)"
+                    icon="card"
+                    :tone="owed > 0 ? 'warning' : 'brand'"
+                    :caption="
+                        awaitingPayment.length
+                            ? `Across ${awaitingPayment.length} training${awaitingPayment.length === 1 ? '' : 's'}`
+                            : 'Nothing outstanding'
+                    "
+                />
+                <AppStatTile
+                    label="Awaiting Review"
+                    :value="'PHP ' + money(underReview)"
+                    icon="clock"
+                    caption="Submitted, not yet verified"
+                />
+                <!--
+                    Green only when there is something to be pleased about.
+                    A settled total is good news; a settled total of nought is
+                    just a participant who has not paid anything yet, and
+                    painting that green says the opposite of what the amber
+                    "Owed" tile beside it is saying about the same person.
+                -->
+                <AppStatTile
+                    label="Verified"
+                    :value="'PHP ' + money(verified)"
+                    icon="check-circle"
+                    :tone="verified > 0 ? 'success' : 'brand'"
+                    caption="Confirmed by CSC"
+                    class="col-span-2 sm:col-span-1"
+                />
+            </div>
+
             <!-- Owed -->
             <AppCard v-if="awaitingPayment.length" title="Awaiting Payment">
                 <!--
@@ -371,13 +476,19 @@ const submitPhysicalOr = () =>
                     <li v-for="payment in payments" :key="payment.id" class="rounded-lg border border-csc-line p-4">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0">
+                                <!--
+                                    A Link, not an anchor. This is an in-app
+                                    route, and a plain <a> tears the SPA down
+                                    and rebuilds it — a full reload to move one
+                                    page sideways.
+                                -->
                                 <p class="font-semibold text-csc-ink">
-                                    <a
+                                    <Link
                                         :href="payment.training.url"
                                         class="rounded hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                                     >
                                         {{ payment.training.title }}
-                                    </a>
+                                    </Link>
                                 </p>
                                 <p class="mt-0.5 text-sm text-csc-ink-subtle">
                                     ₱{{ money(payment.amount) }} · {{ payment.method }} ·
@@ -398,30 +509,8 @@ const submitPhysicalOr = () =>
                             {{ payment.rejection_reason }}
                         </p>
 
-                        <div class="mt-4 flex flex-wrap items-center gap-3">
-                            <a
-                                v-if="payment.proof_url"
-                                :href="payment.proof_url"
-                                class="rounded text-sm font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            >
-                                View proof
-                            </a>
-                            <AppButton
-                                v-if="payment.can_request_refund"
-                                size="sm"
-                                variant="ghost"
-                                @click="startRefund(payment)"
-                            >
-                                Request Refund
-                            </AppButton>
-                            <AppButton
-                                v-if="payment.can_request_physical_or"
-                                size="sm"
-                                variant="ghost"
-                                @click="startPhysicalOr(payment)"
-                            >
-                                Request Physical OR
-                            </AppButton>
+                        <div v-if="paymentActions(payment).length" class="mt-4">
+                            <AppRowActions :actions="paymentActions(payment)" layout="card" />
                         </div>
 
                         <!-- A claim in flight: where it is, and how far along. -->

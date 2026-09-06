@@ -26,6 +26,11 @@ class EvaluationRequested extends ParticipantNotification
         private readonly Collection $experts,
     ) {}
 
+    public function kind(): string
+    {
+        return 'evaluation';
+    }
+
     public function title(object $notifiable): string
     {
         $training = $this->registration->training;

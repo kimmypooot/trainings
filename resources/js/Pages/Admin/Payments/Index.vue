@@ -11,6 +11,7 @@ import AppTextarea from '@/Components/AppTextarea.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppStatTile from '@/Components/AppStatTile.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppFilterChips from '@/Components/AppFilterChips.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppConfirmModal from '@/Components/AppConfirmModal.vue';
@@ -100,9 +101,31 @@ const exportUrl = (format) => {
 watch(search, () => apply());
 watch([statusFilter, methodFilter, refundStatusFilter], () => apply({ immediate: true }));
 
-const filterBy = (status) => {
-    statusFilter.value = status;
-};
+/*
+ * The two chip strips, each paired with the counts behind it.
+ *
+ * Both count the whole queue rather than the filtered page — a chip reading
+ * "14 rejected" is an offer to go and look at fourteen, so narrowing it with
+ * the rows would make every chip but the selected one read zero.
+ *
+ * The payment strip has no "All": every payment is in exactly one of these
+ * three states, so an unfiltered view is the three lists concatenated in an
+ * order nobody chose. Refunds have more states than fit comfortably, so that
+ * strip does offer one.
+ */
+const paymentChips = computed(() =>
+    ['pending', 'verified', 'rejected'].map((value) => ({
+        value,
+        label: props.statuses.find((status) => status.value === value)?.label ?? value,
+        count: props.paymentCounts[value] ?? 0,
+    }))
+);
+
+const refundChips = computed(() =>
+    props.refundStatuses.map((status) => ({ ...status, count: props.refundCounts[status.value] ?? 0 }))
+);
+
+const refundTotal = computed(() => Object.values(props.refundCounts).reduce((sum, n) => sum + n, 0));
 
 // Sort the rows in front of us — the page holds 25, so this is local.
 const sortKey = ref(null);
@@ -482,28 +505,11 @@ const rejectRefund = (refund) => {
                     </div>
                 </div>
 
-                <div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by payment status">
-                    <button
-                        v-for="chip in ['pending', 'verified', 'rejected']"
-                        :key="chip"
-                        type="button"
-                        role="tab"
-                        :aria-selected="statusFilter === chip"
-                        class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                        :class="
-                            statusFilter === chip ? 'bg-csc-blue text-white shadow-sm' : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                        "
-                        @click="filterBy(chip)"
-                    >
-                        {{ statuses.find((s) => s.value === chip)?.label ?? chip }}
-                        <span
-                            class="ml-1 text-xs"
-                            :class="statusFilter === chip ? 'text-white/80' : 'text-csc-ink-subtle'"
-                        >
-                            {{ paymentCounts[chip] ?? 0 }}
-                        </span>
-                    </button>
-                </div>
+                <AppFilterChips
+                    v-model="statusFilter"
+                    :options="paymentChips"
+                    aria-label="Filter by payment status"
+                />
 
                 <!--
                      The results dim while a filtered visit is out. The controls above stay
@@ -823,47 +829,14 @@ const rejectRefund = (refund) => {
             </template>
 
             <template v-else>
-                <div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by refund status">
-                    <button
-                        type="button"
-                        role="tab"
-                        :aria-selected="refundStatusFilter === ''"
-                        class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                        :class="
-                            refundStatusFilter === ''
-                                ? 'bg-csc-blue text-white shadow-sm'
-                                : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                        "
-                        @click="refundStatusFilter = ''"
-                    >
-                        All
-                        <span class="ml-1 text-xs" :class="refundStatusFilter === '' ? 'text-white/80' : 'text-csc-ink-subtle'">
-                            {{ Object.values(refundCounts).reduce((sum, n) => sum + n, 0) }}
-                        </span>
-                    </button>
-                    <button
-                        v-for="status in refundStatuses"
-                        :key="status.value"
-                        type="button"
-                        role="tab"
-                        :aria-selected="refundStatusFilter === status.value"
-                        class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                        :class="
-                            refundStatusFilter === status.value
-                                ? 'bg-csc-blue text-white shadow-sm'
-                                : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                        "
-                        @click="refundStatusFilter = status.value"
-                    >
-                        {{ status.label }}
-                        <span
-                            class="ml-1 text-xs"
-                            :class="refundStatusFilter === status.value ? 'text-white/80' : 'text-csc-ink-subtle'"
-                        >
-                            {{ refundCounts[status.value] ?? 0 }}
-                        </span>
-                    </button>
-                </div>
+                <AppFilterChips
+                    :model-value="refundStatusFilter === '' ? null : refundStatusFilter"
+                    :options="refundChips"
+                    aria-label="Filter by refund status"
+                    allow-all
+                    :all-count="refundTotal"
+                    @update:model-value="refundStatusFilter = $event ?? ''"
+                />
 
                 <!--
                      The results dim while a filtered visit is out. The controls above stay

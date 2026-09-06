@@ -20,6 +20,11 @@ class RegistrationTransferred extends ParticipantNotification
         private readonly string $reason,
     ) {}
 
+    public function kind(): string
+    {
+        return 'transferred';
+    }
+
     public function title(object $notifiable): string
     {
         return 'Your training has been rescheduled';

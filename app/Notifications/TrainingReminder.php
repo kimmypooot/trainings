@@ -11,6 +11,11 @@ class TrainingReminder extends ParticipantNotification
 {
     public function __construct(private readonly Training $training) {}
 
+    public function kind(): string
+    {
+        return 'reminder';
+    }
+
     public function title(object $notifiable): string
     {
         return "Reminder: “{$this->training->title}” starts {$this->training->starts_at->diffForHumans()}";

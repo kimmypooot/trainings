@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import { Link } from '@inertiajs/vue3';
 import AppIcon from '@/Components/AppIcon.vue';
 import { iconNames } from '@/icons';
 
@@ -9,14 +10,29 @@ import { iconNames } from '@/icons';
  * The right form when the data is one number. A one-bar bar chart is the most
  * common way a dashboard wastes a card; this is what to reach for instead.
  *
- * Distinct from AppStat, which is the app-wide stat used across the admin
- * shell and knows how to be a link or a button. This one is for the reports
- * page: it carries a tone, an icon, and the trend behind the number, and it
- * never navigates.
+ * This is the summary figure everywhere — the admin screens, the reports, and
+ * the participant dashboard. It used to be one of two: AppStat was the flat box
+ * that knew how to be a link, this was the rich tile that never navigated, and
+ * the split ran along no line a reader could see. Nine admin screens had the
+ * flat one and the dashboards had the rich one, so the page you landed on
+ * looked like a different product from the page one click later.
+ *
+ * Navigating was the only thing AppStat could do that this could not, so that
+ * is what it gained, and AppStat is gone. `href` makes the whole tile an
+ * Inertia link, `action` makes it a button, and with neither it stays a plain
+ * `div` — so a tile never advertises an interaction it does not have.
+ *
+ * The affordance is the whole tile rather than the figure inside it. A tile is
+ * 132px wide on a phone (see the icon note below); there is no room in that for
+ * a separate target, and the number is what the reader is aiming at anyway.
  */
 const props = defineProps({
     label: { type: String, required: true },
     value: { type: [String, Number], required: true },
+    /** Where the figure leads. Set this and the whole tile becomes a link. */
+    href: { type: String, default: null },
+    /** Set for a tile that opens something in place rather than navigating. */
+    action: { type: Boolean, default: false },
     /** Small print under the value — units, scope, a caveat. */
     caption: { type: String, default: null },
     icon: {
@@ -89,6 +105,32 @@ const tones = {
 
 const skin = computed(() => tones[props.tone]);
 
+const interactive = computed(() => Boolean(props.href) || props.action);
+
+const tag = computed(() => {
+    if (props.href) return Link;
+
+    return props.action ? 'button' : 'div';
+});
+
+/*
+ * The hover lift is on every tile, interactive or not — it is the card's own
+ * material, not an affordance. What an interactive tile adds is the border
+ * picking up the brand on hover and a focus ring, which is the pair the
+ * quick-action tiles and AppStat already used, so a participant meets one
+ * response to "this can be pressed" across the dashboard.
+ *
+ * `text-left` is not cosmetic: a <button> centres its content in every
+ * browser, so without it a pressable tile would set its figure and label to
+ * the middle while the plain tiles beside it stayed ranged left.
+ */
+const shell = computed(() => [
+    'relative overflow-hidden rounded-xl border border-csc-line bg-white p-4 transition-shadow duration-150 hover:shadow-sm sm:p-5',
+    interactive.value
+        ? 'block w-full text-left transition-colors hover:border-csc-blue/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue'
+        : '',
+]);
+
 /*
  * The sparkline. No axis, no labels, no tooltip — it is texture behind the
  * number, showing only the shape of how it got here. Anyone who needs the
@@ -117,8 +159,11 @@ const sparkPath = computed(() => {
 </script>
 
 <template>
-    <div
-        class="relative overflow-hidden rounded-xl border border-csc-line bg-white p-4 transition-shadow duration-150 hover:shadow-sm sm:p-5"
+    <component
+        :is="tag"
+        :href="href ?? undefined"
+        :type="action && !href ? 'button' : undefined"
+        :class="shell"
     >
         <!-- A hairline of tone across the top edge — the accent, kept small. -->
         <span
@@ -205,5 +250,5 @@ const sparkPath = computed(() => {
                 vector-effect="non-scaling-stroke"
             />
         </svg>
-    </div>
+    </component>
 </template>

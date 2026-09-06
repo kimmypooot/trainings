@@ -6,6 +6,7 @@ use App\Enums\RegistrationStatus;
 use App\Models\Certificate;
 use App\Models\Registration;
 use App\Models\User;
+use App\Support\FeedMoment;
 use App\Support\ParticipantAttention;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
@@ -316,16 +317,10 @@ class DashboardController extends Controller
      *
      * Dates follow the house rule: relative inside the last week, absolute
      * beyond it, and always the other form in the tooltip — "3 days ago" is
-     * easier to place, but only while the span is short enough to feel.
-     *
-     * The window is measured on the absolute gap, which is not fussiness.
-     * Carbon 3's diff methods return a *signed* value, so a timestamp in the
-     * future is negative and passes any `< 7` test however far out it is: a
-     * row dated next month sorted to the top of the feed, landed under "This
-     * week", and read "2 weeks from now" — a history of something that has not
-     * happened. Seeded demo data has such rows today, and real data can get
-     * them from a clock skew or a backdated import, so the reading has to hold
-     * either way.
+     * easier to place, but only while the span is short enough to feel. That
+     * rule, and the day band the feed groups by, are FeedMoment's — the
+     * notifications list renders the same events and has to agree with this
+     * page about which of them happened today.
      */
     private function event(
         string $kind,
@@ -335,8 +330,6 @@ class DashboardController extends Controller
         string $url,
         int|string|null $owner = null,
     ): array {
-        $withinTheWeek = $at !== null && abs($at->diffInDays(now())) < 7;
-
         return [
             // Keyed on the row the event came off rather than on its subject:
             // two events of the same kind against the same training title would
@@ -347,18 +340,7 @@ class DashboardController extends Controller
             'subject' => $subject,
             'url' => $url,
             'sort' => $at?->timestamp,
-            'at' => $at?->toIso8601String(),
-            'at_label' => $at === null
-                ? null
-                : ($withinTheWeek ? $at->diffForHumans() : $at->format('d M Y')),
-            'at_exact' => $at?->format('d M Y, g:i A'),
-            'group' => match (true) {
-                $at === null => 'Earlier',
-                $at->isToday() => 'Today',
-                $at->isYesterday() => 'Yesterday',
-                $withinTheWeek => 'This week',
-                default => 'Earlier',
-            },
+            ...FeedMoment::for($at),
         ];
     }
 }

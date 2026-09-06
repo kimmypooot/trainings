@@ -69,16 +69,28 @@ const regenerate = () => {
 
                 <template #footer>
                     <div class="flex flex-col gap-3">
-                        <a
+                        <!--
+                            AppButton with the registry's own download glyph.
+                            This was a hand-rolled anchor carrying a hand-drawn
+                            SVG — the ghost button's classes copied out by hand,
+                            which had already drifted (no `gap-2` sizing rule,
+                            a 1.8 stroke where AppIcon draws 1.5), and a second
+                            arrow-into-tray that did not match the one the rest
+                            of the app downloads with.
+
+                            `external`, because this is a PNG: Inertia would
+                            try to render it as a page. The `download` attribute
+                            falls through to the anchor AppButton renders.
+                        -->
+                        <AppButton
                             href="/my/qr.png"
+                            external
+                            variant="ghost"
+                            icon="download"
                             download="csc-tims-qr-code.png"
-                            class="inline-flex items-center justify-center gap-2 rounded-lg border border-csc-blue/30 px-5 py-2.5 text-sm font-semibold text-csc-blue transition-colors duration-150 hover:border-csc-blue hover:bg-csc-blue-tint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                         >
-                            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
                             Save or Print My Code
-                        </a>
+                        </AppButton>
 
                         <p class="text-xs leading-relaxed text-csc-ink-subtle">
                             This code is unique to you and stays the same across every CSC event. It works without

@@ -7,6 +7,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
 
 defineProps({
     requests: { type: Array, required: true },
@@ -107,13 +108,25 @@ const submit = () => form.post('/my/training-requests', { onSuccess: () => form.
                             CSC remarks: {{ item.review_remarks }}
                         </p>
 
-                        <a
-                            v-if="item.training_url"
-                            :href="item.training_url"
-                            class="mt-3 inline-block rounded text-sm font-medium text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                        >
-                            View the scheduled training
-                        </a>
+                        <!--
+                            The one thing a participant can do with an approved
+                            request, in the shape every other row action in the
+                            app takes. It was an underlined anchor — a full page
+                            reload, and the only control on the page styled as
+                            body text.
+                        -->
+                        <div v-if="item.training_url" class="mt-3">
+                            <AppRowActions
+                                layout="card"
+                                :actions="[
+                                    {
+                                        label: 'View the scheduled training',
+                                        icon: 'calendar',
+                                        href: item.training_url,
+                                    },
+                                ]"
+                            />
+                        </div>
                     </li>
                 </ul>
             </AppCard>
