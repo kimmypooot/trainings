@@ -171,7 +171,7 @@ const describedBy = computed(() => {
     <div ref="root" :class="rootClass" :style="rootStyle" @focusout="onFocusOut">
         <label v-if="label" :for="fieldId" class="mb-1.5 block text-sm font-medium text-csc-ink">
             {{ label }}
-            <span v-if="required" class="text-csc-red-ink" aria-hidden="true">*</span>
+            <span v-if="required" class="text-danger" aria-hidden="true">*</span>
         </label>
 
         <div class="relative">
@@ -193,7 +193,7 @@ const describedBy = computed(() => {
                 class="w-full rounded-lg border bg-white py-2.5 pr-16 pl-4 text-base text-csc-ink transition-colors duration-150 focus:outline-2 focus:outline-offset-1 disabled:cursor-not-allowed disabled:bg-csc-blue-tint/50 disabled:text-csc-ink-subtle sm:text-sm"
                 :class="
                     error
-                        ? 'border-csc-red-ink focus:outline-csc-red-ink'
+                        ? 'border-danger focus:outline-danger'
                         : 'border-csc-line hover:border-csc-blue/40 focus:border-csc-blue focus:outline-csc-blue'
                 "
                 @focus="openList"
@@ -245,6 +245,6 @@ const describedBy = computed(() => {
         </div>
 
         <p v-if="hint && !error" :id="hintId" class="mt-1.5 text-xs text-csc-ink-subtle">{{ hint }}</p>
-        <p v-if="error" :id="errorId" class="mt-1.5 text-xs font-medium text-csc-red-ink">{{ error }}</p>
+        <p v-if="error" :id="errorId" class="mt-1.5 text-xs font-medium text-danger">{{ error }}</p>
     </div>
 </template>

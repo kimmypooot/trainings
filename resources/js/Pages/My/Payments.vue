@@ -505,7 +505,7 @@ const submitPhysicalOr = () =>
                             <AppBadge :status="payment.status" />
                         </div>
 
-                        <p v-if="payment.rejection_reason" class="mt-3 text-sm text-csc-red-ink">
+                        <p v-if="payment.rejection_reason" class="mt-3 text-sm text-danger">
                             {{ payment.rejection_reason }}
                         </p>
 
@@ -530,7 +530,7 @@ const submitPhysicalOr = () =>
 
                             <p
                                 v-if="payment.refund.rejection_reason"
-                                class="mt-1.5 text-sm text-csc-red-ink"
+                                class="mt-1.5 text-sm text-danger"
                             >
                                 {{ payment.refund.rejection_reason }}
                             </p>
@@ -584,7 +584,7 @@ const submitPhysicalOr = () =>
 
                             <p
                                 v-if="payment.physical_or.rejection_reason"
-                                class="mt-1.5 text-sm text-csc-red-ink"
+                                class="mt-1.5 text-sm text-danger"
                             >
                                 {{ payment.physical_or.rejection_reason }}
                             </p>

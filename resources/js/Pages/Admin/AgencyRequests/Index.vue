@@ -194,7 +194,7 @@ const submitReject = () =>
                                 <template v-if="request.ord_notified"> · ORD notified</template>
                             </p>
 
-                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-danger">
                                 Declined: {{ request.rejection_reason }}
                             </p>
                             <p v-if="request.cancellation_reason" class="mt-2 text-sm text-csc-ink-muted">

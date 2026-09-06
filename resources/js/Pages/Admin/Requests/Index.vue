@@ -216,7 +216,7 @@ const convert = (id) => {
                     <span
                         v-if="tab.count"
                         class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                        :class="active === tab.key ? 'bg-white/20' : 'bg-csc-red text-white'"
+                        :class="active === tab.key ? 'bg-white/20' : 'bg-csc-blue-tint text-csc-blue'"
                     >
                         {{ tab.count }}
                     </span>

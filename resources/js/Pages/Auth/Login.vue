@@ -169,7 +169,7 @@ const submit = () => {
 
                 <p
                     v-if="form.errors.form"
-                    class="mt-6 flex items-start gap-2 rounded-lg border border-csc-red-ink/30 bg-csc-red-ink/5 px-4 py-3 text-sm font-medium text-csc-red-ink"
+                    class="mt-6 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm font-medium text-danger"
                     role="alert"
                 >
                     <svg class="mt-0.5 size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -189,9 +189,9 @@ const submit = () => {
                     @click="handoffToGoogle"
                 >
                     <!--
-                        Blue, not red, and deliberately so. --color-csc-red-ink
-                        is the same hex as --color-danger, and the sign-in error
-                        banner sits a few pixels above this button wearing it —
+                        Blue, not red, and deliberately so. The sign-in error
+                        banner sits a few pixels above this button wearing
+                        --color-danger —
                         a red pill here would say something positive in the
                         page's own error vocabulary. Blue is instead the colour
                         of the primary action on this page (the Sign in button),

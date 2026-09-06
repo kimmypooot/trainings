@@ -167,7 +167,7 @@ const submit = () =>
                     </span>
                 </label>
             </div>
-            <p v-if="form.errors.charge_to" class="mt-1.5 text-xs font-medium text-csc-red-ink">
+            <p v-if="form.errors.charge_to" class="mt-1.5 text-xs font-medium text-danger">
                 {{ form.errors.charge_to }}
             </p>
         </fieldset>

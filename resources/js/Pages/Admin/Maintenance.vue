@@ -100,7 +100,7 @@ const confirmEnable = () => {
                     />
 
                     <div class="flex flex-wrap items-center justify-end gap-2 border-t border-csc-line pt-5">
-                        <p v-if="form.errors.enabled" class="mr-auto text-xs font-medium text-csc-red-ink">
+                        <p v-if="form.errors.enabled" class="mr-auto text-xs font-medium text-danger">
                             {{ form.errors.enabled }}
                         </p>
                         <AppButton

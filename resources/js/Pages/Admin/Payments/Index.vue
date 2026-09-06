@@ -412,7 +412,7 @@ const rejectRefund = (refund) => {
                     <span
                         v-if="openRefunds.count"
                         class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                        :class="active === 'refunds' ? 'bg-white/20' : 'bg-csc-red text-white'"
+                        :class="active === 'refunds' ? 'bg-white/20' : 'bg-csc-blue-tint text-csc-blue'"
                     >
                         {{ openRefunds.count }}
                     </span>
@@ -678,7 +678,7 @@ const rejectRefund = (refund) => {
                                             </td>
                                             <td class="px-5 py-3.5">
                                                 <AppBadge :status="payment.status" />
-                                                <p v-if="payment.rejection_reason" class="mt-1 max-w-48 text-xs text-csc-red-ink">
+                                                <p v-if="payment.rejection_reason" class="mt-1 max-w-48 text-xs text-danger">
                                                     {{ payment.rejection_reason }}
                                                 </p>
                                                 <p v-if="payment.remarks" class="mt-1 max-w-48 text-xs text-csc-ink-subtle">
@@ -768,7 +768,7 @@ const rejectRefund = (refund) => {
                                         <AppBadge :status="payment.status" />
                                     </div>
 
-                                    <p v-if="payment.rejection_reason" class="mt-3 text-sm text-csc-red-ink">
+                                    <p v-if="payment.rejection_reason" class="mt-3 text-sm text-danger">
                                         {{ payment.rejection_reason }}
                                     </p>
 
@@ -896,7 +896,7 @@ const rejectRefund = (refund) => {
                                         <span v-if="index < refundPipeline.length - 1" class="h-px w-4 bg-csc-line"></span>
                                     </li>
                                 </ol>
-                                <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-csc-red-ink">
+                                <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-danger">
                                     Declined
                                 </p>
 
@@ -930,7 +930,7 @@ const rejectRefund = (refund) => {
                                     </div>
                                 </dl>
 
-                                <p v-if="refund.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                                <p v-if="refund.rejection_reason" class="mt-2 text-sm text-danger">
                                     Declined: {{ refund.rejection_reason }}
                                 </p>
 
@@ -1050,7 +1050,7 @@ const rejectRefund = (refund) => {
                             fee, not the full one.
                         </span>
                     </label>
-                    <p v-if="verifyForm.errors.prime_hrm_discount" class="mt-2 text-xs font-medium text-csc-red-ink">
+                    <p v-if="verifyForm.errors.prime_hrm_discount" class="mt-2 text-xs font-medium text-danger">
                         {{ verifyForm.errors.prime_hrm_discount }}
                     </p>
                 </div>

@@ -239,7 +239,7 @@ const submitCancel = () =>
 
                         <p class="mt-3 text-sm text-csc-ink-muted">{{ request.message }}</p>
 
-                        <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                        <p v-if="request.rejection_reason" class="mt-2 text-sm text-danger">
                             {{ request.rejection_reason }}
                         </p>
 

@@ -2018,10 +2018,10 @@ const printedAt = new Date().toLocaleString();
                     required
                 />
 
-                <p v-if="transferForm.errors.ids" class="text-xs font-medium text-csc-red-ink">
+                <p v-if="transferForm.errors.ids" class="text-xs font-medium text-danger">
                     {{ transferForm.errors.ids }}
                 </p>
-                <p v-if="transferForm.errors.transfer" class="text-xs font-medium text-csc-red-ink">
+                <p v-if="transferForm.errors.transfer" class="text-xs font-medium text-danger">
                     {{ transferForm.errors.transfer }}
                 </p>
 
@@ -2137,7 +2137,7 @@ const printedAt = new Date().toLocaleString();
                         </div>
                     </dl>
 
-                    <p v-if="paymentForm.errors.prime_hrm_discount" class="mt-2 text-xs font-medium text-csc-red-ink">
+                    <p v-if="paymentForm.errors.prime_hrm_discount" class="mt-2 text-xs font-medium text-danger">
                         {{ paymentForm.errors.prime_hrm_discount }}
                     </p>
                 </div>
@@ -2225,7 +2225,7 @@ const printedAt = new Date().toLocaleString();
                     :error="paymentForm.errors.remarks"
                 />
 
-                <p v-if="paymentForm.errors.payment" class="text-xs font-medium text-csc-red-ink">
+                <p v-if="paymentForm.errors.payment" class="text-xs font-medium text-danger">
                     {{ paymentForm.errors.payment }}
                 </p>
 

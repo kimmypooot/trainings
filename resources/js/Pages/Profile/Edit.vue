@@ -816,7 +816,7 @@ onBeforeUnmount(() => {
                                 <button
                                     v-if="user.avatar"
                                     type="button"
-                                    class="text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-csc-red-ink hover:underline disabled:opacity-50"
+                                    class="text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-danger hover:underline disabled:opacity-50"
                                     :disabled="photoBusy"
                                     @click="removePhoto"
                                 >
@@ -824,7 +824,7 @@ onBeforeUnmount(() => {
                                 </button>
                             </div>
 
-                            <p v-if="photoError" class="mt-1.5 text-xs font-medium text-csc-red-ink">
+                            <p v-if="photoError" class="mt-1.5 text-xs font-medium text-danger">
                                 {{ photoError }}
                             </p>
                             <p v-else class="mt-1.5 text-xs text-csc-ink-subtle">
@@ -1011,7 +1011,7 @@ onBeforeUnmount(() => {
                             </p>
                             <button
                                 type="button"
-                                class="mt-2 rounded text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-csc-red-ink hover:underline disabled:opacity-50"
+                                class="mt-2 rounded text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-danger hover:underline disabled:opacity-50"
                                 :disabled="cancellingEmail"
                                 @click="cancelPendingEmail"
                             >
@@ -1278,7 +1278,7 @@ onBeforeUnmount(() => {
                         <div>
                             <p id="employment-type-label" class="mb-2 text-sm font-medium text-csc-ink">
                                 Are you a government employee?
-                                <span class="text-csc-red-ink" aria-hidden="true">*</span>
+                                <span class="text-danger" aria-hidden="true">*</span>
                             </p>
                             <div
                                 role="radiogroup"
@@ -1334,7 +1334,7 @@ onBeforeUnmount(() => {
                                     </span>
                                 </label>
                             </div>
-                            <p v-if="form.errors.employmentType" class="mt-1.5 text-xs font-medium text-csc-red-ink">
+                            <p v-if="form.errors.employmentType" class="mt-1.5 text-xs font-medium text-danger">
                                 {{ form.errors.employmentType }}
                             </p>
                         </div>

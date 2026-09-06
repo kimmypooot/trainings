@@ -283,7 +283,7 @@ const submitSettings = () =>
                             </div>
 
                             <p v-if="request.notes" class="mt-2 text-sm text-csc-ink-muted">{{ request.notes }}</p>
-                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-danger">
                                 Declined: {{ request.rejection_reason }}
                             </p>
 
@@ -306,7 +306,7 @@ const submitSettings = () =>
                                     <span v-if="index < pipeline.length - 1" class="h-px w-4 bg-csc-line"></span>
                                 </li>
                             </ol>
-                            <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-csc-red-ink">Declined</p>
+                            <p v-else class="mt-3 text-xs font-semibold uppercase tracking-wide text-danger">Declined</p>
 
                             <div v-if="request.courier_name" class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
                                 <p class="flex gap-2">

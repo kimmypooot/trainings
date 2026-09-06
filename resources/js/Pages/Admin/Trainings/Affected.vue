@@ -472,10 +472,10 @@ const exportUrl = computed(() => {
                     required
                 />
 
-                <p v-if="form.errors.ids" class="text-xs font-medium text-csc-red-ink">
+                <p v-if="form.errors.ids" class="text-xs font-medium text-danger">
                     {{ form.errors.ids }}
                 </p>
-                <p v-if="form.errors.transfer" class="text-xs font-medium text-csc-red-ink">
+                <p v-if="form.errors.transfer" class="text-xs font-medium text-danger">
                     {{ form.errors.transfer }}
                 </p>
 

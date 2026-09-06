@@ -498,7 +498,7 @@ onMounted(() => {
 
             <p
                 v-if="Object.keys(form.errors).length || hasLocalErrors()"
-                class="mb-6 flex items-start gap-2 rounded-lg border border-csc-red-ink/30 bg-csc-red-ink/5 px-4 py-3 text-sm font-medium text-csc-red-ink"
+                class="mb-6 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm font-medium text-danger"
                 role="alert"
             >
                 <svg class="mt-0.5 size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -690,7 +690,7 @@ onMounted(() => {
                     <div class="mt-5">
                         <p id="employment-type-label" class="mb-2 text-sm font-medium text-csc-ink">
                             Are you a government employee?
-                            <span class="text-csc-red-ink" aria-hidden="true">*</span>
+                            <span class="text-danger" aria-hidden="true">*</span>
                         </p>
                         <div
                             role="radiogroup"
@@ -746,7 +746,7 @@ onMounted(() => {
                                 </span>
                             </label>
                         </div>
-                        <p v-if="errorFor('employmentType')" class="mt-1.5 text-xs font-medium text-csc-red-ink">
+                        <p v-if="errorFor('employmentType')" class="mt-1.5 text-xs font-medium text-danger">
                             {{ errorFor('employmentType') }}
                         </p>
                     </div>
@@ -838,7 +838,7 @@ onMounted(() => {
                                 Privacy Policy</Link>.
                         </span>
                     </label>
-                    <p v-if="errorFor('consent')" id="consent-error" class="mt-2 text-xs font-medium text-csc-red-ink">
+                    <p v-if="errorFor('consent')" id="consent-error" class="mt-2 text-xs font-medium text-danger">
                         {{ errorFor('consent') }}
                     </p>
                 </div>
