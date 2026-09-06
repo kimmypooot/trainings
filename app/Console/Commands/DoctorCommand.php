@@ -6,6 +6,7 @@ use App\Support\PhilippineGeography;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Throwable;
 
 /**
@@ -47,6 +48,7 @@ class DoctorCommand extends Command
         $this->checkOfficeIdentity($production);
         $this->checkSessionAndCookies($production);
         $this->checkCaches($production);
+        $this->checkCompression($production);
         $this->checkQueue();
         $this->checkScheduler($production);
         $this->checkBackups($production);
@@ -181,6 +183,128 @@ class DoctorCommand extends Command
      * The queue is the check most worth having, because its failure is
      * invisible: nothing errors, participants simply never hear anything.
      */
+    /**
+     * Is the web server actually compressing what it sends?
+     *
+     * This is the third setting in this file with the shape the whole command
+     * exists for: written down, never enforced, and silent when wrong. The
+     * queue worker and the scheduler were the other two. `public/.htaccess`
+     * carries the directives, but they sit behind `<IfModule mod_deflate.c>`
+     * and do nothing until the module is loaded — which a stock XAMPP does not
+     * — and under nginx that file is not read at all. Nothing errors either
+     * way. The site is simply slow, everywhere, forever.
+     *
+     * It is worth a check here rather than a line in the runbook because of
+     * what this application ships: Inertia sends every page as JSON that is
+     * mostly repeated keys and repeated office names, so it compresses by
+     * roughly an order of magnitude, and the people on the other end are in
+     * field offices and at training venues on connections the scanning station
+     * is built offline-first to survive.
+     *
+     * Two deliberate choices about how it fails:
+     *
+     * `decode_content => false` is load-bearing. Guzzle transparently inflates
+     * a gzipped body and *removes* the Content-Encoding header when it does,
+     * so without this the check reads a compressed response as an
+     * uncompressed one and fails every correctly configured deployment.
+     * (No test guards that option: Http::fake() answers without a Guzzle
+     * transfer, so the fake's headers arrive whatever decode_content says.
+     * It was verified by hand against a real Apache instead.)
+     *
+     * And an unreachable host is a *warning*, not a failure. This runs from a
+     * deploy script, which may reach the application before the web server is
+     * up, or from a box that cannot resolve its own public hostname. A gate
+     * that fails for reasons unrelated to what it is checking is one people
+     * learn to pass with --no-verify, and then it is guarding nothing. Only a
+     * host that answers, and answers uncompressed, is a failure.
+     */
+    private function checkCompression(bool $production): void
+    {
+        // Nothing to check on a developer machine: `artisan serve` does not
+        // read .htaccess and does not compress, so this would always fail
+        // locally — and a check that always fails is one people scroll past.
+        if (! $production) {
+            return;
+        }
+
+        $url = (string) config('app.url');
+
+        try {
+            $response = Http::withHeaders(['Accept-Encoding' => 'gzip'])
+                ->withOptions(['decode_content' => false])
+                ->connectTimeout(3)
+                ->timeout(8)
+                ->get($url);
+        } catch (Throwable $e) {
+            $this->results[] = [
+                'level' => 'warn',
+                'label' => 'Responses are compressed',
+                'detail' => "Could not reach {$url} to check ({$e->getMessage()}). Verify by hand: "
+                    ."curl -sI -H 'Accept-Encoding: gzip' {$url} | grep -i content-encoding",
+            ];
+
+            return;
+        }
+
+        $encoding = (string) $response->header('Content-Encoding');
+
+        if ($encoding !== '') {
+            $this->assert(true, 'Responses are compressed', '');
+
+            return;
+        }
+
+        // Two ways to read "no Content-Encoding" that are not a misconfigured
+        // server, and both were hit while testing this check rather than
+        // reasoned about beforehand.
+        //
+        // An error page is not the home page: if APP_URL answers 4xx or 5xx —
+        // a maintenance window, a half-finished vhost, a deploy mid-flight —
+        // the body says nothing about how the real site is served.
+        //
+        // And mod_deflate legitimately leaves very small bodies alone: a
+        // response below roughly a filter block goes out uncompressed on a
+        // perfectly configured server, because deflating it would make it
+        // bigger. A stock Apache error page is a few hundred bytes and lands
+        // exactly there. The real page this check wants to see is ~10 KB.
+        //
+        // Failing a deploy on either would be a gate that blocks for a reason
+        // unrelated to what it checks, so both warn instead.
+        $status = $response->status();
+        $bytes = strlen((string) $response->body());
+
+        if ($status >= 400) {
+            $this->results[] = [
+                'level' => 'warn',
+                'label' => 'Responses are compressed',
+                'detail' => "{$url} answered {$status}, so this could not be judged from it. Check a page "
+                    ."that loads: curl -sI -H 'Accept-Encoding: gzip' {$url} | grep -i content-encoding",
+            ];
+
+            return;
+        }
+
+        if ($bytes < 1024) {
+            $this->results[] = [
+                'level' => 'warn',
+                'label' => 'Responses are compressed',
+                'detail' => "{$url} answered with only {$bytes} bytes, which a correctly configured server "
+                    .'leaves uncompressed anyway, so this proves nothing either way. Check a real page by hand.',
+            ];
+
+            return;
+        }
+
+        $this->assert(
+            false,
+            'Responses are compressed',
+            "{$url} answered {$bytes} bytes with no Content-Encoding header, so nothing is being compressed. "
+            .'Enable mod_deflate and mod_filter under Apache, or `gzip on` with gzip_types covering '
+            .'application/json under nginx. Inertia ships every page as JSON and it compresses roughly '
+            .'tenfold, which is the difference between usable and not on a venue connection.'
+        );
+    }
+
     private function checkQueue(): void
     {
         if (config('queue.default') !== 'database') {

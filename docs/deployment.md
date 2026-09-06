@@ -49,6 +49,36 @@ one abusive client can lock everyone out of certificate verification and out of
 unlocking a scanning station, and HTTPS becomes invisible so `asset()` emits
 `http://` URLs the browser blocks as mixed content.
 
+**Turn compression on, and check that it is actually on.** `public/.htaccess`
+carries the Apache directives, but they sit behind `<IfModule mod_deflate.c>`
+and do nothing at all until the module is loaded — which in a stock XAMPP it is
+not. Enable `mod_deflate` and `mod_filter` (uncomment both `LoadModule` lines in
+`httpd.conf`); under nginx none of that file applies and you want `gzip on` with
+`gzip_types` covering `application/json` in the server block.
+
+This is worth more here than the usual "nice to have". Inertia ships every page
+as JSON, and that JSON is mostly repeated keys and repeated office names — the
+profile form is ~117 KB, of which ~85 KB is the agency picker's few hundred
+rows — so it compresses by roughly an order of magnitude. The people using this
+system are in field offices and at training venues; the scanning station is
+built offline-first precisely because a venue connection cannot be relied on.
+
+**Verify it rather than assuming it**, because the failure is silent — the site
+is simply slow, and nothing logs anything. `tims:doctor` now checks this for you
+and fails the deploy if the site answers uncompressed, so the quickest
+confirmation is to run it (§5); by hand it is:
+
+```bash
+curl -sI -H 'Accept-Encoding: gzip' https://your-host/login | grep -i content-encoding
+# want: content-encoding: gzip
+```
+
+The same command against a `/build/` asset should also show
+`cache-control: public, max-age=31536000, immutable`. Those files carry a
+content hash, so freezing them is safe; `scanner-sw.js` is deliberately
+excluded, because an immutable service worker would strand every scanning
+station on the build it first installed.
+
 ---
 
 ## 2. Environment
@@ -164,6 +194,102 @@ Each row wants `code` (short, unique), `name`, `type` (`field_office`,
 `jurisdiction` — the provinces the office covers, which is what a participant
 picks against. `email`, `head_name` and `head_position` are optional and may be
 null.
+
+### The agency list
+
+`database/data/agencies.json` is the employer list the profile form's picker
+offers. It ships with Regional Office VIII's 285 agencies — 150 LGUs, 82 NGAs,
+27 SUCs and 26 water districts — each already paired with its sector and its
+serving field office. **Like the office list, that is the wrong list for anyone
+else**, so replace it before an installation goes live.
+
+Unlike the office list, though, an empty or missing file here is a legitimate
+state rather than a broken install: every participant simply takes the "my
+agency is not on the list" path and types their employer, which is exactly what
+the form did before the reference existed. So nothing fails loudly, and nothing
+should — an office can come up with no list and build one later.
+
+Filling it in is what buys the thing the picker is for. A picked agency carries
+its sector and its serving field office with it, so those two stop being
+independent guesses made by each participant — which is how "DEPED", "DepEd"
+and "Department of Education" became three employers to every export, and how a
+DepEd employee could be filed as a water district under the wrong office.
+
+Each row wants `code` and `name` (both unique) and `sector`
+(one of `ProfileOptions::sectors()`, spelled exactly). `acronym` is optional and
+worth setting, because it joins the text the picker searches: most people know
+their employer by it, and **the shipped list has none** — the source export did
+not carry a column for them, and guessing 285 of them would be inventing this
+office's reference data. The practical consequence is that typing `DPWH` or
+`DEPED` finds nothing today while `public works` and `education` both work,
+since the picker matches on every word in any order. Filling the column in is a
+worthwhile pass whenever somebody has the authoritative list.
+`field_office_code` is optional and names an office from
+the file above; an unrecognised code leaves the agency's office unset rather
+than failing the seed, and an agency with no office simply leaves that question
+for the participant to answer. `is_active` defaults to true.
+
+```json
+[
+    {
+        "code": "jp-30",
+        "name": "Department of Education - Schools Division Office of Leyte",
+        "acronym": "DEPED",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    }
+]
+```
+
+Apply it with `php artisan db:seed --class=AgencySeeder`, which is safe to
+re-run: rows are matched on `code`, so an amended file corrects names, sectors
+and office assignments in place. It is deliberately **additive** — a row
+removed from the file is left alone rather than deleted, because profiles point
+at these rows. Retire an agency with `"is_active": false`, which keeps it on
+the profiles that already name it while removing it from the picker.
+
+**Why `code` and not `name`.** A name is the field most likely to be edited —
+a typo, a reorganisation, a change of house style — and matching on it means
+the seeder cannot tell a rename from a new agency. It creates a second row,
+leaves every profile already linked pointing at the old spelling, and offers
+the new one to everybody afterwards: one employer, two spellings, which is the
+split this table exists to end. A row with no `code` still falls back to
+matching on `name` and still carries that hazard, so give hand-added rows a
+code.
+
+**A correction reaches the profiles already linked.** `profiles` keeps its own
+copy of the employer name, sector and field office — those columns are searched,
+grouped, sorted, scoped on and written into ten exports, and the typed-employer
+path has no agency row to join to at all. A copy is only safe if it is kept
+current, so the `saved` hook on `App\Models\Agency` pushes a changed name,
+sector or field office out to every profile pointing at the row. Two
+consequences worth knowing: changing an agency's field office **moves its people
+into that office's view**, which is a visibility change and not just a label;
+and an agency whose office is set back to null leaves each profile's own answer
+standing rather than blanking it.
+
+`database/data/agencies.sql` is the same list as an `INSERT … ON DUPLICATE KEY
+UPDATE`, for loading straight into an existing database
+(`mysql -u root csc_tims-db < database/data/agencies.sql`) or for a reviewer who
+would rather read SQL than JSON. It resolves each field office by **code**
+through a subquery rather than carrying an id, because ids are whatever the
+migration assigned on the machine the file came from — a dump with literal ids
+files every agency under the wrong office elsewhere. The two files are
+generated from one source and must be regenerated together; the JSON is what
+the application seeds from.
+
+`ProfileCompletionTest::test_the_shipped_agency_list_is_valid_reference_data`
+guards the JSON, and it is worth knowing what it is guarding against, because
+both failures are silent. A sector misspelled by one character seeds fine,
+lands on a profile, and then bounces that participant's *next* save on a field
+they never touched — the picker wrote a value `ProfileOptions::sectors()` does
+not contain. An office code matching no office seeds a null instead, so the
+agency quietly stops answering the one question the reference exists to answer.
+
+There is no screen for this yet. Until there is, a correction to an agency's
+sector or field office is a file edit and a re-seed — worth knowing, because
+those two fields are read-only on the profile form precisely so that they are
+fixed once here rather than in each participant's record.
 
 **Keep one catch-all row.** The shipped list ends with a `division` row covering
 every province plus an "outside the region" option, and it is what a participant
