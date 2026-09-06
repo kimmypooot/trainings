@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Agency;
 use App\Models\FieldOffice;
 use App\Support\EmailChangeService;
 use App\Support\PhilippineGeography;
@@ -22,7 +23,7 @@ class ProfileController extends Controller
         $user = $request->user();
 
         return Inertia::render('Profile/Complete', [
-            'options' => [...ProfileOptions::all(), 'fieldOffices' => FieldOffice::options()],
+            'options' => [...ProfileOptions::all(), 'fieldOffices' => FieldOffice::options(), 'agencies' => Agency::options()],
             'geography' => PhilippineGeography::nested(),
             'user' => [
                 'name' => $user->name,
@@ -44,7 +45,7 @@ class ProfileController extends Controller
         $user = $request->user()->loadMissing('profile');
 
         return Inertia::render('Profile/Edit', [
-            'options' => [...ProfileOptions::all(), 'fieldOffices' => FieldOffice::options()],
+            'options' => [...ProfileOptions::all(), 'fieldOffices' => FieldOffice::options(), 'agencies' => Agency::options()],
             'geography' => PhilippineGeography::nested(),
             'user' => [
                 'name' => $user->name,
@@ -84,7 +85,7 @@ class ProfileController extends Controller
             'profile' => $user->profile ? [
                 ...$user->profile->only([
                     'first_name', 'middle_name', 'last_name', 'suffix', 'sex', 'civil_status',
-                    'mobile_number', 'position_title', 'salary_grade', 'organization_name', 'sector',
+                    'mobile_number', 'position_title', 'salary_grade', 'agency_id', 'organization_name', 'sector',
                     'region', 'province', 'city_municipality', 'field_office_id', 'position_level',
                     'employment_status', 'organization_address', 'food_restrictions_details',
                 ]),
@@ -143,6 +144,9 @@ class ProfileController extends Controller
             ...ProfileService::messages(),
             'consent.accepted' => 'You must give consent for the processing of your personal data to continue.',
         ]);
+
+        // Sector and field office follow the picked agency rather than the post.
+        $validated = ProfileService::resolveEmployer($validated);
 
         ProfileService::save($request->user(), $validated, recordConsent: true);
     }

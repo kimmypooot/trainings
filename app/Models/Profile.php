@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $consented_at
  * @property-read User $user
  * @property-read FieldOffice|null $fieldOffice
+ * @property-read Agency|null $agency
  *
  * Larastan reads casts from the `$casts` property rather than the `casts()`
  * method this model uses, so the two cast columns resolved to their raw
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'first_name', 'middle_name', 'last_name', 'suffix', 'date_of_birth', 'sex',
     'is_pwd', 'civil_status', 'mobile_number', 'position_title', 'salary_grade',
-    'organization_name', 'sector', 'region', 'province',
+    'agency_id', 'organization_name', 'sector', 'region', 'province',
     'city_municipality', 'field_office_id', 'position_level', 'employment_status',
     'organization_address', 'food_restrictions_details', 'consented_at',
 ])]
@@ -60,6 +61,17 @@ class Profile extends Model
     public function fieldOffice(): BelongsTo
     {
         return $this->belongsTo(FieldOffice::class);
+    }
+
+    /**
+     * The employer picked from the reference list, or null when it was typed.
+     *
+     * Null is the "my agency is not listed" state rather than missing data:
+     * organization_name, sector and field_office_id are filled either way.
+     */
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(Agency::class);
     }
 
     /**

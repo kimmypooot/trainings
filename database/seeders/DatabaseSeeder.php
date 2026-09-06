@@ -12,14 +12,15 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      *
-     * Order matters: offices first, since every profile points at one, then the
-     * fixed demo logins, then the randomised population, and finally the
-     * activity that hangs off those accounts.
+     * Order matters: offices first, since every profile points at one and every
+     * agency is served by one, then the fixed demo logins, then the randomised
+     * population, and finally the activity that hangs off those accounts.
      */
     public function run(): void
     {
         $this->call([
             FieldOfficeSeeder::class,
+            AgencySeeder::class,
             DemoSeeder::class,
             SampleUsersSeeder::class,
             SampleActivitySeeder::class,

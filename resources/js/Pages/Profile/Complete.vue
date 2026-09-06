@@ -4,6 +4,7 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLogo from '@/Components/AppLogo.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AgencyFields from '@/Components/AgencyFields.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
@@ -29,6 +30,7 @@ const form = useForm({
 
     position_title: '',
     salary_grade: '',
+    agency_id: '',
     organization_name: '',
     sector: '',
     region: '',
@@ -212,7 +214,7 @@ const isPrivate = computed(() => employmentType.value === 'private');
 // Non-government roles are grouped under "Private" (lenient): salary grade and
 // position level do not apply, but sector stays pickable — Private Sector, an
 // NGO, or Other — rather than being forced to one value.
-const privateSectorOptions = ['Private Sector', 'Non-Government Organization', 'Other'];
+const privateSectorOptions = ['Private Sector', 'Non-Government Organization (NGO)', 'Other'];
 
 const applyPrivate = () => {
     form.salary_grade = 'Not Applicable';
@@ -226,6 +228,25 @@ const applyGovernment = () => {
     if (form.position_level === 'Not Applicable') form.position_level = '';
     if (form.employment_status === 'Others') form.employment_status = '';
     if (form.sector === 'Private Sector') form.sector = '';
+};
+
+/*
+ * A picked agency answers the employment-classification gate rather than
+ * arguing with it. The gate exists to spare private-sector participants three
+ * fields that do not apply to them; when the reference list already knows the
+ * employer is an NGA, the honest thing is to move the gate to match the fact —
+ * not to leave a DepEd employee filed under "Private sector / Others" because
+ * of the order they happened to fill the form in.
+ *
+ * "Other" flips nothing: it is the sector for an employer that fits none of the
+ * named ones, which is no evidence either way about the gate.
+ */
+const NON_GOVERNMENT_SECTORS = ['Private Sector', 'Non-Government Organization (NGO)'];
+
+const onAgencySelected = (agency) => {
+    if (!agency || agency.sector === 'Other') return;
+
+    employmentType.value = NON_GOVERNMENT_SECTORS.includes(agency.sector) ? 'private' : 'government';
 };
 
 watch(employmentType, (value) => {
@@ -776,39 +797,14 @@ onMounted(() => {
                             />
                         </div>
 
-                        <div class="sm:col-span-12">
-                            <AppInput
-                                v-model="form.organization_name"
-                                label="Name of Agency / Company / Organization"
-                                autocomplete="organization"
-                                placeholder="e.g. DEPARTMENT OF EDUCATION"
-                                maxlength="255"
-                                hint="Enter the full name — do not abbreviate."
-                                :error="errorFor('organization_name')"
-                                uppercase
-                                required
-                            />
-                        </div>
-
-                        <div class="sm:col-span-6">
-                            <AppSelect
-                                v-model="form.sector"
-                                label="Sector"
-                                :options="isPrivate ? privateSectorOptions : props.options.sectors"
-                                :hint="isPrivate ? 'Pick the closest match for your organization.' : undefined"
-                                :error="errorFor('sector')"
-                                required
-                            />
-                        </div>
-                        <div class="sm:col-span-6">
-                            <AppSelect
-                                v-model="form.field_office_id"
-                                label="CSC Field Office"
-                                :options="props.options.fieldOffices"
-                                :error="errorFor('field_office_id')"
-                                required
-                            />
-                        </div>
+                        <AgencyFields
+                            :form="form"
+                            :options="props.options"
+                            :sector-options="isPrivate ? privateSectorOptions : props.options.sectors"
+                            :sector-hint="isPrivate ? 'Pick the closest match for your organization.' : undefined"
+                            :error-for="errorFor"
+                            @agency-selected="onAgencySelected"
+                        />
 
                         <div class="sm:col-span-12">
                             <AppTextarea

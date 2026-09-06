@@ -33,15 +33,13 @@ class ProfileOptions
     public static function sectors(): array
     {
         return [
-            'National Government Agency',
-            'Local Government Unit',
-            'Government-Owned and Controlled Corporation',
-            'State University or College',
-            'Constitutional Body',
-            'Judiciary',
-            'Legislature',
+            'National Government Agency (NGA)',
+            'Local Government Unit (LGU)',
+            'State University or College (SUC)',
+            'Government-Owned and Controlled Corporation (GOCC)',
+            'Water District (WD)',
             'Private Sector',
-            'Non-Government Organization',
+            'Non-Government Organization (NGO)',
             'Other',
         ];
     }

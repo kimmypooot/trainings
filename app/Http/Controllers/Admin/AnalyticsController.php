@@ -405,14 +405,35 @@ class AnalyticsController extends Controller
      * Capped at ten: the tail is a long list of agencies with one registration
      * each, which tells nobody anything and makes the chart unreadable.
      *
+     * **Grouped case-insensitively, and that is not decoration.** This is the
+     * one place in the application that groups employer names in PHP rather
+     * than in SQL, and PHP array keys are case-sensitive while the column's
+     * collation is not. Every WHERE, LIKE and GROUP BY elsewhere already folds
+     * case for free; this would not, so a picked agency ("Department of
+     * Education", the reference's own spelling) and a typed one ("DEPARTMENT
+     * OF EDUCATION") would stand as two bars for one employer — the exact
+     * split the agency list exists to end, reappearing on the one chart drawn
+     * to show it.
+     *
+     * The label prefers a spelling that is not all capitals, because that is
+     * the reference's: a typed employer is upper-cased on the profile and a
+     * picked one keeps the agency's casing (see ProfileService::upperCased).
+     * So where both exist for one employer, the chart shows the proper name
+     * rather than the shouted one.
+     *
      * @return array<int, array{label: string, count: int}>
      */
     private function topAgencies(?int $officeId): array
     {
         return $this->scope(Registration::with('user.profile'), $officeId)
             ->get()
-            ->countBy(fn (Registration $registration) => $registration->user->profile?->organization_name ?: 'Not stated')
-            ->map(fn (int $count, string $label) => ['label' => $label, 'count' => $count])
+            ->map(fn (Registration $registration) => $registration->user->profile?->organization_name ?: 'Not stated')
+            ->groupBy(fn (string $name) => mb_strtoupper($name))
+            ->map(fn (Collection $spellings) => [
+                'label' => $spellings->first(fn (string $name) => $name !== mb_strtoupper($name))
+                    ?? $spellings->first(),
+                'count' => $spellings->count(),
+            ])
             ->sortByDesc('count')
             ->take(10)
             ->values()

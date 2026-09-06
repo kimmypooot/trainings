@@ -289,6 +289,16 @@ const navGroups = [
                 icon: 'building',
             },
             {
+                // The employer list behind the profile form's picker.
+                // Reference data in the same sense a field office is,
+                // and managed by the same roles.
+                key: 'admin-agencies',
+                label: 'Agencies',
+                href: '/admin/agencies',
+                roles: ['admin', 'superadmin'],
+                icon: 'clipboard',
+            },
+            {
                 key: 'admin-smes',
                 label: 'Subject Matter Experts',
                 href: '/admin/smes',

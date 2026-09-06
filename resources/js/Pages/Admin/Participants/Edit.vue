@@ -6,6 +6,7 @@ import AppAlert from '@/Components/AppAlert.vue';
 import AppAvatar from '@/Components/AppAvatar.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
+import AgencyFields from '@/Components/AgencyFields.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
@@ -56,6 +57,7 @@ const form = useForm({
 
     position_title: props.profile?.position_title ?? '',
     salary_grade: props.profile?.salary_grade ?? '',
+    agency_id: props.profile?.agency_id ?? '',
     organization_name: props.profile?.organization_name ?? '',
     sector: props.profile?.sector ?? '',
     region: regionInit,
@@ -304,38 +306,11 @@ const submit = () => form.put(`/admin/participants/${props.participant.id}`);
                             />
                         </div>
 
-                        <div class="sm:col-span-12">
-                            <AppInput
-                                v-model="form.organization_name"
-                                label="Name of Agency / Company / Organization"
-                                placeholder="e.g. DEPARTMENT OF EDUCATION"
-                                maxlength="255"
-                                hint="Enter the full name — do not abbreviate."
-                                :error="form.errors.organization_name"
-                                uppercase
-                                required
-                            />
-                        </div>
-
-                        <div class="sm:col-span-6">
-                            <AppSelect
-                                v-model="form.sector"
-                                label="Sector"
-                                :options="options.sectors"
-                                :error="form.errors.sector"
-                                required
-                            />
-                        </div>
-                        <div class="sm:col-span-6">
-                            <AppSelect
-                                v-model="form.field_office_id"
-                                label="CSC Field Office"
-                                :options="options.fieldOffices"
-                                hint="Decides which field office sees this participant."
-                                :error="form.errors.field_office_id"
-                                required
-                            />
-                        </div>
+                        <AgencyFields
+                            :form="form"
+                            :options="options"
+                            field-office-hint="Decides which field office sees this participant."
+                        />
 
                         <div class="sm:col-span-12">
                             <AppTextarea

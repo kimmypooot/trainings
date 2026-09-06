@@ -6,6 +6,7 @@ import AppAvatar from '@/Components/AppAvatar.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AgencyFields from '@/Components/AgencyFields.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
@@ -47,6 +48,7 @@ const form = useForm({
 
     position_title: props.profile?.position_title ?? '',
     salary_grade: props.profile?.salary_grade ?? '',
+    agency_id: props.profile?.agency_id ?? '',
     organization_name: props.profile?.organization_name ?? '',
     sector: props.profile?.sector ?? '',
     region: regionInit,
@@ -111,14 +113,14 @@ watch(
 // Employment classification, derived from the saved sector. Profiles whose
 // sector is private/others fall under "Private"; everything else is treated as
 // a government employee so the normal fields stay available.
-const isPrivateSector = ['Private Sector', 'Non-Government Organization', 'Other'].includes(props.profile?.sector);
+const isPrivateSector = ['Private Sector', 'Non-Government Organization (NGO)', 'Other'].includes(props.profile?.sector);
 const employmentType = ref(isPrivateSector ? 'private' : 'government');
 const isPrivate = computed(() => employmentType.value === 'private');
 
 // Non-government roles: salary grade and position level do not apply, and
 // employment status is "Others". Sector stays pickable so an NGO or "Other"
 // profile keeps its own answer instead of being forced to Private Sector.
-const privateSectorOptions = ['Private Sector', 'Non-Government Organization', 'Other'];
+const privateSectorOptions = ['Private Sector', 'Non-Government Organization (NGO)', 'Other'];
 
 // What the employment gate overwrote on load, so a Government → Private →
 // Government round trip restores the participant's own answers instead of
@@ -142,6 +144,22 @@ const applyGovernment = () => {
     if (form.position_level === 'Not Applicable') form.position_level = storedGovernment.position_level;
     if (form.employment_status === 'Others') form.employment_status = storedGovernment.employment_status;
     if (form.sector === 'Private Sector') form.sector = storedGovernment.sector;
+};
+
+/*
+ * A picked agency answers the employment-classification gate rather than
+ * arguing with it — the same rule as the first-time form, and for the same
+ * reason: the reference list knowing the employer is an NGA is better evidence
+ * than the radio button somebody pressed before they got to the agency field.
+ *
+ * "Other" flips nothing; it is no evidence either way.
+ */
+const NON_GOVERNMENT_SECTORS = ['Private Sector', 'Non-Government Organization (NGO)'];
+
+const onAgencySelected = (agency) => {
+    if (!agency || agency.sector === 'Other') return;
+
+    employmentType.value = NON_GOVERNMENT_SECTORS.includes(agency.sector) ? 'private' : 'government';
 };
 
 watch(employmentType, (value) => {
@@ -1367,39 +1385,14 @@ onBeforeUnmount(() => {
                                 />
                             </div>
 
-                            <div class="sm:col-span-12">
-                                <AppInput
-                                    v-model="form.organization_name"
-                                    label="Name of Agency / Company / Organization"
-                                    autocomplete="organization"
-                                    placeholder="e.g. DEPARTMENT OF EDUCATION"
-                                    maxlength="255"
-                                    hint="Enter the full name — do not abbreviate."
-                                    :error="errorFor('organization_name')"
-                                    uppercase
-                                    required
-                                />
-                            </div>
-
-                            <div class="sm:col-span-6">
-                                <AppSelect
-                                    v-model="form.sector"
-                                    label="Sector"
-                                    :options="isPrivate ? privateSectorOptions : options.sectors"
-                                    :hint="isPrivate ? 'Pick the closest match for your organization.' : undefined"
-                                    :error="errorFor('sector')"
-                                    required
-                                />
-                            </div>
-                            <div class="sm:col-span-6">
-                                <AppSelect
-                                    v-model="form.field_office_id"
-                                    label="CSC Field Office"
-                                    :options="options.fieldOffices"
-                                    :error="errorFor('field_office_id')"
-                                    required
-                                />
-                            </div>
+                            <AgencyFields
+                                :form="form"
+                                :options="options"
+                                :sector-options="isPrivate ? privateSectorOptions : options.sectors"
+                                :sector-hint="isPrivate ? 'Pick the closest match for your organization.' : undefined"
+                                :error-for="errorFor"
+                                @agency-selected="onAgencySelected"
+                            />
 
                             <div class="sm:col-span-12">
                                 <AppTextarea

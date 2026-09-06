@@ -7,6 +7,7 @@ use App\Enums\PaymentStatus;
 use App\Enums\RegistrationStatus;
 use App\Enums\Role;
 use App\Http\Controllers\Controller;
+use App\Models\Agency;
 use App\Models\FieldOffice;
 use App\Models\Registration;
 use App\Models\User;
@@ -179,7 +180,7 @@ class ParticipantController extends Controller
         $user->load('profile');
 
         return Inertia::render('Admin/Participants/Edit', [
-            'options' => [...ProfileOptions::all(), 'fieldOffices' => FieldOffice::options()],
+            'options' => [...ProfileOptions::all(), 'fieldOffices' => FieldOffice::options(), 'agencies' => Agency::options()],
             'geography' => PhilippineGeography::nested(),
             'participant' => [
                 'id' => $user->id,
@@ -191,7 +192,7 @@ class ParticipantController extends Controller
             'profile' => $user->profile ? [
                 ...$user->profile->only([
                     'first_name', 'middle_name', 'last_name', 'suffix', 'sex', 'civil_status',
-                    'mobile_number', 'position_title', 'salary_grade', 'organization_name', 'sector',
+                    'mobile_number', 'position_title', 'salary_grade', 'agency_id', 'organization_name', 'sector',
                     'region', 'province', 'city_municipality', 'field_office_id', 'position_level',
                     'employment_status', 'organization_address', 'food_restrictions_details',
                 ]),
@@ -209,6 +210,10 @@ class ParticipantController extends Controller
             ProfileService::rules($request->all()),
             ProfileService::messages()
         );
+
+        // Before the diff below, so an agency change shows up as the sector and
+        // field-office moves it actually caused.
+        $validated = ProfileService::resolveEmployer($validated);
 
         $before = $user->profile?->only(array_keys($validated)) ?? [];
 

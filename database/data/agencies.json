@@ -1,0 +1,1712 @@
+[
+    {
+        "code": "jp-1",
+        "name": "Abuyog Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-2",
+        "name": "Babatngon Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-3",
+        "name": "Basey Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-4",
+        "name": "Baybay City Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-5",
+        "name": "Biliran Province State University",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-6",
+        "name": "Borongan Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-7",
+        "name": "Bureau of Fire Protection - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-8",
+        "name": "Bureau of Fisheries and Aquatic Resources - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-9",
+        "name": "Bureau of Internal Revenue - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-10",
+        "name": "Bureau of Jail Management and Penology - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-11",
+        "name": "Bureau of the Treasury - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-12",
+        "name": "Calbayog City Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-13",
+        "name": "Calbiga Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-14",
+        "name": "Catarman Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-15",
+        "name": "Catbalogan Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-16",
+        "name": "City Government of Baybay, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-17",
+        "name": "City Government of Borongan, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-18",
+        "name": "City Government of Calbayog, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-19",
+        "name": "City Government of Catbalogan, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-20",
+        "name": "City Government of Maasin, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-21",
+        "name": "City Government of Ormoc, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-22",
+        "name": "City Government of Tacloban",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-23",
+        "name": "Civil Service Commission - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "hrd"
+    },
+    {
+        "code": "jp-24",
+        "name": "Commission on Elections - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-25",
+        "name": "Commission on Higher Education - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-26",
+        "name": "Commission on Population and Development - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-27",
+        "name": "Department of Agrarian Reform - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-28",
+        "name": "Department of Agriculture - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-29",
+        "name": "Department of Budget and Management - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-30",
+        "name": "Department of Economy, Planning and Development - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-31",
+        "name": "Department of Education - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-32",
+        "name": "Department of Education - Schools Division Office of Baybay City",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-33",
+        "name": "Department of Education - Schools Division Office of Biliran",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-34",
+        "name": "Department of Education - Schools Division Office of Borongan City",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-35",
+        "name": "Department of Education - Schools Division Office of Calbayog City",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-36",
+        "name": "Department of Education - Schools Division Office of Catbalogan City",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-37",
+        "name": "Department of Education - Schools Division Office of Eastern Samar",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-38",
+        "name": "Department of Education - Schools Division Office of Leyte",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-39",
+        "name": "Department of Education - Schools Division Office of Maasin City",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-40",
+        "name": "Department of Education - Schools Division Office of Northern Samar",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-41",
+        "name": "Department of Education - Schools Division Office of Ormoc City",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-42",
+        "name": "Department of Education - Schools Division Office of Samar",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-43",
+        "name": "Department of Education - Schools Division Office of Southern Leyte",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-44",
+        "name": "Department of Education - Schools Division Office of Tacloban City",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-45",
+        "name": "Department of Environment and Natural Resources Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-46",
+        "name": "Department of Health - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-47",
+        "name": "Department of Health - Treatment and Rehabilitation Center - Dulag",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-48",
+        "name": "Department of Interior and Local Government - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-49",
+        "name": "Department of Labor and Employment - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-50",
+        "name": "Department of Migrant Workers - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-51",
+        "name": "Department of Public Works and Highways - Biliran District Engineering Office (Naval, Biliran)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-52",
+        "name": "Department of Public Works and Highways - Eastern Samar District Engineering Office (Borongan City, Eastern Samar)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-53",
+        "name": "Department of Public Works and Highways - Leyte 1st District Engineering Office (Palo, Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-54",
+        "name": "Department of Public Works and Highways - Leyte 2nd District Engineering Office (Macarthur, Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-55",
+        "name": "Department of Public Works and Highways - Leyte 3rd District Engineering Office (Villaba, Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-56",
+        "name": "Department of Public Works and Highways - Leyte 4th District Engineering Office (Ormoc City, Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-57",
+        "name": "Department of Public Works and Highways - Leyte 5th District Engineering Office (Baybay City, Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-58",
+        "name": "Department of Public Works and Highways - Northern Samar 1st District Engineering Office (Catarman, Northern Samar)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-59",
+        "name": "Department of Public Works and Highways - Northern Samar 2nd District Engineering Office (Laoang, Northern Samar)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-60",
+        "name": "Department of Public Works and Highways - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-61",
+        "name": "Department of Public Works and Highways - Samar 1st District Engineering Office (Calbayog City, Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-62",
+        "name": "Department of Public Works and Highways - Samar 2nd District Engineering Office (Catbalogan City, Samar)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-63",
+        "name": "Department of Public Works and Highways - Southern Leyte 1st District Engineering Office (Maasin City, Southern Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-64",
+        "name": "Department of Public Works and Highways - Southern Leyte 2nd District Engineering Office (Sogod, Southern Leyte)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-65",
+        "name": "Department of Public Works and Highways - Tacloban City District Engineering Office",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-66",
+        "name": "Department of Science and Technology - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-67",
+        "name": "Department of Social Welfare and Development - Field Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-68",
+        "name": "Department of Trade and Industry - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-69",
+        "name": "Eastern Samar State University - Arteche Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-70",
+        "name": "Eastern Samar State University - Balangiga Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-71",
+        "name": "Eastern Samar State University - Borongan City Campus (Main Campus)",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-72",
+        "name": "Eastern Samar State University - Can-avid Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-73",
+        "name": "Eastern Samar State University - Guiuan Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-74",
+        "name": "Eastern Samar State University - Maydolong Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-75",
+        "name": "Eastern Samar State University - Salcedo Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-76",
+        "name": "Eastern Visayas Medical Center",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-77",
+        "name": "Eastern Visayas State University",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-78",
+        "name": "Environmental Management Bureau - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-79",
+        "name": "Gamay Water District",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-80",
+        "name": "Gen. Macarthur Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-81",
+        "name": "Governor Benjamin T. Romualdez General Hospital and Schistosomiasis Center",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-82",
+        "name": "Guiuan Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-83",
+        "name": "Isabel Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-84",
+        "name": "Jaro Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-85",
+        "name": "Land Transportation Franchising and Regulatory Board - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-86",
+        "name": "Land Transportation Office - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-87",
+        "name": "Laoang Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-88",
+        "name": "Leyte Metropolitan Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-89",
+        "name": "Leyte Normal University",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-90",
+        "name": "Maasin Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-91",
+        "name": "Maritime Industry Authority - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-92",
+        "name": "Merida Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-93",
+        "name": "Metro Carigara Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-94",
+        "name": "Metro Hilongos Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-95",
+        "name": "Mines and Geosciences Bureau - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-96",
+        "name": "Municipal Government of Abuyog, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-97",
+        "name": "Municipal Government of Alangalang, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-98",
+        "name": "Municipal Government of Albuera, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-99",
+        "name": "Municipal Government of Allen, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-100",
+        "name": "Municipal Government of Almagro, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-101",
+        "name": "Municipal Government of Almeria, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-102",
+        "name": "Municipal Government of Anahawan, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-103",
+        "name": "Municipal Government of Arteche, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-104",
+        "name": "Municipal Government of Babatngon, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-105",
+        "name": "Municipal Government of Balangiga, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-106",
+        "name": "Municipal Government of Balangkayan, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-107",
+        "name": "Municipal Government of Barugo, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-108",
+        "name": "Municipal Government of Basey, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-109",
+        "name": "Municipal Government of Bato, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-110",
+        "name": "Municipal Government of Biliran, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-111",
+        "name": "Municipal Government of Biri, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-112",
+        "name": "Municipal Government of Bobon, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-113",
+        "name": "Municipal Government of Bontoc, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-114",
+        "name": "Municipal Government of Burauen, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-115",
+        "name": "Municipal Government of Cabucgayan, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-116",
+        "name": "Municipal Government of Caibiran, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-117",
+        "name": "Municipal Government of Calbiga, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-118",
+        "name": "Municipal Government of Calubian, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-119",
+        "name": "Municipal Government of Can-Avid, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-120",
+        "name": "Municipal Government of Capoocan, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-121",
+        "name": "Municipal Government of Capul, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-122",
+        "name": "Municipal Government of Carigara, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-123",
+        "name": "Municipal Government of Catarman, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-124",
+        "name": "Municipal Government of Catubig, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-125",
+        "name": "Municipal Government of Culaba, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-126",
+        "name": "Municipal Government of Dagami, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-127",
+        "name": "Municipal Government of Daram, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-128",
+        "name": "Municipal Government of Dolores, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-129",
+        "name": "Municipal Government of Dulag, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-130",
+        "name": "Municipal Government of Gamay, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-131",
+        "name": "Municipal Government of Gandara, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-132",
+        "name": "Municipal Government of Gen. Macarthur, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-133",
+        "name": "Municipal Government of Giporlos, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-134",
+        "name": "Municipal Government of Guiuan, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-135",
+        "name": "Municipal Government of Hernani, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-136",
+        "name": "Municipal Government of Hilongos, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-137",
+        "name": "Municipal Government of Hinabangan, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-138",
+        "name": "Municipal Government of Hindang, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-139",
+        "name": "Municipal Government of Hinunangan, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-140",
+        "name": "Municipal Government of Hinundayan, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-141",
+        "name": "Municipal Government of Inopacan, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-142",
+        "name": "Municipal Government of Isabel, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-143",
+        "name": "Municipal Government of Jaro, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-144",
+        "name": "Municipal Government of Javier, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-145",
+        "name": "Municipal Government of Jiabong, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-146",
+        "name": "Municipal Government of Jipapad, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-147",
+        "name": "Municipal Government of Julita, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-148",
+        "name": "Municipal Government of Kananga, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-149",
+        "name": "Municipal Government of Kawayan, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-150",
+        "name": "Municipal Government of La Paz, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-151",
+        "name": "Municipal Government of Laoang, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-152",
+        "name": "Municipal Government of Lapinig, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-153",
+        "name": "Municipal Government of Las Navas, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-154",
+        "name": "Municipal Government of Lavezares, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-155",
+        "name": "Municipal Government of Lawaan, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-156",
+        "name": "Municipal Government of Leyte, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-157",
+        "name": "Municipal Government of Libagon, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-158",
+        "name": "Municipal Government of Liloan, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-159",
+        "name": "Municipal Government of Limasawa, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-160",
+        "name": "Municipal Government of Llorente, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-161",
+        "name": "Municipal Government of Lope de Vega, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-162",
+        "name": "Municipal Government of Macarthur, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-163",
+        "name": "Municipal Government of Macrohon, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-164",
+        "name": "Municipal Government of Mahaplag, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-165",
+        "name": "Municipal Government of Malitbog, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-166",
+        "name": "Municipal Government of Mapanas, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-167",
+        "name": "Municipal Government of Marabut, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-168",
+        "name": "Municipal Government of Maripipi, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-169",
+        "name": "Municipal Government of Maslog, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-170",
+        "name": "Municipal Government of Matag-ob, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-171",
+        "name": "Municipal Government of Matalom, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-172",
+        "name": "Municipal Government of Matuguinao, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-173",
+        "name": "Municipal Government of Maydolong, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-174",
+        "name": "Municipal Government of Mayorga, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-175",
+        "name": "Municipal Government of Mercedes, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-176",
+        "name": "Municipal Government of Merida, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-177",
+        "name": "Municipal Government of Mondragon, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-178",
+        "name": "Municipal Government of Motiong, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-179",
+        "name": "Municipal Government of Naval, Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-180",
+        "name": "Municipal Government of Oras, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-181",
+        "name": "Municipal Government of Padre Burgos, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-182",
+        "name": "Municipal Government of Pagsanghan, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-183",
+        "name": "Municipal Government of Palapag, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-184",
+        "name": "Municipal Government of Palo, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-185",
+        "name": "Municipal Government of Palompon, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-186",
+        "name": "Municipal Government of Pambujan, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-187",
+        "name": "Municipal Government of Paranas, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-188",
+        "name": "Municipal Government of Pastrana, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-189",
+        "name": "Municipal Government of Pinabacdao, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-190",
+        "name": "Municipal Government of Pintuyan, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-191",
+        "name": "Municipal Government of Quinapondan, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-192",
+        "name": "Municipal Government of Rosario, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-193",
+        "name": "Municipal Government of Saint Bernard, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-194",
+        "name": "Municipal Government of Salcedo, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-195",
+        "name": "Municipal Government of San Antonio, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-196",
+        "name": "Municipal Government of San Francisco, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-197",
+        "name": "Municipal Government of San Isidro, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-198",
+        "name": "Municipal Government of San Isidro, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-199",
+        "name": "Municipal Government of San Jorge, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-200",
+        "name": "Municipal Government of San Jose De Buan, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-201",
+        "name": "Municipal Government of San Jose, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-202",
+        "name": "Municipal Government of San Juan, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-203",
+        "name": "Municipal Government of San Julian, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-204",
+        "name": "Municipal Government of San Miguel, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-205",
+        "name": "Municipal Government of San Policarpo, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-206",
+        "name": "Municipal Government of San Ricardo, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-207",
+        "name": "Municipal Government of San Roque, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-208",
+        "name": "Municipal Government of San Sebastian, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-209",
+        "name": "Municipal Government of San Vicente, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-210",
+        "name": "Municipal Government of Silago, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-211",
+        "name": "Municipal Government of Silvino Lobos, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-212",
+        "name": "Municipal Government of Sogod, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-213",
+        "name": "Municipal Government of St. Bernard, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-214",
+        "name": "Municipal Government of Sta. Fe, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-215",
+        "name": "Municipal Government of Sta. Margarita, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-216",
+        "name": "Municipal Government of Sta. Rita, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-217",
+        "name": "Municipal Government of Sto. Niño, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-218",
+        "name": "Municipal Government of Sulat, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-219",
+        "name": "Municipal Government of Tabango, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-220",
+        "name": "Municipal Government of Tabontabon, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-221",
+        "name": "Municipal Government of Taft, Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-222",
+        "name": "Municipal Government of Tagapul-an, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-223",
+        "name": "Municipal Government of Talalora, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-224",
+        "name": "Municipal Government of Tanauan, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-225",
+        "name": "Municipal Government of Tarangnan, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-226",
+        "name": "Municipal Government of Tolosa, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-227",
+        "name": "Municipal Government of Tomas Oppus, Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-228",
+        "name": "Municipal Government of Tunga, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-229",
+        "name": "Municipal Government of Victoria, Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-230",
+        "name": "Municipal Government of Villaba, Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-231",
+        "name": "Municipal Government of Villareal, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-232",
+        "name": "Municipal Government of Zumarraga, Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-233",
+        "name": "National Bureau of Investigation - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-234",
+        "name": "National Conciliation and Mediation Board - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-235",
+        "name": "National Food Authority - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-236",
+        "name": "National Irrigation Administration - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-237",
+        "name": "National Maritime Polytechnic - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-238",
+        "name": "National Police Commission - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-239",
+        "name": "National Prosecution Service - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-240",
+        "name": "National Telecommunications Commission - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-241",
+        "name": "Naval Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-242",
+        "name": "Northwest Samar State University (NWSSU)",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-243",
+        "name": "Palompon Institute of Technology - Main Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-244",
+        "name": "Palompon Institute of Technology - Tabango Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-245",
+        "name": "Parole and Probation Administration - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-246",
+        "name": "Philippine Coconut Authority - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-247",
+        "name": "Philippine Information Agency - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-248",
+        "name": "Philippine National Police - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-249",
+        "name": "Philippine Science High School - Eastern Visayas Campus",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-250",
+        "name": "Professional Regulation Commission - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-251",
+        "name": "Provincial Government of Biliran",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "bfo"
+    },
+    {
+        "code": "jp-252",
+        "name": "Provincial Government of Eastern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-253",
+        "name": "Provincial Government of Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "lfoii"
+    },
+    {
+        "code": "jp-254",
+        "name": "Provincial Government of Northern Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-255",
+        "name": "Provincial Government of Samar",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-256",
+        "name": "Provincial Government of Southern Leyte",
+        "sector": "Local Government Unit (LGU)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-257",
+        "name": "Regional Tripartite Wages and Productivity Board VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-258",
+        "name": "Samar State University",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "sfo"
+    },
+    {
+        "code": "jp-259",
+        "name": "San Isidro Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-260",
+        "name": "San Jose Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-261",
+        "name": "Sogod Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-262",
+        "name": "Southern Leyte State University - Bontoc Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-263",
+        "name": "Southern Leyte State University - Hinunangan Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-264",
+        "name": "Southern Leyte State University - Maasin City Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-265",
+        "name": "Southern Leyte State University - San Juan Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-266",
+        "name": "Southern Leyte State University - Sogod Campus (Main Campus)",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-267",
+        "name": "Southern Leyte State University - Tomas Oppus Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "slfo"
+    },
+    {
+        "code": "jp-268",
+        "name": "Sulat Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-269",
+        "name": "Taft Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "esfo"
+    },
+    {
+        "code": "jp-270",
+        "name": "Technical Education and Skills Development Authority - Arteche National Agricultural School (TESDA-ANAS)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-271",
+        "name": "Technical Education and Skills Development Authority - Balangiga National Agricultural School (TESDA-BNAS)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-272",
+        "name": "Technical Education and Skills Development Authority - Balicuatro College of Arts and Trades (TESDA-BCAT)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-273",
+        "name": "Technical Education and Skills Development Authority - Cabucgayan National School of Arts and Trades (CNSAT)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-274",
+        "name": "Technical Education and Skills Development Authority - Calubian National Vocational School (TESDA-CNVS)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-275",
+        "name": "Technical Education and Skills Development Authority - Las Navas Agro-Industrial School (TESDA-LNAIS)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-276",
+        "name": "Technical Education and Skills Development Authority - Regional Office VIII",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-277",
+        "name": "Technical Education and Skills Development Authority - Samar National School of Arts and Trades (TESDA-SNSAT)",
+        "sector": "National Government Agency (NGA)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-278",
+        "name": "University of Eastern Philippines",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-279",
+        "name": "University of the Philippines Tacloban College",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "lfoi"
+    },
+    {
+        "code": "jp-280",
+        "name": "Victoria Water District",
+        "sector": "Water District (WD)",
+        "field_office_code": "nsfo"
+    },
+    {
+        "code": "jp-281",
+        "name": "Visayas State University - Alangalang Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-282",
+        "name": "Visayas State University - Isabel Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-283",
+        "name": "Visayas State University - Main Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-284",
+        "name": "Visayas State University - Tolosa Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "wlso"
+    },
+    {
+        "code": "jp-285",
+        "name": "Visayas State University - Villaba Campus",
+        "sector": "State University or College (SUC)",
+        "field_office_code": "wlso"
+    }
+]

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ActivityLogController as AdminActivityLogController;
+use App\Http\Controllers\Admin\AgencyController as AdminAgencyController;
 use App\Http\Controllers\Admin\AgencyRequestController as AdminAgencyRequestController;
 use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AttendanceController as AdminAttendanceController;
@@ -666,6 +667,66 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             Route::delete('/field-offices/{fieldOffice}', [AdminFieldOfficeController::class, 'destroy'])
                 ->middleware(EnsureUserIsStaff::class.':superadmin')
                 ->name('field-offices.destroy');
+
+            /*
+             * Agencies: the employer list behind the profile form's picker.
+             *
+             * Reference data in the same sense a field office is, and managed
+             * by the same roles for the same reason — it is region-wide, so a
+             * field-office user editing it would be changing what every other
+             * office is offered.
+             *
+             * The index carries more than the list. `agency_id` was written by
+             * the profile form and read by nothing, so an employer missing
+             * from this list was invisible: the participant simply typed their
+             * own and nobody was told, which quietly rebuilds the "one
+             * employer, three spellings" split the table exists to end. The
+             * typed employers are ranked on that page, and `agencies.create`
+             * accepts a `name` so one becomes a row without retyping it.
+             */
+            Route::get('/agencies', [AdminAgencyController::class, 'index'])
+                ->name('agencies.index');
+            Route::get('/agencies/create', [AdminAgencyController::class, 'create'])
+                ->name('agencies.create');
+            Route::post('/agencies', [AdminAgencyController::class, 'store'])
+                ->name('agencies.store');
+
+            /*
+             * A typed employer that turned out to be an agency already on
+             * the list — "DEPED" against "Department of Education". Adding
+             * it again is refused by the unique name, correctly, so this is
+             * the only way that spelling ever leaves the gap panel.
+             */
+            Route::post('/agencies/resolve', [AdminAgencyController::class, 'resolve'])
+                ->name('agencies.resolve');
+
+            /*
+             * Correcting what was typed, without deciding what it is.
+             * "DEPED", "DEP ED" and "Dep. Ed." are three rows in the gap
+             * panel until they read the same; merging them makes the next
+             * pass one decision instead of three. Links nothing.
+             */
+            Route::post('/agencies/typed-employers/rename', [AdminAgencyController::class, 'rename'])
+                ->name('agencies.typed-employers.rename');
+            Route::get('/agencies/{agency}/edit', [AdminAgencyController::class, 'edit'])
+                ->name('agencies.edit');
+            Route::put('/agencies/{agency}', [AdminAgencyController::class, 'update'])
+                ->name('agencies.update');
+            Route::post('/agencies/{agency}/toggle', [AdminAgencyController::class, 'toggle'])
+                ->name('agencies.toggle');
+
+            /*
+             * Same split as field offices, and the same reasoning: every other
+             * action here is reversible, this one is not. The controller
+             * refuses outright for an agency anyone is still filed under,
+             * whoever asks — `profiles.agency_id` is nullOnDelete, so the
+             * database would silently unlink those participants rather than
+             * object, dropping them back to the typed-employer state with
+             * nothing recording that it happened.
+             */
+            Route::delete('/agencies/{agency}', [AdminAgencyController::class, 'destroy'])
+                ->middleware(EnsureUserIsStaff::class.':superadmin')
+                ->name('agencies.destroy');
 
             /*
              * Subject matter experts. Reference data in the same sense a field
