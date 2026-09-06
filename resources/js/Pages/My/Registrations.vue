@@ -10,6 +10,7 @@ import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppFilterChips from '@/Components/AppFilterChips.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppRowActions from '@/Components/AppRowActions.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
@@ -230,6 +231,8 @@ const submitResubmit = () => {
 
     <AuthenticatedLayout title="My Registrations" current="registrations">
         <div class="mx-auto max-w-4xl space-y-5">
+            <AppHelpLink anchor="registering">What your registration status means</AppHelpLink>
+
             <!--
                 Filter chips, shown only once there is more than one status to
                 choose between — a single chip is a label pretending to be a

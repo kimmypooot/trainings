@@ -11,6 +11,7 @@ import AppTextarea from '@/Components/AppTextarea.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
 import AppRowActions from '@/Components/AppRowActions.vue';
 import AppStatTile from '@/Components/AppStatTile.vue';
 import AppFileField from '@/Components/AppFileField.vue';
@@ -287,6 +288,8 @@ const submitPhysicalOr = () =>
                     class="col-span-2 sm:col-span-1"
                 />
             </div>
+
+            <AppHelpLink anchor="payments">How paying a training fee works</AppHelpLink>
 
             <!-- Owed -->
             <AppCard v-if="awaitingPayment.length" title="Awaiting Payment">

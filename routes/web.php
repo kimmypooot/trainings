@@ -41,6 +41,7 @@ use App\Http\Controllers\CertificateVerificationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\EvaluationScanController;
+use App\Http\Controllers\HelpController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
@@ -942,6 +943,25 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
 Route::middleware('auth')->group(function () {
     Route::get('/profile/complete', [ProfileController::class, 'create'])->name('profile.complete');
     Route::post('/profile/complete', [ProfileController::class, 'store'])->name('profile.complete.store');
+
+    /*
+     * The participant guide, outside the completeness gate for the same reason
+     * the form above it is — and that is not a technicality.
+     *
+     * EnsureProfileIsComplete redirects the whole participant area to
+     * profile.complete. Put the guide inside it and the one person who most
+     * needs "what does this office mean by my employer, and why can I not get
+     * past this screen" is bounced away from the page that answers it and into
+     * the screen that is confusing them. Same reasoning EmailChangeService
+     * carries about a dead agency inbox: a locked door with the key inside the
+     * room is not a gate, it is a trap.
+     *
+     * Gated on 'auth' alone, so no signed-in account is ever refused it. The
+     * sidebar shows the row to participants, because the guide is written for
+     * them — staff are trained and have docs/ — but a staff member who follows
+     * a link here gets the page rather than a 403.
+     */
+    Route::get('/help', HelpController::class)->name('help');
 });
 
 Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified::class])->group(function () {

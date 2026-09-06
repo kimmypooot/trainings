@@ -31,6 +31,21 @@ const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
 // exactly what the header search reaches — see the admin group in web.php.
 const isStaff = computed(() => role.value !== 'participant');
 
+/*
+ * Where "home" is for this account.
+ *
+ * The seal in the rail linked to /dashboard for everybody. That route is the
+ * *participant* dashboard and carries no role gate — only auth, a complete
+ * profile and a verified address — so it renders for staff too, showing them
+ * their own zero registrations. Clicking the logo, which every user on the web
+ * has learned means "take me home", put a staff member on an empty page
+ * belonging to someone else's job.
+ *
+ * Derived from the same fact the two Dashboard nav rows already split on,
+ * rather than a second copy of the rule.
+ */
+const homeHref = computed(() => (isStaff.value ? '/admin' : '/dashboard'));
+
 // Every sidebar badge is a pending action fed in by key (see
 // PendingActionCounter). The unread notification count is not one of them — it
 // belongs to the header bell, which is the only place that link now lives.
@@ -52,6 +67,16 @@ const ALL_ROLES = [
  * marks the items that earn a slot in the mobile tab bar.
  */
 const STAFF_ROLES = ['field-office', 'admin', 'management', 'superadmin'];
+
+/*
+ * Who works a venue door. Deliberately *not* STAFF_ROLES: management is
+ * excluded because it records nothing, and a collecting officer is included
+ * because taking payments at an event is a door job. This is the same list
+ * routes/web.php puts on /admin/scanner and on /scan/{token}, and the two must
+ * stay identical — a nav row for a page the role gets a 403 from is worse than
+ * no row at all.
+ */
+const VENUE_ROLES = ['field-office', 'collecting-officer', 'admin', 'superadmin'];
 
 const navGroups = [
     {
@@ -138,14 +163,6 @@ const navGroups = [
                 icon: 'bookmark',
             },
             {
-                key: 'certificates',
-                label: 'Certificates',
-                href: '/my/certificates',
-                primary: true,
-                roles: ['participant'],
-                icon: 'certificate',
-            },
-            {
                 // Badged with the number of training days still owed an
                 // evaluation — see PendingActionCounter.
                 key: 'evaluations',
@@ -164,8 +181,50 @@ const navGroups = [
         ],
     },
     {
+        /*
+         * The venue door, and the reason this group exists at all.
+         *
+         * /admin/scanner had no inbound link anywhere in the application — not
+         * from here, not from the roster, not from any page. A complete
+         * offline-first attendance station with a service worker, a camera and
+         * a sync queue was reachable only by typing the URL, which meant it was
+         * reachable only by whoever had already been told about it.
+         *
+         * The roster's scan-station card is not that link and never was: it
+         * issues shareable /station/{token} links for an unauthenticated device
+         * at the door. This is the signed-in staff door to the same service.
+         *
+         * The page itself is deliberately chrome-less — it is a tool held at a
+         * venue, not a screen inside the shell — which is a good reason for it
+         * to have no sidebar *highlight* and no reason at all for it to have no
+         * sidebar *row*.
+         */
+        key: 'attendance',
+        label: 'Attendance',
+        items: [
+            {
+                key: 'admin-scanner',
+                label: 'Scan Station',
+                href: '/admin/scanner',
+                roles: VENUE_ROLES,
+                icon: 'qr',
+            },
+        ],
+    },
+    {
+        /*
+         * Money and the paperwork that comes out of it.
+         *
+         * Certificates moved in here from Trainings, where they sat between
+         * "My Registrations" and "Session Evaluations". A certificate is a
+         * document you collect, not a training you browse or a task you owe,
+         * and the Trainings group had grown into all three jobs at once — five
+         * rows covering finding a course, enrolling on it, and what it leaves
+         * behind. The label says "Documents" because the receipt below is one
+         * too; for staff this group is unchanged.
+         */
         key: 'payments',
-        label: 'Payments & Fees',
+        label: 'Payments & Documents',
         items: [
             {
                 key: 'payments',
@@ -175,11 +234,26 @@ const navGroups = [
                 icon: 'card',
             },
             {
+                /*
+                 * "Physical OR" is what the finance office calls this and what
+                 * the staff queue is still labelled — but a participant cannot
+                 * be expected to expand OR, and this row is the only place they
+                 * meet the term. The route, the key and the staff label are all
+                 * unchanged; only the word this participant reads is.
+                 */
                 key: 'physical-or',
-                label: 'Physical OR',
+                label: 'Official Receipts',
                 href: '/my/physical-or',
                 roles: ['participant'],
                 icon: 'document',
+            },
+            {
+                key: 'certificates',
+                label: 'Certificates',
+                href: '/my/certificates',
+                primary: true,
+                roles: ['participant'],
+                icon: 'certificate',
             },
             {
                 key: 'admin-payments',
@@ -206,11 +280,19 @@ const navGroups = [
         label: 'Requests',
         items: [
             {
+                /*
+                 * Collecting officers too: routes/web.php lets this role review
+                 * cancellations, training requests and outputs, and the queue
+                 * page itself is open to every staff role. Without this the
+                 * sidebar for that role was two rows — Dashboard and My Profile
+                 * — while the job it can actually do sat behind a URL nobody
+                 * had written down.
+                 */
                 key: 'admin-requests',
                 label: 'Requests',
                 href: '/admin/requests',
                 primary: true,
-                roles: STAFF_ROLES,
+                roles: [...STAFF_ROLES, 'collecting-officer'],
                 icon: 'document',
             },
             {
@@ -376,6 +458,27 @@ const navGroups = [
                 roles: ALL_ROLES,
                 icon: 'user',
             },
+            {
+                /*
+                 * Participants only, because the guide is written for them —
+                 * staff are trained and have docs/. The route itself refuses
+                 * nobody signed in, so a staff member following a link into it
+                 * reads the page rather than meeting a 403: who is *offered* a
+                 * thing and who is *allowed* it are different questions, and
+                 * only the second one is security.
+                 *
+                 * Last in Account rather than first in Overview. A guide is
+                 * what you reach for when something has gone wrong, so it wants
+                 * to be findable rather than prominent — putting it at the top
+                 * would spend the best row in the sidebar on the screen a
+                 * participant should need least often.
+                 */
+                key: 'help',
+                label: 'Help & Guide',
+                href: '/help',
+                roles: ['participant'],
+                icon: 'info',
+            },
         ],
     },
 ];
@@ -532,7 +635,7 @@ const confirmSignOut = () => {
                 :class="collapsed ? 'md:justify-center md:px-0' : ''"
             >
                 <Link
-                    href="/dashboard"
+                    :href="homeHref"
                     class="flex items-center gap-3 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
                 >
                     <!--

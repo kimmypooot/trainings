@@ -121,10 +121,21 @@ class AppServiceProvider extends ServiceProvider
      * reasons unrelated to their password. Locally it would also mean no
      * developer could seed an account without internet.
      */
+    /**
+     * The password floor, named so it can be quoted without being retyped.
+     *
+     * The participant guide tells people how long a password has to be, and
+     * a guide that states a number the rule does not enforce is worse than
+     * one that stays vague: it is confidently wrong, and it is wrong on the
+     * screen somebody reads *because* their password was rejected. This is
+     * the one fact both need, so both read it here.
+     */
+    public const PASSWORD_MINIMUM = 12;
+
     private function definePasswordPolicy(): void
     {
         Password::defaults(function () {
-            $rule = Password::min(12)->letters()->numbers();
+            $rule = Password::min(self::PASSWORD_MINIMUM)->letters()->numbers();
 
             return app()->isProduction() ? $rule->uncompromised() : $rule;
         });

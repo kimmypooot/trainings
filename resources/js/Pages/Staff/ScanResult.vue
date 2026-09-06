@@ -31,7 +31,7 @@ const checkIn = (session) => {
 <template>
     <Head title="Scan Result" />
 
-    <AuthenticatedLayout title="Scan Result" current="dashboard">
+    <AuthenticatedLayout title="Scan Result" current="admin-scanner">
         <div class="mx-auto max-w-lg space-y-5">
             <AppCard>
                 <div class="flex items-center gap-4">
