@@ -414,10 +414,6 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                                 {{ modalTraining.duration_days }} day{{ modalTraining.duration_days === 1 ? '' : 's' }}
                             </dd>
                         </div>
-                        <div v-if="modalTraining.level_label">
-                            <dt class="text-csc-ink-subtle">Level</dt>
-                            <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.level_label }}</dd>
-                        </div>
                         <div v-if="modalTraining.registration_not_yet_open && modalTraining.registration_opens_at">
                             <dt class="text-csc-ink-subtle">Registration opens</dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.registration_opens_at }}</dd>

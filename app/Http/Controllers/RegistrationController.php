@@ -131,7 +131,6 @@ class RegistrationController extends Controller
                     'ends_at' => $registration->training->ends_at?->format('d M Y, g:i A'),
                     'mode' => $registration->training->mode->value,
                     'mode_label' => $registration->training->mode->label(),
-                    'level_label' => $registration->training->level?->label(),
                     'category' => $registration->training->category,
                     'duration_days' => $registration->training->duration_days,
                     'payment_required' => $registration->training->payment_required,

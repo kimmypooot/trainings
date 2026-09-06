@@ -66,7 +66,6 @@ class PublicCatalogService
             'venue_details' => $training->venue_details,
             'mode' => $training->mode->label(),
             'mode_value' => $training->mode->value,
-            'level_label' => $training->level?->label(),
             'category' => $training->category,
             'payment_required' => $training->payment_required,
             'payment_amount' => $training->payment_required ? $training->payment_amount : null,

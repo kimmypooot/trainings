@@ -17,7 +17,6 @@ const props = defineProps({
     rescheduling: { type: Object, default: null },
     statuses: { type: Array, required: true },
     modes: { type: Array, required: true },
-    levels: { type: Array, required: true },
     curricula: { type: Array, required: true },
     experts: { type: Array, default: () => [] },
     expertsUrl: { type: String, default: '/admin/smes' },
@@ -42,7 +41,6 @@ const form = useForm({
     training_code: props.training?.training_code ?? '',
     description: props.training?.description ?? '',
     category: props.training?.category ?? '',
-    level: props.training?.level ?? '',
     venue: props.training?.venue ?? '',
     venue_details: props.training?.venue_details ?? '',
     meeting_link: props.training?.meeting_link ?? '',
@@ -260,23 +258,13 @@ const submit = () => {
                             :error="form.errors.description"
                         />
 
-                        <div class="grid gap-5 sm:grid-cols-2">
-                            <AppSelect
-                                v-model="form.level"
-                                label="Training Level"
-                                :options="levels"
-                                placeholder="Not specified"
-                                hint="How much prior experience the run assumes."
-                                :error="form.errors.level"
-                            />
-                            <AppSelect
-                                v-model="form.mode"
-                                label="Delivery Mode"
-                                :options="modes"
-                                :error="form.errors.mode"
-                                required
-                            />
-                        </div>
+                        <AppSelect
+                            v-model="form.mode"
+                            label="Delivery Mode"
+                            :options="modes"
+                            :error="form.errors.mode"
+                            required
+                        />
                     </div>
                 </AppCard>
 

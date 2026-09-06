@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\RegistrationStatus;
-use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use Carbon\CarbonImmutable;
@@ -48,11 +47,10 @@ use Illuminate\Support\Collection;
  * @property bool $accepts_walk_ins
  * @property bool $is_supervisory
  * @property TrainingMode $mode
- * @property TrainingLevel|null $level
  * @property TrainingStatus $status
  */
 #[Fillable([
-    'title', 'slug', 'training_code', 'description', 'category', 'level', 'venue',
+    'title', 'slug', 'training_code', 'description', 'category', 'venue',
     'venue_details', 'meeting_link', 'mode', 'starts_at', 'ends_at', 'duration_days',
     'registration_opens_at', 'registration_closes_at', 'capacity', 'signatory_name',
     'prerequisites', 'target_participants',
@@ -78,7 +76,6 @@ class Training extends Model
             'accepts_walk_ins' => 'boolean',
             'is_supervisory' => 'boolean',
             'mode' => TrainingMode::class,
-            'level' => TrainingLevel::class,
             'status' => TrainingStatus::class,
         ];
     }

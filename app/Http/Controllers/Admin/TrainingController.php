@@ -6,7 +6,6 @@ use App\Enums\Curriculum;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\RegistrationStatus;
-use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Http\Controllers\Controller;
@@ -244,7 +243,6 @@ class TrainingController extends Controller
                 TrainingStatus::cases()
             ),
             'modes' => TrainingMode::options(),
-            'levels' => TrainingLevel::options(),
             'curricula' => Curriculum::options(),
             'experts' => $this->expertOptions($training),
             'expertsUrl' => route('admin.smes.index'),
@@ -330,7 +328,6 @@ class TrainingController extends Controller
             'training_code' => $training->training_code,
             'description' => $training->description,
             'category' => $training->category,
-            'level' => $training->level?->value,
             'venue' => $training->venue,
             'venue_details' => $training->venue_details,
             'meeting_link' => $training->meeting_link,
@@ -535,7 +532,6 @@ class TrainingController extends Controller
             ],
             'description' => ['nullable', 'string', 'max:5000'],
             'category' => ['nullable', Rule::enum(Curriculum::class)],
-            'level' => ['nullable', Rule::enum(TrainingLevel::class)],
             'venue' => ['required', 'string', 'max:255'],
             'venue_details' => ['nullable', 'string', 'max:2000'],
             /*

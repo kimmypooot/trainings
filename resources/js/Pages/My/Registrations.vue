@@ -303,16 +303,6 @@ const submitResubmit = () => {
                                     </div>
                                 </div>
 
-                                <div v-if="registration.training.level_label" class="flex items-start gap-2">
-                                    <AppIcon name="clipboard" size="sm" class="mt-0.5 shrink-0" />
-                                    <div>
-                                        <dt class="text-csc-ink-subtle">Level</dt>
-                                        <dd class="mt-0.5 font-medium text-csc-ink">
-                                            {{ registration.training.level_label }}
-                                        </dd>
-                                    </div>
-                                </div>
-
                                 <div v-if="registration.training.category" class="flex items-start gap-2">
                                     <AppIcon name="bookmark" size="sm" class="mt-0.5 shrink-0" />
                                     <div>
@@ -643,10 +633,6 @@ const submitResubmit = () => {
                         <dd class="mt-0.5 font-medium text-csc-ink">
                             {{ detailing.training.duration_days }} day{{ detailing.training.duration_days === 1 ? '' : 's' }}
                         </dd>
-                    </div>
-                    <div v-if="detailing.training.level_label">
-                        <dt class="text-csc-ink-subtle">Level</dt>
-                        <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.level_label }}</dd>
                     </div>
                     <div v-if="detailing.training.training_code">
                         <dt class="text-csc-ink-subtle">Training code</dt>

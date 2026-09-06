@@ -168,14 +168,6 @@ export const supervisoryDocumentStatusValues = [
 
 export type SupervisoryDocumentStatus = (typeof supervisoryDocumentStatusValues)[number];
 
-export const trainingLevelValues = [
-    'foundational',
-    'intermediate',
-    'advanced',
-] as const;
-
-export type TrainingLevel = (typeof trainingLevelValues)[number];
-
 export const trainingModeValues = [
     'face_to_face',
     'online',

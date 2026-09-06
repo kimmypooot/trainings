@@ -115,10 +115,6 @@ const money = (value) =>
                         {{ program.duration_days }} day{{ program.duration_days === 1 ? '' : 's' }}
                     </dd>
                 </div>
-                <div v-if="program.level_label">
-                    <dt class="text-csc-ink-subtle">Level</dt>
-                    <dd class="mt-0.5 font-medium text-csc-ink">{{ program.level_label }}</dd>
-                </div>
                 <div v-if="program.registration_opens_at">
                     <dt class="text-csc-ink-subtle">Registration opens</dt>
                     <dd class="mt-0.5 font-medium text-csc-ink">{{ program.registration_opens_at }}</dd>
