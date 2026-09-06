@@ -6,6 +6,7 @@ import AppAvatar from '@/Components/AppAvatar.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
 import AgencyFields from '@/Components/AgencyFields.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppModal from '@/Components/AppModal.vue';
@@ -611,6 +612,8 @@ onBeforeUnmount(() => {
 
     <AuthenticatedLayout title="My Profile" current="profile">
         <div class="mx-auto max-w-7xl space-y-5">
+            <AppHelpLink anchor="profile">What CSC needs from your profile, and why</AppHelpLink>
+
             <!-- Identity summary -->
             <AppCard>
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

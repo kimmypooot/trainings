@@ -8,6 +8,7 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
 import AppStatTile from '@/Components/AppStatTile.vue';
 import { formatDateRange } from '@/dateRange';
 import { tone } from '@/activityTone';
@@ -277,6 +278,16 @@ const stats = computed(() => [
                     {{ greetingLine }}
                 </h2>
                 <p class="mt-1.5 text-sm leading-relaxed text-csc-ink-muted">{{ statusLine }}</p>
+
+                <!--
+                    Under the status line rather than beside the greeting: this
+                    is for the participant on their first visit, and it should be
+                    findable without competing with the sentence that tells a
+                    returning one what is waiting.
+                -->
+                <AppHelpLink anchor="getting-started" class="mt-2">
+                    New here? How CSC TIMS works
+                </AppHelpLink>
             </div>
 
             <!-- 2. Action required — rendered only when something is genuinely pending -->
