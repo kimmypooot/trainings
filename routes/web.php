@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\EvaluationCodeController;
 use App\Http\Controllers\Admin\EvaluationController as AdminEvaluationController;
 use App\Http\Controllers\Admin\ExportController as AdminExportController;
 use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeController;
+use App\Http\Controllers\Admin\HelpController as AdminHelpController;
 use App\Http\Controllers\Admin\MaintenanceController as AdminMaintenanceController;
 use App\Http\Controllers\Admin\OfficeSettingController as AdminOfficeSettingController;
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
@@ -371,6 +372,18 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
          * relying on this line to narrow it.
          */
         Route::get('/search', SearchController::class)->name('search');
+
+        /*
+         * The staff guide. Every staff role, unnarrowed, because the page shows
+         * each reader the sections that apply to them — narrowing the route as
+         * well would mean maintaining the same role list twice and having it
+         * disagree with itself the first time one moved.
+         *
+         * Documentation, not a permission: what stops a field office releasing
+         * a certificate is the middleware on that route, not whether the guide
+         * mentions it.
+         */
+        Route::get('/help', AdminHelpController::class)->name('help');
 
         // Creating and editing trainings is HRD work; field offices and
         // management get the roster but not the pen.

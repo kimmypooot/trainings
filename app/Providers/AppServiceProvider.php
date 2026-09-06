@@ -79,7 +79,7 @@ class AppServiceProvider extends ServiceProvider
          * minute is far more than the download handshake in useDownload.js will
          * let a person start by clicking, and far less than a loop.
          */
-        RateLimiter::for('exports', fn (Request $request) => Limit::perMinute(20)
+        RateLimiter::for('exports', fn (Request $request) => Limit::perMinute(self::EXPORTS_PER_MINUTE)
             ->by($request->user()?->getAuthIdentifier() ?: $request->ip()));
 
         /*
@@ -131,6 +131,15 @@ class AppServiceProvider extends ServiceProvider
      * the one fact both need, so both read it here.
      */
     public const PASSWORD_MINIMUM = 12;
+
+    /**
+     * Exports allowed per minute, per user.
+     *
+     * Named for the same reason as the password floor: the staff guide tells
+     * people what the limit is, and the guide and the limiter have to be the
+     * same number or the guide is teaching a rule that does not exist.
+     */
+    public const EXPORTS_PER_MINUTE = 20;
 
     private function definePasswordPolicy(): void
     {

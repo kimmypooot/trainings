@@ -35,7 +35,14 @@ class RequestQueueController extends Controller
      * hide decided items — which is what the pending-first ordering below
      * guarantees, and what the summary() counts make visible.
      */
-    private const LIMIT = 100;
+    /**
+     * Rows shown per queue.
+     *
+     * Public because the staff guide quotes it. A guide that says "100" while
+     * the screen shows fifty is wrong on the page somebody opened because they
+     * were unsure, so it reads the number rather than repeating it.
+     */
+    public const LIMIT = 100;
 
     /**
      * How a request in each of the three queues reaches a field office.

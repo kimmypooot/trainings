@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Enums\Role;
+use App\Http\Controllers\Admin\RequestQueueController;
 use App\Models\Profile;
 use App\Models\User;
 use App\Providers\AppServiceProvider;
+use App\Support\UndoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -162,6 +164,50 @@ class HelpGuideTest extends TestCase
         ]);
 
         $this->actingAs($staff)->get('/help')->assertOk();
+    }
+
+    /**
+     * The staff guide is for staff, and for all of them.
+     *
+     * Not narrowed by role: the page shows each reader the sections that apply
+     * to them, and narrowing the route as well would be the same role list kept
+     * in two places, disagreeing the first time one moved.
+     */
+    public function test_the_staff_guide_is_open_to_every_staff_role_and_closed_to_participants(): void
+    {
+        foreach ([Role::FieldOffice, Role::CollectingOfficer, Role::Admin, Role::Management, Role::SuperAdmin] as $role) {
+            $staff = User::factory()->create(['role' => $role, 'profile_completed_at' => now()]);
+
+            $this->actingAs($staff)->get('/admin/help')->assertOk();
+            $this->flushSession();
+        }
+
+        $this->actingAs($this->participant())->get('/admin/help')->assertForbidden();
+    }
+
+    /**
+     * The figures it quotes are the ones the code applies.
+     *
+     * Each of these appears in the guide's prose as a number a reader will act
+     * on — how long they have to undo, how many rows a queue shows, how many
+     * exports a minute they get. A guide quoting a figure the code no longer
+     * uses is confidently wrong on the page somebody opened because they were
+     * unsure, so the page is handed them rather than told them.
+     */
+    public function test_the_staff_guide_quotes_the_real_limits(): void
+    {
+        $staff = User::factory()->create(['role' => Role::SuperAdmin, 'profile_completed_at' => now()]);
+
+        $this->actingAs($staff)
+            ->get('/admin/help')
+            ->assertOk()
+            ->assertInertia(
+                fn ($page) => $page
+                    ->component('Help/Admin')
+                    ->where('undoWindow', UndoService::WINDOW_SECONDS)
+                    ->where('queueCap', RequestQueueController::LIMIT)
+                    ->where('exportLimit', AppServiceProvider::EXPORTS_PER_MINUTE)
+            );
     }
 
     /**

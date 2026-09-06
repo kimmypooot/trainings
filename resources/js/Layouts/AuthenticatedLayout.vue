@@ -481,6 +481,23 @@ const navGroups = [
             },
             {
                 /*
+                 * The staff guide, for everybody who is not a participant. The
+                 * page shows each reader the sections their role covers, so one
+                 * row serves five roles rather than five rows serving one each.
+                 *
+                 * Beside the participant guide rather than in Administration:
+                 * it is not a thing you administer, it is the thing you read
+                 * when you are unsure what you may do — which is an account
+                 * question, and where the person looking for it would look.
+                 */
+                key: 'admin-help',
+                label: 'Staff Guide',
+                href: '/admin/help',
+                roles: [...STAFF_ROLES, 'collecting-officer'],
+                icon: 'info',
+            },
+            {
+                /*
                  * Participants only, because the guide is written for them —
                  * staff are trained and have docs/. The route itself refuses
                  * nobody signed in, so a staff member following a link into it
