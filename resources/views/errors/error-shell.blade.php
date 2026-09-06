@@ -80,7 +80,13 @@
             @elseif (! empty($actionHref))
                 <a class="btn primary" href="{{ $actionHref }}">{{ $actionLabel ?? 'Continue' }}</a>
             @endif
-            <a class="btn ghost" href="/">Go home</a>
+            {{-- The 404 page's own action *is* home, and rendering this as well
+                 put two identical "Go home" buttons side by side. Every other
+                 error page sets no action at all, so this is their only way
+                 out and it has to stay. --}}
+            @if (empty($actionHref) || $actionHref !== '/')
+                <a class="btn ghost" href="/">Go home</a>
+            @endif
         </div>
     </div>
 </body>
