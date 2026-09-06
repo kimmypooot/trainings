@@ -78,16 +78,35 @@ class PaymentController extends Controller
         // The chips and the summary keep counting the whole queue while the
         // rows below narrow — a chip whose count shrank as the officer typed
         // would read as "work disappeared".
-        $paymentCounts = Payment::query()
+        //
+        // Both come out of one grouped query. They used to be seven: a
+        // GROUP BY for the chips, and then a count and a sum per status for
+        // the summary, which asked the database for the chip totals a second
+        // time. The figures are per-status either way, so grouping once and
+        // reading both columns off the same rows is the same answer in one
+        // round trip. `toBase()` keeps `status` a raw string — the cast would
+        // hand back enum instances and the array below is keyed by value.
+        $paymentTotals = Payment::query()
             ->where($scopePayments)
-            ->select('status', DB::raw('count(*) as total'))
+            ->toBase()
+            ->selectRaw('status, count(*) as total, COALESCE(sum(amount), 0) as amount')
             ->groupBy('status')
-            ->pluck('total', 'status');
+            ->get()
+            ->keyBy('status');
+
+        $paymentCounts = $paymentTotals->map(fn ($row) => (int) $row->total);
+
+        // A status nobody has used yet has no row, and the screen still has to
+        // show it as zero rather than as an absence.
+        $tallyStatus = fn (PaymentStatus $status): array => [
+            'count' => (int) ($paymentTotals[$status->value]->total ?? 0),
+            'amount' => (float) ($paymentTotals[$status->value]->amount ?? 0),
+        ];
 
         $summary = [
-            'pending' => $this->tally(Payment::where($scopePayments)->where('status', PaymentStatus::Pending)),
-            'verified' => $this->tally(Payment::where($scopePayments)->where('status', PaymentStatus::Verified)),
-            'rejected' => $this->tally(Payment::where($scopePayments)->where('status', PaymentStatus::Rejected)),
+            'pending' => $tallyStatus(PaymentStatus::Pending),
+            'verified' => $tallyStatus(PaymentStatus::Verified),
+            'rejected' => $tallyStatus(PaymentStatus::Rejected),
             // Everything still moving, not just the untouched ones — a claim
             // parked at MSD is as much outstanding money as one nobody has
             // looked at yet.
