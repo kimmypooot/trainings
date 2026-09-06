@@ -47,14 +47,23 @@ const submitted = computed(() => days.value.filter((day) => day.submitted).lengt
     <Head title="Session Evaluations" />
 
     <AuthenticatedLayout title="Session Evaluations" current="evaluations">
-        <div class="mx-auto max-w-5xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <p class="text-sm leading-relaxed text-csc-ink-muted">
                 {{ heading }} At the end of each training day you are asked to rate the subject
                 matter experts who delivered it. Evaluations stay open after the day ends, so a
                 session missed here can still be answered later.
             </p>
 
-            <div v-if="days.length" class="grid grid-cols-2 gap-3">
+            <!--
+                Capped, because a tile row divides the frame by however many
+                tiles it has. The dashboard runs four across the 7xl frame and
+                Payments three, giving tiles of roughly 300-390px; two tiles
+                left unbounded in the same frame are ~590px each — the same
+                component, twice the size, one screen apart. The cap keeps a
+                summary figure looking like the summary figures everywhere else
+                rather than like a pair of banners.
+            -->
+            <div v-if="days.length" class="grid grid-cols-2 gap-3 sm:max-w-3xl">
                 <AppStatTile
                     label="Still to Evaluate"
                     :value="pending"

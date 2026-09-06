@@ -230,7 +230,7 @@ const submitResubmit = () => {
     <Head title="My Registrations" />
 
     <AuthenticatedLayout title="My Registrations" current="registrations">
-        <div class="mx-auto max-w-4xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppHelpLink anchor="registering">What your registration status means</AppHelpLink>
 
             <!--

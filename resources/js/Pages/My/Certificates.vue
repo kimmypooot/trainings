@@ -34,7 +34,7 @@ const earnedLine = computed(() => {
     <Head title="Certificates" />
 
     <AuthenticatedLayout title="Certificates" current="certificates">
-        <div class="mx-auto max-w-4xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <p class="text-sm leading-relaxed text-csc-ink-muted">
                 Certificates are issued by the Civil Service Commission after a training is completed. They appear
                 here once released.
@@ -47,7 +47,16 @@ const earnedLine = computed(() => {
                     <span class="ml-1 font-normal normal-case text-csc-ink-subtle">· {{ earnedLine }}</span>
                 </h2>
 
-                <ul class="grid gap-4 sm:grid-cols-2">
+                <!--
+                    Three across once there is room, rather than two very wide
+                    ones. The page shares the app's 7xl frame now, and a
+                    certificate card at half of that is ~590px carrying a title,
+                    two rows of a definition list and a button — the card grew
+                    without gaining anything to put in the space. Gridding up is
+                    how a list uses a wider frame; stretching is how it wastes
+                    one.
+                -->
+                <ul class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     <li
                         v-for="certificate in released"
                         :key="certificate.id"

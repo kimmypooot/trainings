@@ -72,7 +72,7 @@ const truncated = computed(() => props.notifications.length >= props.limit);
     <Head title="Notifications" />
 
     <AuthenticatedLayout title="Notifications" current="notifications">
-        <div class="mx-auto max-w-4xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <p class="text-sm leading-relaxed text-csc-ink-muted">
                     <template v-if="unread">
@@ -168,9 +168,21 @@ const truncated = computed(() => props.notifications.length >= props.limit);
                                         />
                                     </h3>
 
+                                    <!--
+                                        The row spans the frame; the sentence
+                                        inside it does not. This page shares the
+                                        app's 7xl frame now, and one column is
+                                        the right shape for a history being
+                                        scanned — see the note at the top of this
+                                        file — but an unbounded line of body text
+                                        at that width runs past 150 characters.
+                                        Most notification bodies are a sentence
+                                        and never reach the cap; the long ones
+                                        are exactly the ones that needed it.
+                                    -->
                                     <p
                                         v-if="notification.body"
-                                        class="mt-1 text-sm leading-relaxed text-csc-ink-muted"
+                                        class="mt-1 max-w-3xl text-sm leading-relaxed text-csc-ink-muted"
                                     >
                                         {{ notification.body }}
                                     </p>

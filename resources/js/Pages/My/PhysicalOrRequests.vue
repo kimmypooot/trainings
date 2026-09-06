@@ -73,7 +73,7 @@ const confirmCancel = () => {
     <Head title="Official Receipts" />
 
     <AuthenticatedLayout title="Official Receipts" current="physical-or">
-        <div class="mx-auto max-w-4xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <AppHelpLink anchor="payments">How to ask for a printed receipt</AppHelpLink>
 
             <!--

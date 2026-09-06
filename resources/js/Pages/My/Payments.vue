@@ -244,7 +244,7 @@ const submitPhysicalOr = () =>
     <Head title="Payments" />
 
     <AuthenticatedLayout title="Payments" current="payments">
-        <div class="mx-auto max-w-5xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
             <!--
                 Two abreast on a phone and three once there is a row for them.
                 "Awaiting review" is amber only when there is something in it —
