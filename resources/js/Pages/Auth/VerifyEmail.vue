@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AppLogo from '@/Components/AppLogo.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -12,6 +12,12 @@ const props = defineProps({
 const sending = ref(false);
 const resent = ref(false);
 const resendError = ref('');
+
+// This page renders its own shell rather than an app layout, so there is no
+// AppToast here to pick the flash up — EnsureEmailIsVerified's message has to
+// be rendered by the page itself, beside the resend result it sits with.
+const page = usePage();
+const flashError = computed(() => page.props.flash?.error ?? '');
 
 const resend = () => {
     sending.value = true;
@@ -86,12 +92,15 @@ const resend = () => {
                 <p v-else-if="resendError" class="mt-4 rounded-lg bg-danger-soft px-4 py-3 text-sm font-medium text-danger">
                     {{ resendError }}
                 </p>
+                <p v-else-if="flashError" class="mt-4 rounded-lg bg-warning-soft px-4 py-3 text-sm font-medium text-warning">
+                    {{ flashError }}
+                </p>
 
                 <div class="mt-6 flex flex-col gap-3">
                     <AppButton block icon="envelope" :loading="sending" @click="resend">
                         Resend verification email
                     </AppButton>
-                    <AppButton block variant="ghost" icon="arrow-right" href="/dashboard">
+                    <AppButton block variant="ghost" icon="arrow-right" href="/email/verify/continue">
                         I've already verified — continue
                     </AppButton>
                 </div>

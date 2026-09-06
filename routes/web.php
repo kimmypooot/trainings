@@ -271,6 +271,10 @@ Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 've
 
 Route::middleware('auth')->group(function () {
     Route::get('/email/verify', [EmailVerificationController::class, 'notice'])->name('verification.notice');
+    // The notice page's "I've already verified — continue" button. One segment,
+    // so it cannot be mistaken for the two-segment signed link above.
+    Route::get('/email/verify/continue', [EmailVerificationController::class, 'check'])
+        ->name('verification.continue');
     Route::post('/email/verification-notification', [EmailVerificationController::class, 'send'])
         ->middleware('throttle:3,1')
         ->name('verification.send');

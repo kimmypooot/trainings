@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Models\FieldOffice;
 use App\Models\User;
 use App\Notifications\VerifyEmail;
@@ -57,6 +58,53 @@ class EmailVerificationTest extends TestCase
         $this->actingAs($user)
             ->get('/dashboard')
             ->assertRedirect('/email/verify');
+    }
+
+    /**
+     * Landing back on the page you just left, with nothing said, is
+     * indistinguishable from a control that does nothing — which is what the
+     * notice page's "continue" button looked like.
+     */
+    public function test_being_bounced_back_to_the_notice_says_why(): void
+    {
+        $user = User::factory()->unverified()->create(['profile_completed_at' => now()]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertRedirect('/email/verify')
+            ->assertSessionHas('error', EmailVerificationController::NOT_YET_VERIFIED);
+
+        $this->actingAs($user)
+            ->get('/email/verify')
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Auth/VerifyEmail')
+                ->where('flash.error', EmailVerificationController::NOT_YET_VERIFIED));
+    }
+
+    /**
+     * The button asks the one question it is about. Pointed at the dashboard it
+     * met the *profile* gate first — which is listed ahead of the verification
+     * one — so an unverified participant with an unfinished profile, i.e. every
+     * participant at this point in the sequence, was let into the profile form
+     * as though they had verified.
+     */
+    public function test_the_continue_button_holds_an_unverified_user_on_the_notice(): void
+    {
+        $user = User::factory()->unverified()->create(['profile_completed_at' => null]);
+
+        $this->actingAs($user)
+            ->get('/email/verify/continue')
+            ->assertRedirect('/email/verify')
+            ->assertSessionHas('error', EmailVerificationController::NOT_YET_VERIFIED);
+    }
+
+    public function test_the_continue_button_lets_a_verified_user_through(): void
+    {
+        $user = User::factory()->create(['profile_completed_at' => now()]);
+
+        $this->actingAs($user)
+            ->get('/email/verify/continue')
+            ->assertRedirect('/dashboard');
     }
 
     public function test_login_is_blocked_until_the_email_is_verified(): void
@@ -207,7 +255,7 @@ class EmailVerificationTest extends TestCase
             'position_title' => 'Administrative Officer III',
             'salary_grade' => 'SG 14',
             'organization_name' => 'Department of Education',
-            'sector' => 'National Government Agency',
+            'sector' => 'National Government Agency (NGA)',
             'region' => 'Region VIII (Eastern Visayas)',
             'province' => 'Leyte',
             'city_municipality' => 'Palo',
