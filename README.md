@@ -90,7 +90,10 @@ Registering for a run, uploading a supervisory-course supporting document,
 paying (and requesting a refund, or a physical copy of an official receipt),
 carrying a QR code to the venue, evaluating the experts who taught each day,
 downloading certificates, filing agency requests, and keeping their own
-profile — including moving the account to a new email address.
+profile — including moving the account to a new email address. A dashboard
+feed and a full notifications page share one vocabulary for what happened to a
+registration, a payment or a certificate, so the two never describe the same
+event two different ways.
 
 ### For staff
 
@@ -109,9 +112,15 @@ admin, management, superadmin.
 - **Certificates** — release (one training or one participant) and re-send.
 - **Reporting** — analytics, revenue, period and per-training reports, and
   streamed spreadsheet exports.
-- **Administration** — users, field offices, subject-matter experts, editable
-  email templates and their delivery log, maintenance mode, and a read-only
-  audit trail.
+- **Administration** — users, field offices, subject-matter experts, the
+  agency/employer directory that backs the profile picker (with a worklist for
+  employers participants typed rather than picked), editable email templates
+  and their delivery log, maintenance mode, and a read-only audit trail.
+
+A contextual guide exists on both sides of the app — `/help` for a
+participant, `/admin/help` for staff, filtered to the sections a given role's
+job actually touches — and links into it (`AppHelpLink`) sit beside the
+screens most likely to need one rather than in a single index nobody opens.
 
 ## How it is put together
 
