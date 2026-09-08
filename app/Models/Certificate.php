@@ -9,6 +9,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * What `casts()` cannot tell Larastan about this model's relations — see
+ * CLAUDE.md's note on `casts()` vs the `$casts` property. Without these,
+ * `->user` and `->training` resolve to the base `Model`, and every
+ * `->name`/`->title`/`->signatory_name` read off them looks undefined.
+ *
+ * @property-read User $user
+ * @property-read Training $training
+ * @property-read Registration $registration
+ */
 #[Fillable([
     'registration_id', 'user_id', 'training_id', 'certificate_number', 'verification_code',
     'file_path', 'generated_at', 'generated_by', 'email_sent_at',

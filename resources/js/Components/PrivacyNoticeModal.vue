@@ -141,16 +141,19 @@ onBeforeUnmount(() => {
                     <section>
                         <h3 class="mb-1 font-semibold text-csc-blue">2. Personal Data We Collect</h3>
                         <ul class="list-inside list-disc space-y-1 text-csc-ink-muted">
-                            <li><strong>Basic information:</strong> name, agency, position, and contact details.</li>
-                            <li><strong>Training records:</strong> nominations, attendance, and completion data.</li>
-                            <li><strong>Account information:</strong> email address and sign-in method.</li>
+                            <li><strong>Basic information:</strong> name, agency, position, contact details, and, if you add one, a profile photo.</li>
+                            <li><strong>Training records:</strong> nominations, QR-code attendance scans, evaluations, and completion data.</li>
+                            <li><strong>Account information:</strong> email address and sign-in method, including a linked Google account.</li>
+                            <li><strong>Payment and refund data:</strong> proof of payment and, for a refund, the payee's bank details (encrypted).</li>
+                            <li><strong>Delivery data:</strong> if you request a printed receipt be couriered to you, your delivery details and proof of the courier fee.</li>
                         </ul>
                     </section>
 
                     <section>
                         <h3 class="mb-1 font-semibold text-csc-blue">3. Purpose of Processing</h3>
                         <ul class="list-inside list-disc space-y-1 text-csc-ink-muted">
-                            <li>Processing training nominations and enrolment.</li>
+                            <li>Processing training nominations, enrolment, and attendance.</li>
+                            <li>Processing payments, refunds, and requests for a couriered receipt.</li>
                             <li>Issuing certificates and maintaining training records.</li>
                             <li>Producing agency and Commission-level training reports.</li>
                             <li>Complying with legal and regulatory requirements.</li>
@@ -160,8 +163,10 @@ onBeforeUnmount(() => {
                     <section>
                         <h3 class="mb-1 font-semibold text-csc-blue">4. Data Sharing</h3>
                         <p>
-                            Data may be shared with CSC regional, field, and satellite offices and with your nominating
-                            agency, strictly for the purposes above and in compliance with applicable laws.
+                            Data may be shared with CSC regional, field, and satellite offices, with your nominating
+                            agency, and — only if you request a printed receipt be couriered to you — with the courier
+                            engaged to deliver it, strictly for the purposes above and in compliance with applicable
+                            laws.
                         </p>
                     </section>
 

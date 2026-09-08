@@ -26,11 +26,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $phone
  * @property string|null $email
  * @property string|null $certificate_prefix
+ * @property string|null $default_signatory_name
+ * @property string|null $default_signatory_title
  * @property-read User|null $updatedBy
  */
 #[Fillable([
     'name', 'short_name', 'region', 'psgc_region', 'address', 'phone', 'email',
-    'certificate_prefix', 'updated_by',
+    'certificate_prefix', 'default_signatory_name', 'default_signatory_title', 'updated_by',
 ])]
 class OfficeSetting extends Model
 {
@@ -45,7 +47,7 @@ class OfficeSetting extends Model
      */
     public const FIELDS = [
         'name', 'short_name', 'region', 'psgc_region', 'address', 'phone',
-        'email', 'certificate_prefix',
+        'email', 'certificate_prefix', 'default_signatory_name', 'default_signatory_title',
     ];
 
     /**

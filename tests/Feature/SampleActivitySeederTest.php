@@ -11,7 +11,6 @@ use App\Models\Payment;
 use App\Models\RefundRequest;
 use App\Models\Registration;
 use App\Models\Training;
-use App\Models\TrainingRequest;
 use App\Models\User;
 use Database\Seeders\SampleActivitySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -155,7 +154,7 @@ class SampleActivitySeederTest extends TestCase
         foreach ($certificates as $certificate) {
             $this->assertNotNull($certificate->generated_at);
             $this->assertSame(32, strlen($certificate->verification_code));
-            $this->assertStringStartsWith('CSC8-', $certificate->certificate_number);
+            $this->assertStringStartsWith('CERT-', $certificate->certificate_number);
             // Data only: a path is recorded but no file was ever written.
             $this->assertFalse(file_exists(storage_path('app/'.$certificate->file_path)));
         }
@@ -236,13 +235,6 @@ class SampleActivitySeederTest extends TestCase
             $this->assertSame(PaymentStatus::Verified, $refund->payment->status);
             $this->assertLessThanOrEqual((float) $refund->payment->amount, (float) $refund->amount);
         }
-    }
-
-    public function test_training_requests_cover_every_review_state(): void
-    {
-        $this->assertGreaterThan(0, TrainingRequest::where('status', 'pending')->count());
-        $this->assertGreaterThan(0, TrainingRequest::where('status', 'approved')->count());
-        $this->assertGreaterThan(0, TrainingRequest::where('status', 'rejected')->count());
     }
 
     public function test_the_admin_screens_render_against_the_seeded_data(): void

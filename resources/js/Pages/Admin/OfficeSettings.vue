@@ -37,6 +37,8 @@ const form = useForm({
     phone: props.office.phone ?? '',
     email: props.office.email ?? '',
     certificate_prefix: props.office.certificate_prefix ?? '',
+    default_signatory_name: props.office.default_signatory_name ?? '',
+    default_signatory_title: props.office.default_signatory_title ?? '',
 });
 
 // Shown beside the region picker so the consequence of changing it is on the
@@ -138,7 +140,7 @@ const submit = () => form.post('/admin/office', { preserveScroll: true });
                         :hint="
                             certificatePrefixLocked
                                 ? undefined
-                                : 'Printed on every certificate — a prefix of CSC8 gives CSC8-2026-000042.'
+                                : 'Printed on every certificate — a prefix of CERT gives CERT-2026-00042.'
                         "
                         :error="form.errors.certificate_prefix"
                     />
@@ -148,6 +150,30 @@ const submit = () => form.post('/admin/office', { preserveScroll: true });
                         leave a permanent break in the numbering, and numbers already given out
                         have to keep matching the printed copies.
                     </AppAlert>
+                </AppCard>
+
+                <AppCard title="Certificate signatory" class="mt-5">
+                    <p class="mb-4 text-sm text-csc-ink-muted">
+                        Who signs a certificate when the training itself does not name someone —
+                        set on an individual training's own form, which always wins over this.
+                        Left blank, a certificate prints "Authorized Signatory" instead of a name.
+                    </p>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <AppInput
+                            v-model="form.default_signatory_name"
+                            label="Signatory's name"
+                            hint="Printed on the signature line — typically the Director."
+                            :error="form.errors.default_signatory_name"
+                        />
+
+                        <AppInput
+                            v-model="form.default_signatory_title"
+                            label="Signatory's title"
+                            hint="Printed beneath the name, e.g. &quot;Director IV&quot;."
+                            :error="form.errors.default_signatory_title"
+                        />
+                    </div>
                 </AppCard>
 
                 <div class="mt-5 flex flex-wrap items-center justify-between gap-3">

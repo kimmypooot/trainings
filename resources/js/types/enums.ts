@@ -93,6 +93,8 @@ export const paymentMethodValues = [
     'lddap',
     'promissory',
     'official_receipt',
+    'cash_deposit_slip',
+    'check_deposit_slip',
 ] as const;
 
 export type PaymentMethod = (typeof paymentMethodValues)[number];

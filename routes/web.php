@@ -54,7 +54,6 @@ use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\RegistrationOutputController;
 use App\Http\Controllers\ScanLinkController;
 use App\Http\Controllers\TrainingController;
-use App\Http\Controllers\TrainingRequestController;
 use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureProfileIsComplete;
 use App\Http\Middleware\EnsureUserCollectsPayments;
@@ -514,6 +513,15 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                     ->name('scanner.walk-in');
 
                 /*
+                 * The desk's QR lookup — for a participant who arrived
+                 * without the phone their code lives on. Deliberately
+                 * online, alongside walk-in admission and for the same
+                 * reason; see ScannerController::participantQr().
+                 */
+                Route::get('/scanner/registrations/{registration}/qr', [ScannerController::class, 'participantQr'])
+                    ->name('scanner.participant-qr');
+
+                /*
                  * Issuing a station to someone without an account. Kept with
                  * scanning itself, because deciding who works a door is the
                  * same job as working it — and a link can never grant more
@@ -817,7 +825,7 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
          * as much as it is work. Deciding an item is the work, so management
          * is named out of it — a granted cancellation refunds money and frees
          * a seat, which is not something a role that reads reports should be
-         * able to do. Only HRD may convert a request into an actual training.
+         * able to do.
          */
         Route::get('/requests', [AdminRequestQueueController::class, 'index'])->name('requests.index');
 
@@ -825,8 +833,6 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             ->group(function () {
                 Route::post('/requests/cancellations/{cancellationRequest}', [AdminRequestQueueController::class, 'reviewCancellation'])
                     ->name('requests.cancellations.review');
-                Route::post('/requests/trainings/{trainingRequest}', [AdminRequestQueueController::class, 'reviewTrainingRequest'])
-                    ->name('requests.trainings.review');
                 Route::post('/requests/outputs/{output}', [AdminRequestQueueController::class, 'reviewOutput'])
                     ->name('requests.outputs.review');
             });
@@ -849,11 +855,6 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('agency-requests.verify-payment');
             Route::post('/agency-requests/{agencyRequest}/reject', [AdminAgencyRequestController::class, 'reject'])
                 ->name('agency-requests.reject');
-        });
-
-        Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
-            Route::post('/requests/trainings/{trainingRequest}/convert', [AdminRequestQueueController::class, 'convertTrainingRequest'])
-                ->name('requests.trainings.convert');
         });
 
         /*
@@ -943,12 +944,16 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             ->name('certificates.index');
         Route::get('/certificates/{certificate}/download', [AdminCertificateController::class, 'download'])
             ->name('certificates.download');
+        Route::get('/certificates/{certificate}/view', [AdminCertificateController::class, 'view'])
+            ->name('certificates.view');
         Route::get('/certificates/{certificate}', [AdminCertificateController::class, 'show'])
             ->name('certificates.show');
 
         Route::middleware(EnsureUserIsStaff::class.':admin|superadmin|field-office')->group(function () {
             Route::post('/certificates/{certificate}/resend', [AdminCertificateController::class, 'resend'])
                 ->name('certificates.resend');
+            Route::post('/certificates/{certificate}/regenerate', [AdminCertificateController::class, 'regenerate'])
+                ->name('certificates.regenerate');
         });
     });
 
@@ -1010,6 +1015,12 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
     Route::get('/my/payments', [PaymentController::class, 'index'])->name('payments.index');
     Route::post('/my/registrations/{registration}/payments', [PaymentController::class, 'store'])
         ->name('payments.store');
+    // Correcting a rejected payment — the wrong screenshot, a mistyped
+    // reference number — in place, the same move
+    // registrations.supporting-document.resubmit makes for a rejected
+    // supporting document. See PaymentService::resubmit().
+    Route::post('/my/payments/{payment}/resubmit', [PaymentController::class, 'resubmit'])
+        ->name('payments.resubmit');
     Route::post('/my/payments/{payment}/refund', [PaymentController::class, 'requestRefund'])
         ->name('payments.refund');
     Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->name('payments.proof');
@@ -1040,8 +1051,7 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
 
     /*
      * Agency requests: an agency formally asking CSC to run a training for its
-     * own staff, and the document exchange that follows. Distinct from the
-     * training-requests routes below, which are the suggestion box.
+     * own staff, and the document exchange that follows.
      */
     Route::get('/my/agency-requests', [AgencyRequestController::class, 'index'])
         ->name('agency-requests.index');
@@ -1057,11 +1067,6 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
     // correspondence need to read what the other sent.
     Route::get('/agency-request-documents/{document}', [AgencyRequestController::class, 'download'])
         ->name('agency-requests.documents.download');
-
-    Route::get('/my/training-requests', [TrainingRequestController::class, 'index'])
-        ->name('training-requests.index');
-    Route::post('/my/training-requests', [TrainingRequestController::class, 'store'])
-        ->name('training-requests.store');
 
     Route::post('/my/registrations/{registration}/outputs', [RegistrationOutputController::class, 'store'])
         ->name('outputs.store');
@@ -1115,6 +1120,12 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
         ->name('certificates.download');
 
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    // The header bell's popover: the newest handful, fetched as JSON rather
+    // than a page visit — see NotificationController::recent().
+    Route::get('/notifications/recent', [NotificationController::class, 'recent'])
+        ->name('notifications.recent');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])
+        ->name('notifications.read-one');
     Route::post('/notifications/read', [NotificationController::class, 'markAllRead'])
         ->name('notifications.read');
 

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\PaymentStatus;
 use App\Enums\RefundStatus;
+use App\Enums\RequestStatus;
 use App\Enums\Role;
 use App\Models\FieldOffice;
 use App\Models\Payment;
@@ -12,7 +13,6 @@ use App\Models\RefundRequest;
 use App\Models\Registration;
 use App\Models\RegistrationOutput;
 use App\Models\Training;
-use App\Models\TrainingRequest;
 use App\Models\User;
 use App\Support\CancellationRequestService;
 use App\Support\PendingActionCounter;
@@ -165,9 +165,8 @@ class PendingActionCounterTest extends TestCase
             'file_size' => 2048,
             'mime_type' => 'application/pdf',
         ]);
-        TrainingRequest::factory()->create(['requested_by' => $participant->getKey()]);
 
-        $this->assertSame(3, PendingActionCounter::for($admin)['admin-requests']);
+        $this->assertSame(2, PendingActionCounter::for($admin)['admin-requests']);
     }
 
     public function test_resolved_requests_are_not_pending(): void
@@ -175,7 +174,16 @@ class PendingActionCounterTest extends TestCase
         $admin = $this->staff();
         $participant = $this->participant();
 
-        TrainingRequest::factory()->approved()->create(['requested_by' => $participant->getKey()]);
+        RegistrationOutput::create([
+            'registration_id' => Registration::factory()->create(['user_id' => $participant->getKey()])->getKey(),
+            'title' => 'Reflection paper',
+            'description' => 'What I learned.',
+            'file_path' => 'outputs/paper.pdf',
+            'original_filename' => 'paper.pdf',
+            'file_size' => 2048,
+            'mime_type' => 'application/pdf',
+            'status' => RequestStatus::Approved,
+        ]);
 
         $this->assertSame(0, PendingActionCounter::for($admin)['admin-requests']);
     }
@@ -186,8 +194,14 @@ class PendingActionCounterTest extends TestCase
         $theirs = FieldOffice::factory()->create();
         $officer = $this->staff(Role::FieldOffice, $mine);
 
-        TrainingRequest::factory()->create(['requested_by' => $this->participant($mine)->getKey()]);
-        TrainingRequest::factory()->create(['requested_by' => $this->participant($theirs)->getKey()]);
+        CancellationRequestService::open(
+            Registration::factory()->create(['user_id' => $this->participant($mine)->getKey()]),
+            'Assigned to field work that week.',
+        );
+        CancellationRequestService::open(
+            Registration::factory()->create(['user_id' => $this->participant($theirs)->getKey()]),
+            'Assigned to field work that week.',
+        );
 
         $this->assertSame(1, PendingActionCounter::for($officer)['admin-requests']);
     }
@@ -197,8 +211,14 @@ class PendingActionCounterTest extends TestCase
         $office = FieldOffice::factory()->create();
         $admin = $this->staff(Role::Admin);
 
-        TrainingRequest::factory()->create(['requested_by' => $this->participant($office)->getKey()]);
-        TrainingRequest::factory()->create(['requested_by' => $this->participant()->getKey()]);
+        CancellationRequestService::open(
+            Registration::factory()->create(['user_id' => $this->participant($office)->getKey()]),
+            'Assigned to field work that week.',
+        );
+        CancellationRequestService::open(
+            Registration::factory()->create(['user_id' => $this->participant()->getKey()]),
+            'Assigned to field work that week.',
+        );
 
         $this->assertSame(2, PendingActionCounter::for($admin)['admin-requests']);
     }

@@ -5,6 +5,7 @@ import AppAvatar from '@/Components/AppAvatar.vue';
 import AppFooter from '@/Components/AppFooter.vue';
 import AppChangePasswordModal from '@/Components/AppChangePasswordModal.vue';
 import AppGlobalSearch from '@/Components/AppGlobalSearch.vue';
+import AppNotificationsPopover from '@/Components/AppNotificationsPopover.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppToast from '@/Components/AppToast.vue';
 import AppModal from '@/Components/AppModal.vue';
@@ -19,7 +20,6 @@ const props = defineProps({
 const page = usePage();
 const user = computed(() => page.props.auth?.user ?? {});
 const role = computed(() => user.value.role ?? 'participant');
-const unread = computed(() => page.props.unreadNotifications ?? 0);
 const pendingActions = computed(() => page.props.pendingActions ?? {});
 // Staff pass straight through maintenance mode, so without a banner it can sit
 // on for days unnoticed — see HandleInertiaRequests' maintenanceMode prop.
@@ -241,8 +241,9 @@ const navGroups = [
          * document you collect, not a training you browse or a task you owe,
          * and the Trainings group had grown into all three jobs at once — five
          * rows covering finding a course, enrolling on it, and what it leaves
-         * behind. The label says "Documents" because the receipt below is one
-         * too; for staff this group is unchanged.
+         * behind. The label says "Documents" for the certificate row below;
+         * for staff this group is unchanged. The participant's own receipt
+         * request lives in Requests instead — see the note there.
          */
         key: 'payments',
         label: 'Payments & Documents',
@@ -253,20 +254,6 @@ const navGroups = [
                 href: '/my/payments',
                 roles: ['participant'],
                 icon: 'card',
-            },
-            {
-                /*
-                 * "Physical OR" is what the finance office calls this and what
-                 * the staff queue is still labelled — but a participant cannot
-                 * be expected to expand OR, and this row is the only place they
-                 * meet the term. The route, the key and the staff label are all
-                 * unchanged; only the word this participant reads is.
-                 */
-                key: 'physical-or',
-                label: 'Official Receipts',
-                href: '/my/physical-or',
-                roles: ['participant'],
-                icon: 'document',
             },
             {
                 key: 'certificates',
@@ -303,11 +290,10 @@ const navGroups = [
             {
                 /*
                  * Collecting officers too: routes/web.php lets this role review
-                 * cancellations, training requests and outputs, and the queue
-                 * page itself is open to every staff role. Without this the
-                 * sidebar for that role was two rows — Dashboard and My Profile
-                 * — while the job it can actually do sat behind a URL nobody
-                 * had written down.
+                 * cancellations and outputs, and the queue page itself is open
+                 * to every staff role. Without this the sidebar for that role
+                 * was two rows — Dashboard and My Profile — while the job it
+                 * can actually do sat behind a URL nobody had written down.
                  */
                 key: 'admin-requests',
                 label: 'Requests',
@@ -324,16 +310,26 @@ const navGroups = [
                 icon: 'building',
             },
             {
-                key: 'training-requests',
-                label: 'Suggest a Training',
-                href: '/my/training-requests',
+                /*
+                 * "Physical OR" is what the finance office calls this and what
+                 * the staff queue is still labelled — but a participant cannot
+                 * be expected to expand OR, and this row is the only place they
+                 * meet the term. It lives here rather than under Payments &
+                 * Documents because a participant experiences it as a request
+                 * they file and wait on, not as a payment or a document they
+                 * hold — the route, the key and the staff label are all
+                 * unchanged; only the word this participant reads, and the
+                 * group it sits in, are.
+                 */
+                key: 'physical-or',
+                label: 'Official Receipts',
+                href: '/my/physical-or',
                 roles: ['participant'],
-                icon: 'plus',
+                icon: 'document',
             },
             {
-                // Named for what it is, so it is not confused with the
-                // suggestion box above: this one is a formal request from an
-                // agency, with letters going both ways.
+                // Named for what it is: a formal request from an agency, with
+                // letters going both ways.
                 key: 'agency-requests',
                 label: 'Agency Requests',
                 href: '/my/agency-requests',
@@ -827,46 +823,12 @@ const confirmSignOut = () => {
 
                     <div class="flex items-center gap-1 sm:gap-2">
                         <!--
-                            The bell is now the only route to notifications, so
-                            it carries the current-page state the sidebar row
-                            used to hold.
+                            A preview popover rather than a link straight to
+                            the full list — see AppNotificationsPopover for
+                            why. "See previous notifications" inside it is the
+                            hand-off to Notifications/Index.
                         -->
-                        <Link
-                            href="/notifications"
-                            class="relative inline-flex size-11 items-center justify-center rounded-lg transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            :class="
-                                props.current === 'notifications'
-                                    ? 'bg-csc-blue-tint text-csc-blue'
-                                    : 'text-csc-ink'
-                            "
-                            :aria-current="props.current === 'notifications' ? 'page' : undefined"
-                        >
-                            <AppIcon name="bell" />
-                            <!-- Unread alert: a pulsing ring draws the eye, the count carries the detail -->
-                            <template v-if="unread">
-                                <!--
-                                    Keyed on the count so the pulse replays
-                                    when the number actually changes. It used to
-                                    be animate-ping, which is infinite: a
-                                    permanent attention-grab for a figure that
-                                    was not moving. Three beats, then it rests.
-                                -->
-                                <span
-                                    :key="unread"
-                                    class="bell-ping absolute top-1 right-1 inline-flex size-4 rounded-full bg-danger/50"
-                                    aria-hidden="true"
-                                />
-                                <span
-                                    class="absolute top-1 right-1 inline-flex min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white ring-2 ring-white"
-                                    aria-hidden="true"
-                                >
-                                    {{ unread > 9 ? '9+' : unread }}
-                                </span>
-                            </template>
-                            <span class="sr-only" aria-live="polite">
-                                Notifications{{ unread ? ` — ${unread} unread` : '' }}
-                            </span>
-                        </Link>
+                        <AppNotificationsPopover :current="props.current" />
 
                         <div ref="accountRef" class="relative">
                             <button
@@ -1105,21 +1067,4 @@ const confirmSignOut = () => {
     background: color-mix(in srgb, white 35%, transparent);
 }
 
-/*
- * Tailwind's animate-ping is infinite. The unread badge only has news to break
- * when the count changes, so this is the same motion bounded to three beats;
- * the element is keyed on the count, which replays it on the next arrival.
- * The global prefers-reduced-motion block in app.css already neutralises it.
- */
-.bell-ping {
-    animation: bell-ping 1s cubic-bezier(0, 0, 0.2, 1) 3;
-}
-
-@keyframes bell-ping {
-    75%,
-    100% {
-        transform: scale(2);
-        opacity: 0;
-    }
-}
 </style>

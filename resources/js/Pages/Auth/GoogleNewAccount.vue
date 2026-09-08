@@ -4,7 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AuthLayout from '@/Layouts/AuthLayout.vue';
-import { beginSignIn, dismiss } from '@/authSplash';
+import { beginAccountCreation, dismiss } from '@/authSplash';
 
 defineProps({
     // The address they have just authenticated with. Shown because it is the
@@ -22,13 +22,19 @@ const deciding = ref(false);
 const createAccount = () => {
     if (deciding.value) return;
     deciding.value = true;
-    beginSignIn();
+    beginAccountCreation();
 
     router.post(
         '/auth/google/new',
         {},
         {
-            onError: () => {
+            // `onFinish`, not `onError` alone: a success here leaves this page
+            // for the profile form, and nothing was ever taking the splash
+            // back down for that case — it is mounted outside every page, so
+            // an unhandled success left it on screen forever, over a form the
+            // participant could not see to fill in. `onFinish` fires either
+            // way, the same move `signInInstead()` already makes below.
+            onFinish: () => {
                 dismiss();
                 deciding.value = false;
             },

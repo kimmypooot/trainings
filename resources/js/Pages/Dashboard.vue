@@ -495,7 +495,7 @@ const stats = computed(() => [
             <!-- 5. Recent activity -->
             <AppCard title="Recent Activity" :padded="recentActivity.length > 0">
                 <template v-if="recentActivity.length" #action>
-                    <AppButton href="/my/registrations" size="sm" variant="ghost">View All</AppButton>
+                    <AppButton href="/notifications" size="sm" variant="ghost">View All</AppButton>
                 </template>
 
                 <!--

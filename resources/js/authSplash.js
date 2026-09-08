@@ -34,6 +34,12 @@ const state = reactive({
     // Swapped under the title while a sequence is running; the original moves
     // this line too (e.g. "Preparing Appointing Authority dashboard…").
     subtitle: 'Please wait a moment…',
+    // The 'loading' stage's headline. Null means the default, "Signing you
+    // in" — the overlay is shared by more than sign-in now (see
+    // beginAccountCreation), and a Google sign-up seeing "Signing you in" for
+    // an account that does not exist yet was confusing in exactly the way a
+    // status message should not be.
+    title: null,
 });
 
 let showedAt = 0;
@@ -47,16 +53,27 @@ const clear = () => {
 /** Milliseconds still owed before a stage has had its minimum time on screen. */
 const remaining = (minimum) => Math.max(0, minimum - (Date.now() - showedAt));
 
-const show = (stage, subtitle) => {
+const show = (stage, subtitle, title = null) => {
     clear();
     state.stage = stage;
     state.subtitle = subtitle;
+    state.title = title;
     state.visible = true;
     showedAt = Date.now();
 };
 
 /** Raise the splash for a sign-in that is now in flight. */
 export const beginSignIn = () => show('loading', 'Please wait a moment…');
+
+/**
+ * Raise it for a first-time Google sign-up creating its account.
+ *
+ * A distinct headline rather than reusing beginSignIn(): nothing has signed
+ * in yet at this point, and telling someone "Signing you in" while their
+ * account is still being created is the kind of small mismatch that reads as
+ * the system not knowing what it is doing.
+ */
+export const beginAccountCreation = () => show('loading', 'Please wait a moment…', 'Creating your account');
 
 /** Raise it for the trip out to Google, which is a real document navigation. */
 export const beginRedirect = (subtitle) => show('loading', subtitle);
@@ -115,6 +132,7 @@ export const dismiss = () => {
     state.visible = false;
     state.stage = 'loading';
     state.name = null;
+    state.title = null;
 };
 
 export const authSplash = readonly(state);

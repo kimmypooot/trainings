@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
@@ -12,6 +12,7 @@ import AppModal from '@/Components/AppModal.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import AppSelect from '@/Components/AppSelect.vue';
 import AppSkeleton from '@/Components/AppSkeleton.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
 import TrainingRegistrationForm from '@/Components/TrainingRegistrationForm.vue';
 import { formatDateRange, spansMultipleDays } from '@/dateRange';
@@ -106,8 +107,23 @@ const selected = ref(null);
 // asked for, so previously opened (or hover-preloaded) trainings live here.
 const detailsCache = ref({});
 
-const fetchDetails = (training) => {
+// id => true for a training whose fetch failed and was not a mere preload.
+// Without this, a genuinely failed click-initiated request left the modal
+// showing its skeleton forever — indistinguishable from "still loading" —
+// because the only feedback path was the same silent `onError` a hover
+// preload uses on purpose. A preload failing is nothing to report (the click
+// asks again); a click itself failing is the one case a participant is
+// actually staring at the dialog waiting for, so it needs its own visible
+// outcome and a way to retry rather than a wait that never ends.
+const failedDetails = ref({});
+
+const fetchDetails = (training, { silent = false } = {}) => {
     if (detailsCache.value[training.id]) return;
+
+    // A fresh attempt — including a retry — clears any earlier failure so the
+    // modal goes back to its loading state rather than showing a stale error
+    // while the new request is still in flight.
+    delete failedDetails.value[training.id];
 
     router.reload({
         only: ['details'],
@@ -115,13 +131,18 @@ const fetchDetails = (training) => {
         preserveState: true,
         preserveScroll: true,
         preserveUrl: true,
-        // A hover-preload is a courtesy, not a request the participant is
-        // waiting on — if it fails (a network blip, or a stale asset version
-        // after a fresh deploy, which Inertia already recovers from on its
-        // own by reloading the page), there is nothing for this call to do
-        // beyond not surfacing an unhandled rejection. A click still opens
-        // the modal and asks again.
-        onError: () => {},
+        onError: () => {
+            // A hover-preload is a courtesy, not a request the participant is
+            // waiting on — if it fails (a network blip, or a stale asset
+            // version after a fresh deploy, which Inertia already recovers
+            // from on its own by reloading the page), there is nothing for
+            // this call to do beyond not surfacing an unhandled rejection: a
+            // click still opens the modal and asks again. A click-initiated
+            // fetch failing is different — the modal is already open and
+            // showing its skeleton, so silence here would leave it stuck
+            // that way with no indication anything went wrong.
+            if (!silent) failedDetails.value[training.id] = true;
+        },
     });
 };
 
@@ -134,7 +155,10 @@ const fetchDetails = (training) => {
 watch(
     () => page.props.details,
     (loaded) => {
-        if (loaded?.id) detailsCache.value[loaded.id] = loaded;
+        if (!loaded?.id) return;
+
+        detailsCache.value[loaded.id] = loaded;
+        delete failedDetails.value[loaded.id];
     }
 );
 
@@ -147,6 +171,15 @@ const openDetails = (training) => {
     fetchDetails(training);
 };
 
+// The failed fetch for whichever training is currently open, if any — the
+// modal reads this rather than a bare boolean so a stale failure from an
+// earlier training can never leak onto the one on screen now.
+const detailFailed = computed(() => Boolean(selected.value && failedDetails.value[selected.value.id]));
+
+const retryDetails = () => {
+    if (selected.value) fetchDetails(selected.value);
+};
+
 // Hovering a card preloads its picture so the modal usually opens already
 // full. Debounced and cancelled on leave so a slow drag across the grid does
 // not fire a request per card, and skipped on touch where hover is meaningless.
@@ -154,7 +187,7 @@ let preloadTimer;
 const preloadDetails = (training) => {
     if (window.matchMedia('(hover: none)').matches) return;
     clearTimeout(preloadTimer);
-    preloadTimer = setTimeout(() => fetchDetails(training), 150);
+    preloadTimer = setTimeout(() => fetchDetails(training, { silent: true }), 150);
 };
 
 const cancelPreload = () => clearTimeout(preloadTimer);
@@ -181,6 +214,27 @@ const slotsDetail = (training) =>
         ? 'No limit'
         : `${training.slots_remaining} of ${training.capacity} remaining`;
 
+/*
+ * How full a capped run is, 0–100. `null` for an uncapped run, which has
+ * nothing to fill toward — the card renders no bar rather than a bar that
+ * always reads empty.
+ */
+const capacityFilled = (training) => {
+    if (training.capacity === null) return null;
+
+    const taken = training.capacity - training.slots_remaining;
+    return Math.max(0, Math.min(100, Math.round((taken / training.capacity) * 100)));
+};
+
+// Amber past 80% full, red once it is actually full — the same reading order
+// as the text beside it ("3 slots left" vs "Full"), just visible at a glance
+// across a whole grid of cards instead of read one card at a time.
+const capacityTone = (training) => {
+    if (training.is_full) return 'bg-danger';
+    if (capacityFilled(training) >= 80) return 'bg-warning';
+    return 'bg-csc-blue';
+};
+
 // A registered card is tinted by its status — see resources/js/statusTone.js
 // for why "approved" reads green here specifically, distinct from the info
 // tone AppBadge gives it in the footer badge on the same card.
@@ -196,70 +250,76 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                 Programs offered by the Civil Service Commission. Slots are taken on a first-come basis.
             </p>
 
-            <!-- Your registrations, at a glance -->
-            <div v-if="registeredCount > 0" class="flex items-center gap-2 rounded-xl border border-csc-line bg-white px-4 py-3 text-sm text-csc-ink-muted">
-                <span>
-                    You are registered in
-                    <Link
-                        href="/my/registrations"
-                        class="font-semibold text-csc-blue hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    >
-                        {{ registeredCount }} upcoming {{ registeredCount === 1 ? 'training' : 'trainings' }}
-                    </Link>.
-                    Open your registrations to track approvals and payments.
-                </span>
+            <!-- At a glance: what the catalogue holds, and where the participant already stands in it. -->
+            <div class="grid gap-3 sm:grid-cols-2">
+                <AppStatTile
+                    label="Programs available"
+                    :value="trainings.meta.total"
+                    icon="calendar"
+                    caption="Matching the filters below"
+                />
+                <AppStatTile
+                    label="Your registrations"
+                    :value="registeredCount"
+                    icon="check"
+                    tone="success"
+                    :href="registeredCount > 0 ? '/my/registrations' : null"
+                    caption="Track approvals and payments"
+                />
             </div>
 
             <!-- Search + filters -->
-            <div class="flex flex-col gap-3">
-                <AppInput
-                    v-model="search"
-                    label=""
-                    type="search"
-                    placeholder="Search by title, code, or venue…"
-                    aria-label="Search trainings"
-                    class="lg:max-w-xs"
-                />
-
-                <div class="flex flex-wrap items-end gap-3">
-                    <AppSelect
-                        v-model="mode"
-                        class="w-full sm:w-40"
-                        label="Mode"
-                        :options="modeOptions"
-                        placeholder="All modes"
-                    />
-                    <AppSelect
-                        v-model="category"
-                        class="w-full sm:w-56"
-                        label="Category"
-                        :options="categoryOptions"
-                        placeholder="All categories"
-                    />
-                    <AppSelect
-                        v-model="sort"
-                        class="w-full sm:w-44"
-                        label="Sort by"
-                        :options="sortOptions"
-                        placeholder="Start date"
+            <AppCard>
+                <div class="flex flex-col gap-3">
+                    <AppInput
+                        v-model="search"
+                        label=""
+                        type="search"
+                        placeholder="Search by title, code, or venue…"
+                        aria-label="Search trainings"
+                        class="lg:max-w-xs"
                     />
 
-                    <label
-                        class="flex cursor-pointer items-center gap-2 rounded-lg border border-csc-line bg-white px-3 py-2.5 text-sm font-medium text-csc-ink-muted hover:border-csc-blue/40"
-                    >
-                        <input
-                            v-model="openOnly"
-                            type="checkbox"
-                            class="size-4 shrink-0 rounded border-csc-line accent-csc-blue"
+                    <div class="flex flex-wrap items-end gap-3">
+                        <AppSelect
+                            v-model="mode"
+                            class="w-full sm:w-40"
+                            label="Mode"
+                            :options="modeOptions"
+                            placeholder="All modes"
                         />
-                        Open registration
-                    </label>
+                        <AppSelect
+                            v-model="category"
+                            class="w-full sm:w-56"
+                            label="Category"
+                            :options="categoryOptions"
+                            placeholder="All categories"
+                        />
+                        <AppSelect
+                            v-model="sort"
+                            class="w-full sm:w-44"
+                            label="Sort by"
+                            :options="sortOptions"
+                            placeholder="Start date"
+                        />
 
-                    <AppButton v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
-                        Clear filters
-                    </AppButton>
+                        <label
+                            class="flex cursor-pointer items-center gap-2 rounded-lg border border-csc-line bg-csc-blue-tint/40 px-3 py-2.5 text-sm font-medium text-csc-ink-muted transition-colors duration-150 hover:border-csc-blue/40 has-checked:border-csc-blue has-checked:bg-csc-blue-tint has-checked:text-csc-blue"
+                        >
+                            <input
+                                v-model="openOnly"
+                                type="checkbox"
+                                class="size-4 shrink-0 rounded border-csc-line accent-csc-blue"
+                            />
+                            Open registration
+                        </label>
+
+                        <AppButton v-if="hasActiveFilters" variant="ghost" size="sm" @click="clearFilters">
+                            Clear filters
+                        </AppButton>
+                    </div>
                 </div>
-            </div>
+            </AppCard>
 
             <!--
                  The results dim while a filtered visit is out. The controls above stay
@@ -272,7 +332,7 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                     <article
                         v-for="training in trainings.data"
                         :key="training.id"
-                        class="relative flex cursor-pointer flex-col overflow-hidden rounded-xl border transition-shadow duration-150 hover:shadow-md"
+                        class="relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-t-4 transition-shadow duration-150 hover:shadow-md"
                         :class="cardTone(training)"
                         @mouseenter="preloadDetails(training)"
                         @mouseleave="cancelPreload"
@@ -313,6 +373,45 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                                     <span class="font-medium text-csc-ink-subtle">
                                         {{ training.payment_amount ? formatFee(training.payment_amount) : 'Free' }}
                                     </span>
+                                </div>
+
+                                <!--
+                                    Capacity, at a glance: the footer already
+                                    says "3 slots left" in words, but a bar
+                                    reads across a whole grid of cards in one
+                                    pass where the text has to be read card by
+                                    card. Absent on an uncapped run — there is
+                                    nothing to fill toward.
+
+                                    A visible caption travels with it — the
+                                    bar's own `aria-label` only ever reached a
+                                    screen reader, so a sighted reader saw a
+                                    coloured strip with no stated meaning. The
+                                    label/figure pair above the bar is the same
+                                    layout the profile completeness meter uses,
+                                    for the same reason: the number is what
+                                    answers "how full", the bar is just how
+                                    fast that answer reads across a grid.
+                                -->
+                                <div v-if="training.capacity !== null" class="mt-2.5">
+                                    <div class="flex items-baseline justify-between gap-2 text-2xs text-csc-ink-subtle">
+                                        <span>Available slots</span>
+                                        <span class="font-medium">{{ slotsDetail(training) }}</span>
+                                    </div>
+                                    <div
+                                        class="mt-1 h-1.5 overflow-hidden rounded-full bg-csc-blue-tint"
+                                        role="progressbar"
+                                        :aria-label="slotsDetail(training)"
+                                        :aria-valuenow="capacityFilled(training)"
+                                        aria-valuemin="0"
+                                        aria-valuemax="100"
+                                    >
+                                        <div
+                                            class="h-full rounded-full transition-all duration-300"
+                                            :class="capacityTone(training)"
+                                            :style="{ width: `${capacityFilled(training)}%` }"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -380,7 +479,10 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                 <template v-if="modalTraining">
                     <dl class="grid gap-x-6 gap-y-5 text-sm sm:grid-cols-2">
                         <div>
-                            <dt class="text-csc-ink-subtle">Date</dt>
+                            <dt class="flex items-center gap-1.5 text-csc-ink-subtle">
+                                <AppIcon name="calendar" size="sm" />
+                                Date
+                            </dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">
                                 {{ modalTraining.starts_at }}
                                 <template v-if="spansMultipleDays(modalTraining.starts_at, modalTraining.ends_at)">
@@ -389,27 +491,60 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                             </dd>
                         </div>
                         <div>
-                            <dt class="text-csc-ink-subtle">Venue</dt>
+                            <dt class="flex items-center gap-1.5 text-csc-ink-subtle">
+                                <AppIcon name="map-pin" size="sm" />
+                                Venue
+                            </dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.venue }}</dd>
                         </div>
                         <div>
-                            <dt class="text-csc-ink-subtle">Mode</dt>
+                            <dt class="flex items-center gap-1.5 text-csc-ink-subtle">
+                                <AppIcon name="info" size="sm" />
+                                Mode
+                            </dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.mode_label }}</dd>
                         </div>
                         <div v-if="modalTraining.payment_required">
-                            <dt class="text-csc-ink-subtle">Fee</dt>
+                            <dt class="flex items-center gap-1.5 text-csc-ink-subtle">
+                                <AppIcon name="card" size="sm" />
+                                Fee
+                            </dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ formatFee(modalTraining.payment_amount) }}</dd>
                         </div>
                         <div v-if="modalTraining.category">
-                            <dt class="text-csc-ink-subtle">Curriculum</dt>
+                            <dt class="flex items-center gap-1.5 text-csc-ink-subtle">
+                                <AppIcon name="tag" size="sm" />
+                                Curriculum
+                            </dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ modalTraining.category }}</dd>
                         </div>
                         <div>
-                            <dt class="text-csc-ink-subtle">Available slots</dt>
+                            <dt class="flex items-center gap-1.5 text-csc-ink-subtle">
+                                <AppIcon name="users" size="sm" />
+                                Available slots
+                            </dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">{{ slotsDetail(modalTraining) }}</dd>
+                            <div
+                                v-if="modalTraining.capacity !== null"
+                                class="mt-1.5 h-1.5 max-w-48 overflow-hidden rounded-full bg-csc-blue-tint"
+                                role="progressbar"
+                                :aria-label="slotsDetail(modalTraining)"
+                                :aria-valuenow="capacityFilled(modalTraining)"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                            >
+                                <div
+                                    class="h-full rounded-full transition-all duration-300"
+                                    :class="capacityTone(modalTraining)"
+                                    :style="{ width: `${capacityFilled(modalTraining)}%` }"
+                                />
+                            </div>
                         </div>
                         <div v-if="modalTraining.duration_days">
-                            <dt class="text-csc-ink-subtle">Duration</dt>
+                            <dt class="flex items-center gap-1.5 text-csc-ink-subtle">
+                                <AppIcon name="clock" size="sm" />
+                                Duration
+                            </dt>
                             <dd class="mt-0.5 font-medium text-csc-ink">
                                 {{ modalTraining.duration_days }} day{{ modalTraining.duration_days === 1 ? '' : 's' }}
                             </dd>
@@ -438,6 +573,26 @@ const cardTone = (training) => registrationCardToneFor(training.is_registered, t
                         :training="modalTraining"
                         class="mt-6"
                     />
+
+                    <!--
+                        A failed fetch gets its own state rather than sitting
+                        under the skeleton forever — the loading placeholder
+                        and "this did not work" look the same to a screen
+                        reader and to anyone who glances away and back, so the
+                        two must not share one rendering.
+                    -->
+                    <div
+                        v-else-if="detailFailed"
+                        class="mt-6 flex flex-col items-center gap-3 border-t border-csc-line pt-5 text-center"
+                    >
+                        <p class="flex items-center gap-1.5 text-sm font-medium text-danger">
+                            <AppIcon name="warning" size="sm" />
+                            Could not load the rest of this training's details.
+                        </p>
+                        <AppButton variant="ghost" size="sm" icon="refresh" @click="retryDetails">
+                            Try again
+                        </AppButton>
+                    </div>
 
                     <div v-else class="mt-6 border-t border-csc-line pt-5">
                         <AppSkeleton variant="text" :count="3" label="Loading training details" />

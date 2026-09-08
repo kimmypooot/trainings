@@ -76,6 +76,19 @@ export function useScanStation({
 
     const admitting = ref(false);
 
+    /**
+     * Whether the device's last roster is still being pulled out of IndexedDB.
+     *
+     * True from mount until the initial `refreshStoredRosters`/`activate` pair
+     * settles. A page that renders its "no roster yet, pick one to download"
+     * screen the instant `roster` is null shows that screen for one visible
+     * frame on every reopen of a station that already has a roster on it —
+     * IndexedDB is asynchronous, so `roster` starts null no matter how quickly
+     * it is about to be filled in. Callers gate that screen on this flag
+     * instead of on `!roster` alone.
+     */
+    const restoring = ref(true);
+
     const online = ref(navigator.onLine);
     const syncState = ref('idle'); // idle | syncing | error
     const syncMessage = ref(null);
@@ -696,14 +709,18 @@ export function useScanStation({
     }
 
     onMounted(async () => {
-        await refreshStoredRosters();
+        try {
+            await refreshStoredRosters();
 
-        if (restoreLast) {
-            const last = localStorage.getItem(storageKey);
+            if (restoreLast) {
+                const last = localStorage.getItem(storageKey);
 
-            if (last) {
-                await activate(Number(last));
+                if (last) {
+                    await activate(Number(last));
+                }
             }
+        } finally {
+            restoring.value = false;
         }
 
         window.addEventListener('online', handleOnline);
@@ -761,6 +778,7 @@ export function useScanStation({
         lastSyncedAt,
         downloading,
         credentialExpired,
+        restoring,
         // derived
         pendingCount,
         failedCount,
@@ -844,11 +862,19 @@ export function mergeRoster(held, incoming) {
  * same on both doors or an operator moving between them will misread it.
  */
 export const verdictStyles = {
-    success: { tone: 'bg-success text-white', icon: 'check', title: 'Checked in' },
-    duplicate: { tone: 'bg-warning text-white', icon: 'clock', title: 'Already marked' },
-    'off-day': { tone: 'bg-danger text-white', icon: 'warning', title: 'Not running today' },
-    unknown: { tone: 'bg-danger text-white', icon: 'warning', title: 'Not on this roster' },
-    invalid: { tone: 'bg-danger text-white', icon: 'close', title: 'Unrecognised code' },
+    /*
+     * Titles say what happened to the *record*, not what happened to the scan.
+     *
+     * "Checked in" and "Not on this roster" described the station's own state
+     * of mind; a facilitator with a queue needs the outcome — was this person
+     * counted or not. Every one of these is paired with an icon and rendered
+     * beside a written detail line, so none of them relies on its colour.
+     */
+    success: { fill: 'bg-success', icon: 'check-circle', title: 'Attendance recorded' },
+    duplicate: { fill: 'bg-warning', icon: 'clock', title: 'Already recorded' },
+    'off-day': { fill: 'bg-danger', icon: 'warning', title: 'Not running today' },
+    unknown: { fill: 'bg-danger', icon: 'warning', title: 'Participant not found' },
+    invalid: { fill: 'bg-danger', icon: 'close', title: 'Invalid QR code' },
     /*
      * Walk-ins read as success because that is what they are: the person is in
      * the room and on the register. The pending variant is warning rather than
@@ -856,14 +882,21 @@ export const verdictStyles = {
      * yet, and colouring it as an error sends the operator hunting a problem
      * that does not exist.
      */
-    'walk-in': { tone: 'bg-success text-white', icon: 'check', title: 'Walk-in admitted' },
-    'walk-in-pending': { tone: 'bg-warning text-white', icon: 'clock', title: 'Enrolled — fee due' },
-    refused: { tone: 'bg-danger text-white', icon: 'warning', title: 'Not admitted' },
+    'walk-in': { fill: 'bg-success', icon: 'check-circle', title: 'Walk-in admitted' },
+    'walk-in-pending': { fill: 'bg-warning', icon: 'clock', title: 'Enrolled — fee due' },
+    refused: { fill: 'bg-danger', icon: 'warning', title: 'Not admitted' },
 };
 
+/*
+ * The sync dot.
+ *
+ * `info` is the brand blue rather than white now that the station's chrome is
+ * light — on the old dark ground a white dot was the only thing that read as
+ * "working", and on white it read as nothing at all.
+ */
 export const toneDots = {
     success: 'bg-success',
     warning: 'bg-warning',
     danger: 'bg-danger',
-    info: 'bg-white',
+    info: 'bg-csc-blue',
 };

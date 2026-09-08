@@ -77,6 +77,32 @@ const resend = () => {
     );
 };
 
+/*
+ * Regenerating overwrites the stored PDF in place — same number, same
+ * verification code, fresh render from the certificate's current data. It
+ * confirms first for the same reason a re-send does: it is not something to
+ * undo, and it is meant for a deliberate correction (a name fixed on the
+ * profile, a template fix that should reach an issued document), not a
+ * routine click.
+ */
+const regenerating = ref(null);
+const regenerateProcessing = ref(false);
+
+const regenerate = () => {
+    regenerateProcessing.value = true;
+    router.post(
+        `/admin/certificates/${regenerating.value.id}/regenerate`,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                regenerateProcessing.value = false;
+                regenerating.value = null;
+            },
+        }
+    );
+};
+
 const copied = ref(null);
 const copyVerifyUrl = async (certificate) => {
     await navigator.clipboard.writeText(certificate.verify_url);
@@ -93,6 +119,9 @@ const copyVerifyUrl = async (certificate) => {
  * so the control has to be the receipt.
  */
 const actionsFor = (certificate) => [
+    // Opened beside this page, not navigated to — the point is confirming
+    // what a caller is looking at without losing the register underneath it.
+    { label: 'View', icon: 'eye', href: certificate.view_url, external: true, newTab: true },
     // A file response, not an Inertia visit.
     { label: 'Download', icon: 'download', href: certificate.download_url, external: true },
     copied.value === certificate.id
@@ -100,6 +129,9 @@ const actionsFor = (certificate) => [
         : { label: 'Copy verify link', icon: 'link', onClick: () => copyVerifyUrl(certificate) },
     ...(props.can.resend
         ? [{ label: 'Re-send', icon: 'envelope', onClick: () => (resending.value = certificate) }]
+        : []),
+    ...(props.can.regenerate
+        ? [{ label: 'Regenerate PDF', icon: 'refresh', onClick: () => (regenerating.value = certificate) }]
         : []),
 ];
 </script>
@@ -296,6 +328,20 @@ const actionsFor = (certificate) => [
             :processing="processing"
             @confirm="resend"
             @close="resending = null"
+        />
+
+        <AppConfirmModal
+            :open="regenerating !== null"
+            title="Regenerate this certificate's PDF?"
+            :description="
+                regenerating
+                    ? `A fresh PDF for ${regenerating.participant} replaces the one currently stored, from the certificate's current data. The certificate number and verification link stay the same — anyone already holding the old file has an out-of-date copy.`
+                    : ''
+            "
+            confirm-label="Regenerate PDF"
+            :processing="regenerateProcessing"
+            @confirm="regenerate"
+            @close="regenerating = null"
         />
     </AuthenticatedLayout>
 </template>

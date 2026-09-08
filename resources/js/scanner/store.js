@@ -120,6 +120,15 @@ export async function saveRoster(trainingId, bundle) {
 }
 
 export async function getRoster(trainingId) {
+    // `undefined` is not a valid IndexedDB key, and `store.get()` throws
+    // synchronously rather than resolving to "not found" — station.js asks
+    // this for a training that may not exist yet (a first-ever download has
+    // no `roster.value` to read a fallback id off), and that ordinary case
+    // must read as "nothing stored", not crash the whole download silently.
+    if (trainingId === null || trainingId === undefined) {
+        return undefined;
+    }
+
     return withStore(ROSTERS, 'readonly', (store) => store.get(trainingId));
 }
 

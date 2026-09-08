@@ -73,15 +73,18 @@ const verified = computed(() =>
  * The proof link stays an `external` action: it is a file served by a download
  * controller, and Inertia would try to render the PDF as a page.
  */
+// Correcting a rejected payment, and claiming a refund on a verified one, are
+// not one option among several — each is the one thing standing between a
+// participant and money that is stuck, so both get their own button rather
+// than sitting in this row at the same weight as "View proof". See the
+// "Correct and resubmit" and "Request refund" AppButtons in the template.
+// The two conditions are mutually exclusive (a payment is either Rejected or
+// Verified, never both), so they never compete for the same spot.
 const paymentActions = (payment) => {
     const actions = [];
 
     if (payment.proof_url) {
         actions.push({ label: 'View proof', icon: 'eye', href: payment.proof_url, external: true });
-    }
-
-    if (payment.can_request_refund) {
-        actions.push({ label: 'Request refund', icon: 'arrow-left', onClick: () => startRefund(payment) });
     }
 
     if (payment.can_request_physical_or) {
@@ -107,18 +110,21 @@ const isOnlineTransfer = computed(() => form.payment_method === 'online');
 // made it into a registration here. The OR number is what lets staff go
 // looking for it, so it is asked for only in this one case.
 const isOfficialReceipt = computed(() => form.payment_method === 'official_receipt');
+const isCashDepositSlip = computed(() => form.payment_method === 'cash_deposit_slip');
+const isCheckDepositSlip = computed(() => form.payment_method === 'check_deposit_slip');
 
-// Whether a document is expected with this method — asked for, never demanded.
-// A payment without one still goes through and is flagged for staff instead,
-// so this drives the wording only. Read off the method list the server sent so
-// the two cannot drift apart.
-const proofExpected = computed(
-    () => props.methods.find((method) => method.value === form.payment_method)?.expects_proof ?? false
+// Whether this method has nothing else standing behind it — read off the
+// method list the server sent so the file field's "required" state can never
+// drift from what PaymentController::store() actually enforces.
+const proofRequired = computed(
+    () => props.methods.find((method) => method.value === form.payment_method)?.requires_proof ?? false
 );
 
 const proofLabel = computed(() => {
     if (isPromissory.value) return 'Signed Promissory Note';
     if (isOfficialReceipt.value) return 'Photo of the Official Receipt';
+    if (isCashDepositSlip.value) return 'Cash Deposit Slip';
+    if (isCheckDepositSlip.value) return 'Check Deposit Slip';
 
     return 'Proof of Payment';
 });
@@ -128,8 +134,8 @@ const proofHint = computed(() => {
         return 'A clear photo of the physical receipt, front side up — the OR number, amount, and date must all be readable. PDF or image, up to 5 MB.';
     }
 
-    return proofExpected.value
-        ? 'Please attach the transfer slip if you have it — it is what CSC matches against the bank statement. You can submit without one, and staff will follow up. PDF or image, up to 5 MB. Only you and CSC finance staff can open it.'
+    return proofRequired.value
+        ? 'Required — this is what CSC matches against the bank record, and a submission without one is refused. PDF or image, up to 5 MB. Only you and CSC finance staff can open it.'
         : 'PDF or image, up to 5 MB. Only you and CSC finance staff can open it.';
 });
 
@@ -159,6 +165,96 @@ const submit = () =>
             paying.value = null;
             form.reset();
         },
+    });
+
+/*
+ * Correcting a rejected payment.
+ *
+ * The wrong screenshot, a mistyped reference number — a mistake the
+ * participant can see for themselves, and until this existed the only way
+ * back from a rejection was asking the office to intervene, or filing a
+ * whole second payment and leaving the wrong one sitting in the history
+ * unexplained. A separate form and modal rather than reusing `form`/`paying`
+ * above: that pair belongs to a registration with no payment yet, this one
+ * belongs to a payment that already has an id and a rejection reason to
+ * show alongside the fields.
+ */
+const resubmitting = ref(null);
+
+const resubmitForm = useForm({
+    amount: '',
+    payment_method: 'online',
+    payment_date: '',
+    reference_number: '',
+    proof: null,
+});
+
+const resubmitIsPromissory = computed(() => resubmitForm.payment_method === 'promissory');
+const resubmitIsOnlineTransfer = computed(() => resubmitForm.payment_method === 'online');
+const resubmitIsOfficialReceipt = computed(() => resubmitForm.payment_method === 'official_receipt');
+const resubmitIsCashDepositSlip = computed(() => resubmitForm.payment_method === 'cash_deposit_slip');
+const resubmitIsCheckDepositSlip = computed(() => resubmitForm.payment_method === 'check_deposit_slip');
+
+const resubmitAvailableMethods = computed(() =>
+    props.methods.filter(
+        (method) => method.value !== 'promissory' || resubmitting.value?.training.accepts_promissory
+    )
+);
+
+// Mirrors PaymentController::resubmit()'s own rule: forced only when the
+// method has nothing else standing behind it *and* nothing is on record yet
+// — a payment already carrying a file is never made to re-attach one just to
+// correct an unrelated field.
+const resubmitProofRequired = computed(() => {
+    const required = props.methods.find((method) => method.value === resubmitForm.payment_method)
+        ?.requires_proof ?? false;
+
+    return required && !resubmitting.value?.proof_url;
+});
+
+const resubmitProofLabel = computed(() => {
+    if (resubmitIsPromissory.value) return 'Signed Promissory Note';
+    if (resubmitIsOfficialReceipt.value) return 'Photo of the Official Receipt';
+    if (resubmitIsCashDepositSlip.value) return 'Cash Deposit Slip';
+    if (resubmitIsCheckDepositSlip.value) return 'Check Deposit Slip';
+
+    return 'Proof of Payment';
+});
+
+const resubmitProofHint = computed(() => {
+    if (resubmitProofRequired.value) {
+        return 'Required — this is what CSC matches against the bank record, and a submission without one is refused. PDF or image, up to 5 MB.';
+    }
+
+    // Optional otherwise: a rejection can be about the amount or the
+    // reference number alone, with nothing wrong with the file already on
+    // it, so the hint says what happens when nothing is attached rather than
+    // demanding a re-upload of a document that was never the problem.
+    return resubmitting.value?.proof_url
+        ? 'Leave this blank to keep the file already on this payment, or attach a replacement. PDF or image, up to 5 MB.'
+        : 'PDF or image, up to 5 MB.';
+});
+
+const startResubmit = (payment) => {
+    resubmitting.value = payment;
+    resubmitForm.reset();
+    resubmitForm.clearErrors();
+    resubmitForm.amount = payment.amount;
+    resubmitForm.payment_method = payment.payment_method;
+    resubmitForm.payment_date = payment.payment_date_input;
+    resubmitForm.reference_number = payment.reference_number ?? '';
+};
+
+const closeResubmit = () => {
+    resubmitting.value = null;
+    resubmitForm.reset();
+};
+
+const submitResubmit = () =>
+    resubmitForm.post(`/my/payments/${resubmitting.value.id}/resubmit`, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: closeResubmit,
     });
 
 const refunding = ref(null);
@@ -450,6 +546,7 @@ const submitPhysicalOr = () =>
                                 accept=".pdf,.jpg,.jpeg,.png"
                                 :hint="proofHint"
                                 :preview-hint="proofPreviewHint"
+                                :required="proofRequired"
                                 :error="form.errors.proof"
                                 :progress="form.progress"
                                 @change="form.proof = $event"
@@ -511,6 +608,33 @@ const submitPhysicalOr = () =>
                         <p v-if="payment.rejection_reason" class="mt-3 text-sm text-danger">
                             {{ payment.rejection_reason }}
                         </p>
+
+                        <!--
+                            A real button, not a row action: this is the one
+                            thing standing between the participant and a
+                            payment stuck at a rejection, so it needs to read
+                            as obviously clickable rather than sit at the same
+                            weight as "View proof" in the row below.
+                        -->
+                        <AppButton
+                            v-if="payment.can_resubmit"
+                            class="mt-3"
+                            size="sm"
+                            icon="pencil"
+                            @click="startResubmit(payment)"
+                        >
+                            Correct and resubmit
+                        </AppButton>
+
+                        <AppButton
+                            v-if="payment.can_request_refund"
+                            class="mt-3"
+                            size="sm"
+                            icon="arrow-left"
+                            @click="startRefund(payment)"
+                        >
+                            Request refund
+                        </AppButton>
 
                         <div v-if="paymentActions(payment).length" class="mt-4">
                             <AppRowActions :actions="paymentActions(payment)" layout="card" />
@@ -623,6 +747,87 @@ const submitPhysicalOr = () =>
                 </ul>
             </AppCard>
         </div>
+
+        <!--
+            Correcting a rejected payment: the same fields the first
+            submission asked for, pre-filled, with the reason it came back
+            shown above them so the correction actually addresses it.
+        -->
+        <AppModal
+            :open="resubmitting !== null"
+            title="Correct this payment"
+            :subtitle="resubmitting ? `For “${resubmitting.training.title}”.` : undefined"
+            size="lg"
+            @close="closeResubmit"
+        >
+            <form class="space-y-4" @submit.prevent="submitResubmit">
+                <AppAlert v-if="resubmitting?.rejection_reason" tone="danger" title="Why this was rejected">
+                    {{ resubmitting.rejection_reason }}
+                </AppAlert>
+
+                <div class="grid gap-4 sm:grid-cols-3">
+                    <AppInput
+                        v-model="resubmitForm.amount"
+                        label="Amount Paid"
+                        type="number"
+                        :error="resubmitForm.errors.amount"
+                        required
+                    />
+
+                    <AppSelect
+                        v-model="resubmitForm.payment_method"
+                        label="Method"
+                        :options="resubmitAvailableMethods"
+                        :error="resubmitForm.errors.payment_method"
+                        required
+                    />
+
+                    <AppInput
+                        v-model="resubmitForm.payment_date"
+                        :label="resubmitIsPromissory ? 'Date Signed' : 'Date Paid'"
+                        type="date"
+                        :error="resubmitForm.errors.payment_date"
+                        required
+                    />
+                </div>
+
+                <AppInput
+                    v-if="resubmitIsOfficialReceipt"
+                    v-model="resubmitForm.reference_number"
+                    label="Official Receipt (OR) Number"
+                    hint="Exactly as printed on the receipt."
+                    :error="resubmitForm.errors.reference_number"
+                    required
+                />
+
+                <AppFileField
+                    id="resubmit-proof"
+                    :label="resubmitProofLabel"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    :hint="resubmitProofHint"
+                    :required="resubmitProofRequired"
+                    :error="resubmitForm.errors.proof"
+                    :progress="resubmitForm.progress"
+                    @change="resubmitForm.proof = $event"
+                />
+
+                <p v-if="resubmitting?.proof_url" class="text-xs text-csc-ink-subtle">
+                    <a
+                        :href="resubmitting.proof_url"
+                        target="_blank"
+                        rel="noopener"
+                        class="rounded text-csc-blue underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+                    >View the file currently on record</a>
+                </p>
+
+                <div class="flex justify-end gap-2">
+                    <AppButton type="button" variant="ghost" @click="closeResubmit">Cancel</AppButton>
+                    <AppButton type="submit" icon="check" :loading="resubmitForm.processing">
+                        Resubmit for verification
+                    </AppButton>
+                </div>
+            </form>
+        </AppModal>
 
         <AppModal
             :open="refunding !== null"

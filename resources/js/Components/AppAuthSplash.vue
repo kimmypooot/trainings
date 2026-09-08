@@ -21,7 +21,7 @@
                             <p class="text-gray-500 text-sm">{{ splash.subtitle }}</p>
                         </div>
                         <div v-else key="loading" class="space-y-2">
-                            <p class="text-xl font-semibold text-primary">Signing you in</p>
+                            <p class="text-xl font-semibold text-primary">{{ splash.title ?? 'Signing you in' }}</p>
                             <p class="text-gray-500 text-sm">{{ splash.subtitle }}</p>
                         </div>
                     </Transition>
@@ -48,8 +48,14 @@ import { authSplash as splash } from '@/authSplash';
  * uppercase "Welcome back" over the name on sign-in, and the plain title over
  * "See you next time!" on sign-out.
  *
- * Two departures, both forced by the difference in navigation model and both
+ * Three departures, all forced by the difference in navigation model and all
  * invisible on screen:
+ *
+ *  - The loading stage's headline is overridable (`splash.title`), because
+ *    this overlay is no longer only for signing in — a first-time Google
+ *    sign-up creating its account raises it too, and "Signing you in" would
+ *    be wrong for something that has not signed in yet. See
+ *    beginAccountCreation() in @/authSplash.
  *
  *  - The copy comes from the shared module rather than a slot. There the
  *    overlay is re-declared in each of four call sites, which can each own

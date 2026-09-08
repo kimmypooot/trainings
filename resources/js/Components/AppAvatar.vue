@@ -23,7 +23,7 @@ const initials = computed(() => {
 
 <template>
     <span
-        class="inline-flex aspect-square shrink-0 items-center justify-center overflow-hidden rounded-full bg-csc-blue font-semibold text-white"
+        class="inline-flex aspect-square shrink-0 items-center justify-center overflow-hidden rounded-full border border-csc-line bg-csc-blue font-semibold text-white"
         :class="sizes[size]"
     >
         <img v-if="src" :src="src" alt="" class="size-full object-cover" />

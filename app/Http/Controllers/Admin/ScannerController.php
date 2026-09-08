@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\Role;
 use App\Enums\TrainingStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Registration;
 use App\Models\Training;
 use App\Models\User;
+use App\Support\ParticipantQrCode;
 use App\Support\ScanStationService;
 use App\Support\WalkInService;
 use Carbon\CarbonImmutable;
@@ -217,6 +219,42 @@ class ScannerController extends Controller
              * would have produced, digest included.
              */
             'participant' => ScanStationService::participantRow($result['registration']),
+        ]);
+    }
+
+    /**
+     * A participant's own check-in code, for the desk to show or print when
+     * someone has turned up without the phone it lives on.
+     *
+     * Deliberately online, like walkIn() above and for the same two reasons.
+     * First, the offline roster carries digests, never the codes themselves
+     * — see ScanStationService::participantRow() — specifically so a device
+     * left in a function room overnight is worth nothing to whoever picks it
+     * up; answering this from that same device would undo exactly that.
+     * Second, it belongs on the desk rather than the public volunteer
+     * station for the accountability reason walk-in admission does: pulling
+     * up somebody's personal check-in credential is staff work with a name
+     * attached, not something a shareable door link should be able to do.
+     *
+     * Scoped to the actor's own field office exactly as the roster and the
+     * walk-in desk are — a registration outside it 404s rather than
+     * confirming whether the id belongs to somebody real.
+     */
+    public function participantQr(Request $request, Registration $registration): JsonResponse
+    {
+        $registration->loadMissing('user.profile');
+
+        $officeId = $request->user()->scopedFieldOfficeId();
+
+        abort_if(
+            $officeId !== null && $registration->user->profile?->field_office_id !== $officeId,
+            404
+        );
+
+        return response()->json([
+            'name' => $registration->user->name,
+            'organization' => $registration->user->profile?->organization_name,
+            'qr' => ParticipantQrCode::dataUri($registration->user),
         ]);
     }
 }

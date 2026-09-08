@@ -37,6 +37,13 @@ const props = defineProps({
 const page = usePage();
 const office = computed(() => page.props.office ?? {});
 
+// Read once, for the courier-delivery step below: PhysicalOrRequestService
+// refuses the option to anyone whose profile places them inside this region,
+// so the guide names the same boundary the server enforces rather than
+// describing the option as open to everyone and leaving the refusal
+// unexplained.
+const officeRegion = office.value.region ?? 'this region';
+
 /*
  * The guide's contents.
  *
@@ -143,7 +150,7 @@ const sections = [
                  * using an awkward word.
                  */
                 heading: 'If you need the printed receipt',
-                body: 'CSC issues an official receipt for every verified payment. If you need the printed copy couriered to you, ask for it on the Official Receipts page and attach proof that you have paid the courier fee.',
+                body: `CSC issues an official receipt for every verified payment. This option is for participants outside ${officeRegion} who cannot come to the counter for it — ask for it on the Official Receipts page and attach proof that you have paid the courier fee. Participants inside the region are expected to collect the printed copy in person.`,
             },
         ],
     },

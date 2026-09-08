@@ -20,7 +20,7 @@ class CertificateFactory extends Factory
             'registration_id' => $registration,
             'user_id' => fn (array $attributes) => Registration::find($attributes['registration_id'])->user_id,
             'training_id' => fn (array $attributes) => Registration::find($attributes['registration_id'])->training_id,
-            'certificate_number' => 'CSC8-'.now()->format('Y').'-'.fake()->unique()->numberBetween(100000, 999999),
+            'certificate_number' => config('office.certificate_prefix').'-'.now()->format('Y').'-'.fake()->unique()->numberBetween(10000, 99999),
             'verification_code' => Str::random(32),
         ];
     }

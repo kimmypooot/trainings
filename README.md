@@ -89,9 +89,8 @@ to nominate should not have to create an account to read what is on offer.
 Registering for a run, uploading a supervisory-course supporting document,
 paying (and requesting a refund, or a physical copy of an official receipt),
 carrying a QR code to the venue, evaluating the experts who taught each day,
-downloading certificates, filing agency requests and training suggestions, and
-keeping their own profile — including moving the account to a new email
-address.
+downloading certificates, filing agency requests, and keeping their own
+profile — including moving the account to a new email address.
 
 ### For staff
 
@@ -105,8 +104,8 @@ admin, management, superadmin.
 - **Attendance** — the signed-in scanner at `/admin/scanner`, walk-in
   admission, and issuing or revoking station links.
 - **Payments** — verification, refunds, promissory notes, physical-OR requests.
-- **Request queues** — training requests, cancellations, agency requests and
-  their document exchange, supervisory documents.
+- **Request queues** — cancellations, agency requests and their document
+  exchange, supervisory documents.
 - **Certificates** — release (one training or one participant) and re-send.
 - **Reporting** — analytics, revenue, period and per-training reports, and
   streamed spreadsheet exports.

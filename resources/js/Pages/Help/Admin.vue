@@ -200,21 +200,17 @@ const sections = [
         id: 'requests',
         title: 'Request queues',
         icon: 'document',
-        summary: 'Withdrawals, training suggestions and submitted outputs.',
+        summary: 'Withdrawals and submitted outputs.',
         roles: ALL_STAFF,
-        keywords: ['request', 'withdrawal', 'cancellation', 'output', 'suggestion', 'queue', 'review'],
+        keywords: ['request', 'withdrawal', 'cancellation', 'output', 'queue', 'review'],
         steps: [
             {
-                heading: 'Three queues on one screen',
-                body: 'Cancellations, training requests and submitted outputs. Each tab counts the database rather than the rows on screen, so the number on the tab and the number in the sidebar always agree.',
+                heading: 'Two queues on one screen',
+                body: 'Cancellations and submitted outputs. Each tab counts the database rather than the rows on screen, so the number on the tab and the number in the sidebar always agree.',
             },
             {
                 heading: 'Reviewing',
                 body: 'Field offices, collecting officers, HRD and superadmin can all decide on these. Approving a withdrawal frees the seat and starts a refund where one is due, so it is a decision rather than a tidy-up.',
-            },
-            {
-                heading: 'Turning a suggestion into a run',
-                body: 'Only HRD can convert a training request into an actual training. Everyone else can approve or decline the request itself.',
             },
         ],
         problems: [

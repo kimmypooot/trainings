@@ -35,7 +35,10 @@ import { iconNames } from '@/icons';
  * tabbing through the row.
  *
  * An action is:
- *   { label, icon?, tone?, href?, external?, onClick?, disabled?, reason? }
+ *   { label, icon?, tone?, href?, external?, newTab?, onClick?, disabled?, reason? }
+ * `newTab` opens an `external` link in a new tab — for a document meant to be
+ * looked at beside this page rather than navigated away to — and does nothing
+ * on its own.
  * `reason` is why a disabled action is refused, and it joins the label in the
  * tooltip — "delete is missing" and "delete is refused, because eleven people
  * are attached" are different answers, and only the second says what to do
@@ -69,20 +72,43 @@ const compact = computed(() => props.layout === 'row');
  */
 const base = computed(() => [
     'inline-flex items-center justify-center rounded-lg font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue',
-    compact.value ? 'size-9' : 'min-h-9 gap-1.5 px-2.5 py-1.5 text-xs',
+    compact.value ? 'size-9' : 'min-h-9 gap-1.5 border px-3 py-1.5 text-xs',
 ]);
 
+/*
+ * `row` stays bare-text-on-hover: the table cell is dense and every action in
+ * it already reads as a control by its position in the actions column, so a
+ * border there would just add noise to twenty rows at once.
+ *
+ * `card` is a phone-held list where each action is its own tap target with
+ * nothing around it to say "this is a button" — bare coloured text next to
+ * plain paragraph text read as another line of copy, not a control, which
+ * is what made "View training details" and "Request withdrawal" hard to spot
+ * on My Registrations. A border plus a soft fill at rest, not only on hover,
+ * makes the shape read as a button before it is touched.
+ */
 const tones = {
-    default: 'text-csc-blue hover:bg-csc-blue-tint',
-    danger: 'text-danger hover:bg-danger-soft',
-    success: 'text-success hover:bg-success-soft',
+    row: {
+        default: 'border-transparent text-csc-blue hover:bg-csc-blue-tint',
+        danger: 'border-transparent text-danger hover:bg-danger-soft',
+        success: 'border-transparent text-success hover:bg-success-soft',
+    },
+    card: {
+        default: 'border-csc-blue/25 bg-csc-blue-tint/40 text-csc-blue hover:border-csc-blue/40 hover:bg-csc-blue-tint',
+        danger: 'border-danger/25 bg-danger-soft text-danger hover:border-danger/40 hover:bg-danger-soft/70',
+        success: 'border-success/25 bg-success-soft text-success hover:border-success/40 hover:bg-success-soft/70',
+    },
 };
 
-const blocked = 'cursor-not-allowed text-csc-ink-subtle';
+const blocked = computed(() =>
+    compact.value
+        ? 'border-transparent cursor-not-allowed text-csc-ink-subtle'
+        : 'cursor-not-allowed border-csc-line bg-csc-line/15 text-csc-ink-subtle',
+);
 
 const classesFor = (action) => [
     base.value,
-    action.disabled ? blocked : tones[action.tone ?? 'default'],
+    action.disabled ? blocked.value : tones[props.layout][action.tone ?? 'default'],
 ];
 
 /** The tooltip and the accessible name are the same sentence. */
@@ -144,6 +170,8 @@ const tooltip =
             <a
                 v-if="action.href && action.external"
                 :href="action.href"
+                :target="action.newTab ? '_blank' : undefined"
+                :rel="action.newTab ? 'noopener noreferrer' : undefined"
                 :class="classesFor(action)"
                 :aria-label="showsLabel(action) ? undefined : action.label"
             >

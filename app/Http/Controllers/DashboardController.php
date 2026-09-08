@@ -296,7 +296,7 @@ class DashboardController extends Controller
             $events[] = $this->event(
                 'certificate',
                 'Certificate issued',
-                $certificate->registration?->training?->title ?? 'Training',
+                $certificate->registration->training->title,
                 $certificate->generated_at,
                 route('certificates.index'),
                 "cert-{$certificate->id}",

@@ -51,11 +51,11 @@ class CertificateTest extends TestCase
         return $user->refresh();
     }
 
-    private function completedRegistration(): Registration
+    private function completedRegistration(?Training $training = null): Registration
     {
         return Registration::factory()->completed()->create([
             'user_id' => $this->participant()->getKey(),
-            'training_id' => Training::factory()->create()->getKey(),
+            'training_id' => ($training ?? Training::factory()->create())->getKey(),
         ]);
     }
 
@@ -184,7 +184,7 @@ class CertificateTest extends TestCase
         $certificate = CertificateService::release($registration, $this->staff());
 
         $this->assertNotNull($certificate->generated_at);
-        $this->assertStringStartsWith('CSC8-', $certificate->certificate_number);
+        $this->assertStringStartsWith('CERT-', $certificate->certificate_number);
         $this->assertSame(32, strlen($certificate->verification_code));
 
         Storage::disk(CertificateService::DISK)->assertExists($certificate->file_path);
@@ -560,9 +560,9 @@ class CertificateTest extends TestCase
         $year = now()->addWeek()->format('Y');
 
         $this->assertSame([
-            "CSC8-{$year}-000001",
-            "CSC8-{$year}-000002",
-            "CSC8-{$year}-000003",
+            "CERT-{$year}-00001",
+            "CERT-{$year}-00002",
+            "CERT-{$year}-00003",
         ], $numbers);
     }
 
@@ -664,6 +664,44 @@ class CertificateTest extends TestCase
         $this->assertNotNull($certificate->fresh()->email_sent_at);
     }
 
+    public function test_staff_can_regenerate_a_certificates_pdf(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+        $originalPath = $certificate->file_path;
+
+        $this->actingAs($this->staff())
+            ->post("/admin/certificates/{$certificate->id}/regenerate")
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $fresh = $certificate->fresh();
+
+        // The document's identity is untouched: same number, same
+        // verification code, so the QR and the download link already
+        // printed or handed out still resolve to this record.
+        $this->assertSame($certificate->certificate_number, $fresh->certificate_number);
+        $this->assertSame($certificate->verification_code, $fresh->verification_code);
+        // render() derives the path from the (unchanged) verification code,
+        // so a regenerate overwrites the same file rather than moving it.
+        $this->assertSame($originalPath, $fresh->file_path);
+        $this->assertTrue(Storage::disk(CertificateService::DISK)->exists($fresh->file_path));
+
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'certificate.regenerated',
+            'subject_type' => (new Certificate)->getMorphClass(),
+            'subject_id' => $certificate->id,
+        ]);
+    }
+
+    public function test_management_may_not_regenerate_a_certificate(): void
+    {
+        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+
+        $this->actingAs($this->staff(Role::Management))
+            ->post("/admin/certificates/{$certificate->id}/regenerate")
+            ->assertForbidden();
+    }
+
     public function test_the_detail_page_shows_who_has_verified_a_certificate(): void
     {
         $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
@@ -748,63 +786,98 @@ class CertificateTest extends TestCase
      * Render the stored certificate template the way CertificateService does,
      * minus dompdf — the office strings are what is under test, not the PDF.
      */
-    private function renderCertificate(): string
+    private function renderCertificate(?Training $training = null): string
     {
-        $certificate = CertificateService::release($this->completedRegistration(), $this->staff());
+        $registration = $training
+            ? $this->completedRegistration($training)
+            : $this->completedRegistration();
+        $certificate = CertificateService::release($registration, $this->staff());
         $certificate->loadMissing(['user.profile', 'training']);
+        $issuedOn = $certificate->generated_at ?? now();
+
+        // Mirrors CertificateService::render()'s own resolution, so a test
+        // against this helper is a test against what actually ships — see
+        // that method for why the title only ever pairs with the default name.
+        $usingDefaultSignatory = $certificate->training->signatory_name === null
+            && config('office.default_signatory_name');
 
         return view('certificates.default', [
             'certificate' => $certificate,
             'participant' => $certificate->user,
             'training' => $certificate->training,
             'qr' => 'data:image/png;base64,',
+            'givenDay' => (int) $issuedOn->format('j'),
+            'givenSuffix' => CertificateService::ordinalSuffix((int) $issuedOn->format('j')),
+            'givenMonthYear' => $issuedOn->format('F Y'),
+            'displayDate' => CertificateService::displayDateRange(
+                $certificate->training->starts_at,
+                $certificate->training->ends_at ?? $certificate->training->starts_at,
+            ),
+            'signatoryName' => $certificate->training->signatory_name
+                ?: (config('office.default_signatory_name') ?: 'Authorized Signatory'),
+            'signatoryTitle' => $usingDefaultSignatory ? config('office.default_signatory_title') : null,
+            'nameSize' => 34,
+            'titleSize' => 19,
+            'trainingTitleLines' => [$certificate->training->title],
+            'titleWrapOffset' => 0,
         ])->render();
     }
 
     /**
-     * The one identity string in the app that cannot be corrected afterwards.
-     *
-     * A certificate is rendered once at release and stored, so an office name
-     * baked into the template outlives the fix. This codebase is deployed one
-     * copy per regional office, and the template used to name Regional Office
-     * VIII outright — every other office would have issued permanent documents
-     * crediting the wrong one.
+     * The signature line falls back through three tiers: the training's own
+     * signatory, then the office-wide default, then generic text — the same
+     * "no telephone number beats the wrong one" reasoning config/office.php
+     * already follows, applied to who signed the document.
      */
-    public function test_the_certificate_names_the_configured_office(): void
+    public function test_the_certificate_uses_the_configured_default_signatory(): void
     {
         config([
-            'office.name' => 'Civil Service Commission Regional Office V',
-            'office.region' => 'Bicol',
-            'office.short_name' => 'CSC RO V',
+            'office.default_signatory_name' => 'Signatory One',
+            'office.default_signatory_title' => 'Director IV',
         ]);
 
         $html = $this->renderCertificate();
 
-        $this->assertStringContainsString('Civil Service Commission Regional Office V', $html);
-        $this->assertStringContainsString('Bicol', $html);
-        $this->assertStringContainsString('CSC RO V', $html);
+        $this->assertStringContainsString('Signatory One', $html);
+        $this->assertStringContainsString('Director IV', $html);
+    }
 
-        // The point of the test: no other office's identity survives in it.
-        $this->assertStringNotContainsString('Regional Office VIII', $html);
-        $this->assertStringNotContainsString('Eastern Visayas', $html);
-        $this->assertStringNotContainsString('RO VIII', $html);
+    /** A training's own signatory wins over the office-wide default. */
+    public function test_a_trainings_own_signatory_overrides_the_office_default(): void
+    {
+        config([
+            'office.default_signatory_name' => 'Signatory One',
+            'office.default_signatory_title' => 'Director IV',
+        ]);
+
+        $training = Training::factory()->create(['signatory_name' => 'Guest Facilitator']);
+
+        $html = $this->renderCertificate($training);
+
+        $this->assertStringContainsString('Guest Facilitator', $html);
+        $this->assertStringNotContainsString('Signatory One', $html);
+        // The office default's title is not printed under a different
+        // person's name — see CertificateService::render()'s own comment.
+        $this->assertStringNotContainsString('Director IV', $html);
     }
 
     /**
-     * No region beats the wrong region, matching the rest of config/office.php.
+     * With nothing configured at all, the certificate still prints something
+     * rather than a blank signature line.
      */
-    public function test_the_certificate_omits_the_region_when_it_is_unset(): void
+    public function test_the_certificate_falls_back_to_generic_text_with_no_signatory_configured(): void
     {
-        config(['office.name' => 'Civil Service Commission Regional Office V', 'office.region' => null]);
+        config(['office.default_signatory_name' => null, 'office.default_signatory_title' => null]);
 
         $html = $this->renderCertificate();
 
-        $this->assertStringContainsString('Civil Service Commission Regional Office V', $html);
-        $this->assertStringNotContainsString('class="office"', $html);
+        $this->assertStringContainsString('Authorized Signatory', $html);
+        $this->assertStringNotContainsString('class="signature-title"', $html);
     }
 
     /**
-     * The printed number carries the region too — CSC8 is Region VIII.
+     * A deployment that wants a region-coded prefix (CSC8 for Region VIII,
+     * say) sets it explicitly — the default carries no region of its own.
      */
     public function test_the_certificate_number_prefix_is_configurable(): void
     {

@@ -1,8 +1,9 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppAvatar from '@/Components/AppAvatar.vue';
+import AppAvatarCropper from '@/Components/AppAvatarCropper.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppIcon from '@/Components/AppIcon.vue';
@@ -67,7 +68,16 @@ const form = useForm({
 // The state the page loaded with. `isDirty` compares against this, and a
 // successful save re-baselines it, so the guard never complains about a
 // profile that was just persisted.
-const pristine = { ...form.data() };
+//
+// Reactive, not a plain object: `isDirty` below reads `pristine[key]` inside
+// a `.some()` that short-circuits on the first mismatch, so Vue's computed
+// caches its result and only tracks the fields it read before stopping. A
+// plain object's mutation (the re-baseline on save) is invisible to that
+// tracking, so the cached `true` from the edit session would survive the
+// save and the guard would fire on the very next navigation even though
+// nothing was left unsaved. Making pristine reactive means the fields it
+// reads are tracked too, so re-baselining it correctly invalidates the cache.
+const pristine = reactive({ ...form.data() });
 
 // Region → Province → City/Municipality cascade, fed by the PSGC reference.
 // Each select only lists the children of the pick above it; changing a parent
@@ -392,6 +402,17 @@ const photoVisit = (options = {}) => {
 
 const choosePhoto = () => photoInput.value?.click();
 
+/*
+ * The photo picked from disk, held only long enough to be cropped.
+ *
+ * Nothing is uploaded yet at this point — AppAvatarCropper produces the file
+ * that actually gets posted, once the participant has said which part of the
+ * photo to keep. Server-side, AvatarImageService still centre-crops whatever
+ * arrives, but the cropper always hands back a square, so that step becomes
+ * a no-op on the common case rather than the only crop that ever happened.
+ */
+const croppingFile = ref(null);
+
 const onPhotoChosen = (event) => {
     const file = event.target.files?.[0] ?? null;
     // Clear the input so re-picking the same file still fires a change.
@@ -401,11 +422,21 @@ const onPhotoChosen = (event) => {
     photoError.value = null;
 
     // Mirrors the server rules, so an obviously-too-large file is refused
-    // before it is uploaded rather than after.
+    // before it is even opened for cropping.
     if (file.size > 2 * 1024 * 1024) {
         photoError.value = 'The photo may not be larger than 2 MB.';
         return;
     }
+
+    croppingFile.value = file;
+};
+
+const cancelCrop = () => {
+    croppingFile.value = null;
+};
+
+const uploadCroppedPhoto = (file) => {
+    croppingFile.value = null;
 
     releasePreview();
     localPreview.value = URL.createObjectURL(file);
@@ -612,7 +643,6 @@ onBeforeUnmount(() => {
 
     <AuthenticatedLayout title="My Profile" current="profile">
         <div class="mx-auto max-w-7xl space-y-5">
-            <AppHelpLink anchor="profile">What CSC needs from your profile, and why</AppHelpLink>
 
             <!-- Identity summary -->
             <AppCard>
@@ -665,6 +695,9 @@ onBeforeUnmount(() => {
                                     worse than one that simply says nothing.
                                 -->
                             </p>
+                        </div>
+                        <div class="mt-3">
+                            <AppHelpLink anchor="profile">What CSC needs from your profile, and why</AppHelpLink>
                         </div>
                     </div>
 
@@ -1466,5 +1499,12 @@ onBeforeUnmount(() => {
                 </div>
             </template>
         </AppModal>
+
+        <AppAvatarCropper
+            :open="croppingFile !== null"
+            :file="croppingFile"
+            @cropped="uploadCroppedPhoto"
+            @close="cancelCrop"
+        />
     </AuthenticatedLayout>
 </template>

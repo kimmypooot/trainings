@@ -12,7 +12,6 @@ import AppConfirmModal from '@/Components/AppConfirmModal.vue';
 
 const props = defineProps({
     cancellations: { type: Array, required: true },
-    trainingRequests: { type: Array, required: true },
     outputs: { type: Array, required: true },
     // Per-queue { pending, total, shown }, counted in the database rather than
     // off the arrays above — see below.
@@ -29,7 +28,6 @@ const props = defineProps({
  */
 const tabs = computed(() => [
     { key: 'cancellations', label: 'Withdrawals', count: props.queues.cancellations.pending },
-    { key: 'trainings', label: 'Training Requests', count: props.queues.trainings.pending },
     { key: 'outputs', label: 'Outputs', count: props.queues.outputs.pending },
 ]);
 
@@ -129,28 +127,6 @@ const rejectCancellation = (item) => {
     });
 };
 
-const approveTraining = (item) => {
-    approveWithConfirm({
-        title: 'Approve this training request?',
-        description: `“${item.title}” is approved for scheduling on behalf of ${item.requester ?? 'the agency'}.`,
-        confirmLabel: 'Approve request',
-        onConfirm: () =>
-            post(`/admin/requests/trainings/${item.id}`, { decision: 'approved', remarks: null }),
-    });
-};
-
-const rejectTraining = (item) => {
-    rejectWithReason({
-        title: 'Decline this training request',
-        description: 'The requester is shown this reason.',
-        label: 'Reason for declining',
-        confirmLabel: 'Decline request',
-        minLength: 10,
-        onConfirm: (remarks) =>
-            post(`/admin/requests/trainings/${item.id}`, { decision: 'rejected', remarks }),
-    });
-};
-
 const acceptOutput = (item) => {
     approveWithConfirm({
         title: 'Accept this output?',
@@ -173,19 +149,6 @@ const returnOutput = (item) => {
     });
 };
 
-const convert = (id) => {
-    const item = props.trainingRequests.find((request) => request.id === id);
-
-    approveWithConfirm({
-        title: 'Create a draft training?',
-        description: item
-            ? `A draft is created from “${item.title}” for you to finish the venue and schedule.`
-            : 'A draft training is created from this approved request.',
-        confirmLabel: 'Create Draft Training',
-        onConfirm: () =>
-            router.post(`/admin/requests/trainings/${id}/convert`, {}, { preserveScroll: true }),
-    });
-};
 </script>
 
 <template>
@@ -264,71 +227,6 @@ const convert = (id) => {
 
                 <p v-if="hiddenNotice('cancellations')" class="mt-4 text-sm text-csc-ink-subtle">
                     {{ hiddenNotice('cancellations') }}
-                </p>
-            </AppCard>
-
-            <!-- Training requests -->
-            <AppCard v-if="active === 'trainings'" title="Requested Trainings" :padded="trainingRequests.length > 0">
-                <AppEmptyState
-                    v-if="!trainingRequests.length"
-                    title="No training requests"
-                    description="Agencies asking CSC to run a training appear here."
-                    icon="calendar"
-                />
-
-                <ul v-else class="space-y-3">
-                    <li
-                        v-for="item in trainingRequests"
-                        :key="item.id"
-                        class="rounded-lg border border-csc-line p-4"
-                    >
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="min-w-0">
-                                <p class="font-semibold text-csc-ink">{{ item.title }}</p>
-                                <p class="mt-0.5 text-sm text-csc-ink-subtle">
-                                    Requested by {{ item.requester ?? '—' }} · {{ item.submitted_at }}
-                                </p>
-                            </div>
-                            <AppBadge :status="item.status" />
-                        </div>
-
-                        <p class="mt-3 text-sm text-csc-ink-muted">{{ item.justification }}</p>
-                        <p class="mt-1.5 text-xs text-csc-ink-subtle">
-                            <template v-if="item.category">{{ item.category }} · </template>
-                            <template v-if="item.expected_participants">
-                                ~{{ item.expected_participants }} participants ·
-                            </template>
-                            Preferred {{ item.preferred_start ?? 'any date' }}
-                        </p>
-
-                        <div class="mt-4 flex flex-wrap gap-2">
-                            <template v-if="item.status === 'pending'">
-                                <AppButton size="sm" icon="check" @click="approveTraining(item)">
-                                    Approve
-                                </AppButton>
-                                <AppButton size="sm" variant="ghost" icon="close" @click="rejectTraining(item)">
-                                    Decline
-                                </AppButton>
-                            </template>
-
-                            <AppButton
-                                v-else-if="item.status === 'approved' && !item.converted"
-                                size="sm"
-                                icon="plus"
-                                @click="convert(item.id)"
-                            >
-                                Create Draft Training
-                            </AppButton>
-
-                            <p v-else-if="item.converted" class="text-xs text-csc-ink-subtle">
-                                A draft training has been created from this request.
-                            </p>
-                        </div>
-                    </li>
-                </ul>
-
-                <p v-if="hiddenNotice('trainings')" class="mt-4 text-sm text-csc-ink-subtle">
-                    {{ hiddenNotice('trainings') }}
                 </p>
             </AppCard>
 

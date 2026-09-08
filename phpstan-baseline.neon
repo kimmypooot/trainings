@@ -85,36 +85,6 @@ parameters:
 			path: app/Http/Controllers/Admin/AttendanceController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
-			identifier: property.notFound
-			count: 3
-			path: app/Http/Controllers/Admin/CertificateController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/Admin/CertificateController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$profile\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/CertificateController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
-			identifier: property.notFound
-			count: 2
-			path: app/Http/Controllers/Admin/CertificateController.php
-
-		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:notify\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/CertificateController.php
-
-		-
 			message: '#^Cannot call method diffForHumans\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1
@@ -145,7 +115,7 @@ parameters:
 			path: app/Http/Controllers/Admin/CertificateController.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:through\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: int, number\: string, participant\: mixed, email\: mixed, training\: mixed, issued_at\: mixed, email_sent_at\: mixed, verifications\: int\<0, max\>, downloads\: int\<0, max\>, last_verified_at\: mixed, verify_url\: string, download_url\: string\}, Closure\(App\\Models\\Certificate\)\: array\{id\: int, number\: string, participant\: mixed, email\: mixed, training\: mixed, issued_at\: mixed, email_sent_at\: mixed, verifications\: int\<0, max\>, downloads\: int\<0, max\>, last_verified_at\: mixed, verify_url\: string, download_url\: string\} given\.$#'
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Pagination\\AbstractPaginator\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:through\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{id\: int, number\: string, participant\: string\|null, email\: string, training\: string, issued_at\: mixed, email_sent_at\: mixed, verifications\: int\<0, max\>, downloads\: int\<0, max\>, last_verified_at\: mixed, verify_url\: string, download_url\: string, view_url\: string\}, Closure\(App\\Models\\Certificate\)\: array\{id\: int, number\: string, participant\: string\|null, email\: string, training\: string, issued_at\: mixed, email_sent_at\: mixed, verifications\: int\<0, max\>, downloads\: int\<0, max\>, last_verified_at\: mixed, verify_url\: string, download_url\: string, view_url\: string\} given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Http/Controllers/Admin/CertificateController.php
@@ -271,12 +241,6 @@ parameters:
 			path: app/Http/Controllers/Admin/ExportController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$email\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/ExportController.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$generated_at\.$#'
 			identifier: property.notFound
 			count: 1
@@ -285,7 +249,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: app/Http/Controllers/Admin/ExportController.php
 
 		-
@@ -310,12 +274,6 @@ parameters:
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
 			identifier: property.notFound
 			count: 2
-			path: app/Http/Controllers/Admin/ExportController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
-			identifier: property.notFound
-			count: 1
 			path: app/Http/Controllers/Admin/ExportController.php
 
 		-
@@ -553,12 +511,6 @@ parameters:
 			path: app/Http/Controllers/Admin/PhysicalOrRequestController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/Admin/RequestQueueController.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$training\.$#'
 			identifier: property.notFound
 			count: 2
@@ -573,19 +525,13 @@ parameters:
 		-
 			message: '#^Cannot access property \$value on string\.$#'
 			identifier: property.nonObject
-			count: 3
-			path: app/Http/Controllers/Admin/RequestQueueController.php
-
-		-
-			message: '#^Cannot call method format\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
+			count: 2
 			path: app/Http/Controllers/Admin/RequestQueueController.php
 
 		-
 			message: '#^Cannot call method label\(\) on string\.$#'
 			identifier: method.nonObject
-			count: 3
+			count: 2
 			path: app/Http/Controllers/Admin/RequestQueueController.php
 
 		-
@@ -596,12 +542,6 @@ parameters:
 
 		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\RegistrationOutput\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/Admin/RequestQueueController.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\TrainingRequest\>\:\:map\(\) contains unresolvable type\.$#'
 			identifier: argument.unresolvableType
 			count: 1
 			path: app/Http/Controllers/Admin/RequestQueueController.php
@@ -949,62 +889,14 @@ parameters:
 			path: app/Http/Controllers/CertificateController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$duration_days\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CertificateVerificationController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$ends_at\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CertificateVerificationController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CertificateVerificationController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$starts_at\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CertificateVerificationController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CertificateVerificationController.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$venue\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/CertificateVerificationController.php
-
-		-
 			message: '#^Cannot call method format\(\) on string\.$#'
 			identifier: method.nonObject
 			count: 1
 			path: app/Http/Controllers/CertificateVerificationController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$training\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/DashboardController.php
-
-		-
 			message: '#^Parameter \#4 \$at of method App\\Http\\Controllers\\DashboardController\:\:event\(\) expects Carbon\\CarbonInterface\|null, string\|null given\.$#'
 			identifier: argument.type
-			count: 1
-			path: app/Http/Controllers/DashboardController.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>title" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/DashboardController.php
 
@@ -1309,36 +1201,6 @@ parameters:
 			path: app/Http/Controllers/TrainingController.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$slug\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Http/Controllers/TrainingRequestController.php
-
-		-
-			message: '#^Cannot access property \$value on string\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: app/Http/Controllers/TrainingRequestController.php
-
-		-
-			message: '#^Cannot call method format\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: app/Http/Controllers/TrainingRequestController.php
-
-		-
-			message: '#^Cannot call method label\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Http/Controllers/TrainingRequestController.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\TrainingRequest\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/TrainingRequestController.php
-
-		-
 			message: '#^Call to function abort_unless\(\) with bool and 403 will always evaluate to true\.$#'
 			identifier: function.alreadyNarrowedType
 			count: 1
@@ -1525,12 +1387,6 @@ parameters:
 			path: app/Notifications/CancellationReviewed.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$title\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Notifications/CertificateReleased.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$training\.$#'
 			identifier: property.notFound
 			count: 1
@@ -1613,12 +1469,6 @@ parameters:
 			identifier: ternary.alwaysFalse
 			count: 1
 			path: app/Notifications/RefundReviewed.php
-
-		-
-			message: '#^Strict comparison using \=\=\= between string and App\\Enums\\RequestStatus\:\:Approved will always evaluate to false\.$#'
-			identifier: identical.alwaysFalse
-			count: 2
-			path: app/Notifications/TrainingRequestReviewed.php
 
 		-
 			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:notify\(\)\.$#'
@@ -2149,42 +1999,6 @@ parameters:
 			path: app/Support/SmeEvaluationService.php
 
 		-
-			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Model\:\:notify\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Support/TrainingRequestService.php
-
-		-
-			message: '#^Cannot call method isPending\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Support/TrainingRequestService.php
-
-		-
-			message: '#^Method App\\Support\\TrainingRequestService\:\:convert\(\) should return App\\Models\\Training but returns null\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Support/TrainingRequestService.php
-
-		-
-			message: '#^Static method App\\Support\\TrainingRequestService\:\:uniqueSlug\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: app/Support/TrainingRequestService.php
-
-		-
-			message: '#^Strict comparison using \!\=\= between string and App\\Enums\\RequestStatus\:\:Approved will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: app/Support/TrainingRequestService.php
-
-		-
-			message: '#^Unreachable statement \- code above always terminates\.$#'
-			identifier: deadCode.unreachable
-			count: 1
-			path: app/Support/TrainingRequestService.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$attendance_date\.$#'
 			identifier: property.notFound
 			count: 1
@@ -2359,15 +2173,9 @@ parameters:
 			path: tests/Feature/SampleActivitySeederTest.php
 
 		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$name\.$#'
-			identifier: property.notFound
-			count: 1
-			path: tests/Feature/SampleActivitySeederTest.php
-
-		-
 			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$status\.$#'
 			identifier: property.notFound
-			count: 2
+			count: 1
 			path: tests/Feature/SampleActivitySeederTest.php
 
 		-
@@ -2379,12 +2187,6 @@ parameters:
 		-
 			message: '#^Cannot call method startOfDay\(\) on string\.$#'
 			identifier: method.nonObject
-			count: 1
-			path: tests/Feature/SampleActivitySeederTest.php
-
-		-
-			message: '#^Parameter \#1 \$user of method Illuminate\\Foundation\\Testing\\TestCase\:\:actingAs\(\) expects Illuminate\\Contracts\\Auth\\Authenticatable, Illuminate\\Database\\Eloquent\\Model\|null given\.$#'
-			identifier: argument.type
 			count: 1
 			path: tests/Feature/SampleActivitySeederTest.php
 
