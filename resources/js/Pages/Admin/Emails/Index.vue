@@ -208,7 +208,7 @@ const deleteTemplate = (template) =>
                                 {{ audience.label }}
                             </label>
                         </div>
-                        <p v-if="form.errors.statuses" class="mt-1.5 text-xs font-medium text-csc-red-ink">
+                        <p v-if="form.errors.statuses" class="mt-1.5 text-xs font-medium text-danger">
                             {{ form.errors.statuses }}
                         </p>
                     </fieldset>
@@ -274,7 +274,7 @@ const deleteTemplate = (template) =>
                         </span>
                     </AppAlert>
 
-                    <p v-if="form.errors.audience" class="text-xs font-medium text-csc-red-ink">
+                    <p v-if="form.errors.audience" class="text-xs font-medium text-danger">
                         {{ form.errors.audience }}
                     </p>
 
@@ -447,7 +447,7 @@ const deleteTemplate = (template) =>
                     required
                 />
 
-                <p v-if="testForm.errors.subject || testForm.errors.message" class="text-xs font-medium text-csc-red-ink">
+                <p v-if="testForm.errors.subject || testForm.errors.message" class="text-xs font-medium text-danger">
                     {{ testForm.errors.subject || testForm.errors.message }}
                 </p>
 

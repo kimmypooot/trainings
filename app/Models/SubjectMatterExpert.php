@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 #[Fillable([
     'name', 'position', 'organization', 'email', 'contact_number',
-    'expertise', 'bio', 'remarks', 'is_active', 'created_by',
+    'expertise', 'is_active', 'created_by',
 ])]
 class SubjectMatterExpert extends Model
 {

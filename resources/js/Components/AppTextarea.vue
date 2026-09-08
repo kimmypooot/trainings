@@ -58,7 +58,7 @@ const remaining = computed(() => {
     <div>
         <label :for="fieldId" class="mb-1.5 block text-sm font-medium text-csc-ink">
             {{ label }}
-            <span v-if="required" class="text-csc-red-ink" aria-hidden="true">*</span>
+            <span v-if="required" class="text-danger" aria-hidden="true">*</span>
         </label>
 
         <textarea
@@ -73,7 +73,7 @@ const remaining = computed(() => {
             class="w-full rounded-lg border bg-white px-4 py-2.5 text-base text-csc-ink transition-colors duration-150 placeholder:text-csc-ink-placeholder focus:outline-2 focus:outline-offset-1 sm:text-sm"
             :class="[
                 error
-                    ? 'border-csc-red-ink focus:outline-csc-red-ink'
+                    ? 'border-danger focus:outline-danger'
                     : 'border-csc-line hover:border-csc-blue/40 focus:border-csc-blue focus:outline-csc-blue',
                 uppercase ? 'uppercase placeholder:normal-case' : '',
             ]"
@@ -82,7 +82,7 @@ const remaining = computed(() => {
 
         <div class="mt-1 flex items-start justify-between gap-3">
             <p v-if="hint && !error" :id="hintId" class="text-xs text-csc-ink-subtle">{{ hint }}</p>
-            <p v-if="error" :id="errorId" class="text-xs font-medium text-csc-red-ink">{{ error }}</p>
+            <p v-if="error" :id="errorId" class="text-xs font-medium text-danger">{{ error }}</p>
             <p v-if="remaining !== null && !error" class="ml-auto shrink-0 text-xs text-csc-ink-subtle" aria-live="polite">
                 {{ remaining }} characters left
             </p>

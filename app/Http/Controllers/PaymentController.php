@@ -78,15 +78,29 @@ class PaymentController extends Controller
                     'ends_at' => $payment->training->ends_at->format('d M Y'),
                     'mode_label' => $payment->training->mode->label(),
                     'url' => route('trainings.show', $payment->training->slug),
+                    // Whether the resubmit form may offer the promissory
+                    // option — same rule PaymentMethod::rule() enforces
+                    // server-side, so the form never offers what the training
+                    // does not accept.
+                    'accepts_promissory' => $payment->training->accepts_promissory,
                 ],
                 'amount' => $payment->amount,
                 'method' => $payment->payment_method->label(),
+                // The raw value, alongside the label above — the resubmit
+                // form needs it to pre-select the method, and the label
+                // stays what the read-only row displays.
+                'payment_method' => $payment->payment_method->value,
                 'reference_number' => $payment->reference_number,
                 'payment_date' => $payment->payment_date->format('d M Y'),
+                // ISO, for the resubmit form's date input — the display
+                // string above is formatted for reading, not for a <input
+                // type="date">.
+                'payment_date_input' => $payment->payment_date->format('Y-m-d'),
                 'or_number' => $payment->or_number,
                 'status' => $payment->status->value,
                 'status_label' => $payment->status->label(),
                 'rejection_reason' => $payment->rejection_reason,
+                'can_resubmit' => $payment->status->allowsResubmission(),
                 'can_request_refund' => $payment->status->isRefundable()
                     && ! $payment->hasPendingRefund()
                     && ! $payment->hasBeenRefunded(),
@@ -251,11 +265,20 @@ class PaymentController extends Controller
                 'nullable', 'string', 'max:64',
             ],
             'payment_date' => ['required', 'date', 'before_or_equal:today'],
-            // Never refused for want of a document. An online transfer without
-            // a slip is accepted and then flagged in the verification queue —
-            // see PaymentMethod::expectsProof(). Blocking it here only moved
-            // the participants who cannot scan onto the counter.
-            'proof' => ['nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
+            /*
+             * Required for the methods with nothing else standing behind
+             * them — an online transfer, LDDAP-ADA, a cash or cheque deposit
+             * slip — and merely accepted for the rest, per
+             * PaymentMethod::requiresProof(). Cash and Check are walk-in
+             * payments the collecting officer already has a receipt for, and
+             * a promissory note is itself the document.
+             */
+            'proof' => [
+                Rule::requiredIf(
+                    PaymentMethod::tryFrom((string) $request->input('payment_method'))?->requiresProof() ?? false
+                ),
+                'nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png',
+            ],
         ]);
 
         PaymentService::submit($registration, [
@@ -267,6 +290,77 @@ class PaymentController extends Controller
         ]);
 
         return back()->with('success', 'Your payment has been recorded and is awaiting verification.');
+    }
+
+    /**
+     * Correct and resubmit a rejected payment.
+     *
+     * Same validation as store() — this is the same submission, corrected —
+     * except a new file is not always demanded here the way it is there: a
+     * payment against a required-proof method can be rejected for its amount
+     * or reference number alone, with nothing wrong with the document
+     * already on it, and a participant who has nothing to change about the
+     * file should not be made to re-attach it to fix an unrelated field. A
+     * new file is only forced when the method requires one and none is on
+     * record at all — the gap PaymentMethod::requiresProof() exists to close
+     * cannot be resubmitted around by simply leaving the field empty.
+     *
+     * Mirrors RegistrationController::resubmitDocument() — a rejected upload
+     * corrected in place is the shape this app already uses for exactly this
+     * problem on the supporting-document workflow; PaymentService::resubmit()
+     * is that same move for a payment.
+     */
+    public function resubmit(Request $request, Payment $payment): RedirectResponse
+    {
+        abort_unless($payment->user_id === $request->user()->getKey(), 403);
+
+        // The training off the payment's own column, not the registration's —
+        // Payment carries training_id directly, and a payment must always be
+        // resubmittable on its own even if the registration behind it were
+        // ever missing.
+        $payment->loadMissing('training');
+
+        $validated = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01', 'max:1000000'],
+            'payment_method' => [
+                'required',
+                PaymentMethod::rule($payment->training->accepts_promissory),
+            ],
+            'reference_number' => [
+                Rule::requiredIf($request->input('payment_method') === PaymentMethod::OfficialReceipt->value),
+                'nullable', 'string', 'max:64',
+            ],
+            'payment_date' => ['required', 'date', 'before_or_equal:today'],
+            'proof' => [
+                Rule::requiredIf(function () use ($request, $payment) {
+                    $method = PaymentMethod::tryFrom((string) $request->input('payment_method'));
+
+                    return ($method?->requiresProof() ?? false) && blank($payment->proof_path);
+                }),
+                'nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png',
+            ],
+        ]);
+
+        // Stored before the row is touched, and the old one dropped only
+        // after — the same order ProfilePhotoController keeps, so a storage
+        // failure on the new file leaves the rejected payment exactly as it
+        // was rather than pointing at nothing.
+        $previousProof = $payment->proof_path;
+        $newProofPath = $request->file('proof')?->store('payment-proofs', self::DISK);
+
+        PaymentService::resubmit($payment, [
+            'amount' => $validated['amount'],
+            'payment_method' => $validated['payment_method'],
+            'reference_number' => $validated['reference_number'] ?? null,
+            'payment_date' => $validated['payment_date'],
+            'proof_path' => $newProofPath,
+        ]);
+
+        if ($newProofPath !== null && $previousProof !== null) {
+            Storage::disk(self::DISK)->delete($previousProof);
+        }
+
+        return back()->with('success', 'Your payment has been corrected and is awaiting verification again.');
     }
 
     /**

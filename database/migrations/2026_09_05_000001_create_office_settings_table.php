@@ -55,7 +55,7 @@ return new class extends Migration
             $table->string('email', 128)->nullable();
 
             /*
-             * The prefix on printed certificate numbers: CSC8-2026-000042.
+             * The prefix on printed certificate numbers: CERT-2026-00042.
              *
              * Editable only until the first certificate is issued. After that
              * the screen locks it, because a change puts a permanent seam in a

@@ -17,10 +17,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * The agency's side of a training request, ported from v1's
  * `participant/training-requests.php`.
  *
- * Distinct from TrainingRequestController, which is the suggestion box — a
- * participant proposing a topic for CSC to run regionally. This is an agency
- * formally asking CSC to conduct a training for its own staff, and the document
- * exchange that follows.
+ * An agency formally asking CSC to conduct a training for its own staff, and
+ * the document exchange that follows.
  */
 class AgencyRequestController extends Controller
 {

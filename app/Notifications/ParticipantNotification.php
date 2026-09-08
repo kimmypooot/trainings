@@ -28,6 +28,30 @@ abstract class ParticipantNotification extends Notification implements ShouldQue
     abstract public function url(object $notifiable): string;
 
     /**
+     * Which family of event this is.
+     *
+     * Names a key in resources/js/activityTone.ts, which is what decides the
+     * glyph and the tone the in-app list draws the row with. The notifications
+     * page had been rendering all fifty of a participant's notifications as
+     * identical bordered boxes — the one screen somebody opens *because*
+     * something happened was the screen that would not say what.
+     *
+     * Declared here rather than mapped from the class name in the controller,
+     * for the reason the docblock above gives about title/body/url: a
+     * notification describes itself once, in one file, and the list and the
+     * email are both built from that. A map elsewhere is a second place to
+     * remember.
+     *
+     * The default is deliberately the neutral one. A new notification that
+     * forgets to override this is legible, just undifferentiated — and
+     * NotificationKindTest names every subclass, so it does not stay forgotten.
+     */
+    public function kind(): string
+    {
+        return 'announcement';
+    }
+
+    /**
      * Text for the button in the email, when one makes sense.
      */
     public function action(object $notifiable): ?string
@@ -52,6 +76,7 @@ abstract class ParticipantNotification extends Notification implements ShouldQue
             'title' => $this->title($notifiable),
             'body' => $this->body($notifiable),
             'url' => $this->url($notifiable),
+            'kind' => $this->kind(),
         ];
     }
 

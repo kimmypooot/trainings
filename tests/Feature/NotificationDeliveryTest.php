@@ -100,6 +100,93 @@ class NotificationDeliveryTest extends TestCase
             );
     }
 
+    /**
+     * The header bell's popover reads this endpoint rather than the Inertia
+     * page — see NotificationController::recent().
+     */
+    public function test_the_header_popover_reads_recent_notifications_as_json(): void
+    {
+        $participant = $this->participant();
+        $registration = RegistrationService::register($participant, Training::factory()->create());
+
+        RegistrationService::review($registration, RegistrationStatus::Approved, $this->staff());
+
+        $response = $this->actingAs($participant)
+            ->getJson('/notifications/recent')
+            ->assertOk();
+
+        $response->assertJsonCount(1, 'notifications');
+        $this->assertFalse($response->json('notifications.0.read'));
+        $this->assertStringContainsString("You're confirmed", $response->json('notifications.0.title'));
+        $this->assertSame(1, $response->json('unread'));
+    }
+
+    /**
+     * The popover's own count, not the shared Inertia prop, is what the
+     * header badge reads — because the shared prop can go stale after the
+     * browser's Back button restores a page from history without asking the
+     * server. This is what makes that count trustworthy: it has to still
+     * read 0 once every notification is read, not just the one just marked.
+     */
+    public function test_the_popovers_unread_count_drops_after_marking_one_read(): void
+    {
+        $participant = $this->participant();
+        $registration = RegistrationService::register($participant, Training::factory()->create());
+        RegistrationService::review($registration, RegistrationStatus::Approved, $this->staff());
+
+        $notification = $participant->notifications()->sole();
+
+        $this->actingAs($participant)->postJson("/notifications/{$notification->id}/read")->assertOk();
+
+        $this->actingAs($participant)
+            ->getJson('/notifications/recent')
+            ->assertOk()
+            ->assertJson(['unread' => 0]);
+    }
+
+    /**
+     * The click that opens a notification is what marks it read — fired as a
+     * plain POST alongside the navigation, not through the Inertia page.
+     */
+    public function test_opening_a_notification_marks_it_read(): void
+    {
+        $participant = $this->participant();
+        $registration = RegistrationService::register($participant, Training::factory()->create());
+
+        RegistrationService::review($registration, RegistrationStatus::Approved, $this->staff());
+
+        $notification = $participant->notifications()->sole();
+        $this->assertNull($notification->read_at);
+
+        $this->actingAs($participant)
+            ->postJson("/notifications/{$notification->id}/read")
+            ->assertOk()
+            ->assertJson(['read' => true]);
+
+        $this->assertNotNull($notification->fresh()->read_at);
+    }
+
+    /**
+     * `whereKey()` is scoped to the caller's own relation, so another
+     * account's notification id is simply not found rather than being
+     * something to authorize against.
+     */
+    public function test_a_participant_cannot_mark_another_participants_notification_read(): void
+    {
+        $owner = $this->participant();
+        $registration = RegistrationService::register($owner, Training::factory()->create());
+        RegistrationService::review($registration, RegistrationStatus::Approved, $this->staff());
+
+        $notification = $owner->notifications()->sole();
+        $stranger = $this->participant();
+
+        $this->actingAs($stranger)
+            ->postJson("/notifications/{$notification->id}/read")
+            ->assertNotFound();
+
+        $this->assertNull($notification->fresh()->read_at);
+    }
+
     public function test_the_unread_badge_reflects_a_new_notification(): void
     {
         $participant = $this->participant();

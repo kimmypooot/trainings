@@ -33,6 +33,24 @@ const resend = () => {
     );
 };
 
+const regenerating = ref(false);
+const regenerateProcessing = ref(false);
+
+const regenerate = () => {
+    regenerateProcessing.value = true;
+    router.post(
+        `/admin/certificates/${props.certificate.id}/regenerate`,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                regenerateProcessing.value = false;
+                regenerating.value = false;
+            },
+        }
+    );
+};
+
 const copied = ref(false);
 const copyVerifyUrl = async () => {
     await navigator.clipboard.writeText(props.certificate.verify_url);
@@ -74,6 +92,9 @@ const details = [
                         <p class="mt-0.5 text-sm text-csc-ink-muted">{{ certificate.training }}</p>
 
                         <div class="mt-4 flex flex-wrap gap-2">
+                            <AppButton :href="certificate.view_url" external new-tab size="sm" variant="ghost" icon="eye">
+                                View
+                            </AppButton>
                             <AppButton :href="certificate.download_url" external size="sm" variant="ghost" icon="download">
                                 Download PDF
                             </AppButton>
@@ -82,6 +103,15 @@ const details = [
                             </AppButton>
                             <AppButton v-if="can.resend" size="sm" variant="ghost" icon="envelope" @click="resending = true">
                                 Re-send Email
+                            </AppButton>
+                            <AppButton
+                                v-if="can.regenerate"
+                                size="sm"
+                                variant="ghost"
+                                icon="refresh"
+                                @click="regenerating = true"
+                            >
+                                Regenerate PDF
                             </AppButton>
                         </div>
                     </div>
@@ -165,6 +195,16 @@ const details = [
             :processing="processing"
             @confirm="resend"
             @close="resending = false"
+        />
+
+        <AppConfirmModal
+            :open="regenerating"
+            title="Regenerate this certificate's PDF?"
+            :description="`A fresh PDF for ${certificate.participant} replaces the one currently stored, from the certificate's current data. The certificate number and verification link stay the same — anyone already holding the old file has an out-of-date copy.`"
+            confirm-label="Regenerate PDF"
+            :processing="regenerateProcessing"
+            @confirm="regenerate"
+            @close="regenerating = false"
         />
     </AuthenticatedLayout>
 </template>

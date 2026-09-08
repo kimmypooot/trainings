@@ -107,10 +107,6 @@ const cancel = () => {
                             </template>
                         </dd>
                     </div>
-                    <div v-if="training.level_label">
-                        <dt class="text-csc-ink-subtle">Level</dt>
-                        <dd class="mt-0.5 font-medium text-csc-ink">{{ training.level_label }}</dd>
-                    </div>
                     <div v-if="training.registration_closes_at">
                         <dt class="text-csc-ink-subtle">Registration closes</dt>
                         <dd class="mt-0.5 font-medium text-csc-ink">{{ training.registration_closes_at }}</dd>

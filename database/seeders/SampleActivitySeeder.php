@@ -24,7 +24,6 @@ use App\Models\SmeEvaluation;
 use App\Models\SubjectMatterExpert;
 use App\Models\Training;
 use App\Models\TrainingDayEvaluation;
-use App\Models\TrainingRequest;
 use App\Models\User;
 use Database\Factories\RegistrationFactory;
 use Database\Seeders\Concerns\SeedsRandomly;
@@ -102,7 +101,6 @@ class SampleActivitySeeder extends Seeder
             $this->training($spec);
         }
 
-        $this->trainingRequests();
         $this->agencyRequests();
 
         $this->report($seed);
@@ -376,9 +374,10 @@ class SampleActivitySeeder extends Seeder
                 'user_id' => $registration->user_id,
                 'training_id' => $training->getKey(),
                 'certificate_number' => sprintf(
-                    'CSC8-%s-%06d',
+                    '%s-%s-%05d',
+                    config('office.certificate_prefix'),
                     $training->starts_at->format('Y'),
-                    fake()->unique()->numberBetween(1, 999999)
+                    fake()->unique()->numberBetween(1, 99999)
                 ),
                 'verification_code' => $code,
                 'file_path' => "certificates/{$code}.pdf",
@@ -620,48 +619,6 @@ class SampleActivitySeeder extends Seeder
         );
 
         $this->count('withdrawal requests');
-    }
-
-    /**
-     * Agency-requested trainings, at every stage of review.
-     */
-    private function trainingRequests(): void
-    {
-        $titles = [
-            ['Basic Occupational Safety and Health', 'Technical', RequestStatus::Pending],
-            ['Customer Service for Frontline Staff', 'Foundation', RequestStatus::Pending],
-            ['Advanced Spreadsheet Skills', 'Technical', RequestStatus::Approved],
-            ['Conflict Resolution in the Workplace', 'Leadership and Management', RequestStatus::Rejected],
-            ['Freedom of Information Orientation', 'Foundation', RequestStatus::Pending],
-        ];
-
-        foreach ($titles as [$title, $category, $status]) {
-            $requester = $this->participants->random();
-            $reviewed = $status !== RequestStatus::Pending;
-            $submittedAt = now()->subDays(fake()->numberBetween(5, 60));
-
-            $request = TrainingRequest::updateOrCreate(
-                ['title' => $title, 'requested_by' => $requester->getKey()],
-                [
-                    'justification' => "Our office has personnel with no formal training in {$category}, and the "
-                        .'competency gap is showing in day-to-day work. We are requesting CSC to run a session locally.',
-                    'category' => $category,
-                    'expected_participants' => fake()->numberBetween(12, 40),
-                    'preferred_start' => now()->addMonths(fake()->numberBetween(2, 5))->toDateString(),
-                    'preferred_end' => now()->addMonths(fake()->numberBetween(2, 5))->addDays(2)->toDateString(),
-                    'status' => $status,
-                    'reviewed_by' => $reviewed ? $this->staff->random()->getKey() : null,
-                    'reviewed_at' => $reviewed ? $submittedAt->copy()->addDays(7) : null,
-                    'review_remarks' => $status === RequestStatus::Rejected
-                        ? 'No facilitator available this semester — resubmit for the next planning cycle.'
-                        : null,
-                ]
-            );
-
-            $request->forceFill(['created_at' => $submittedAt])->save();
-
-            $this->count('training requests');
-        }
     }
 
     /**

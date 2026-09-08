@@ -114,7 +114,7 @@ onBeforeUnmount(revokePreview);
     <div>
         <label :for="id" class="mb-1.5 block text-sm font-medium text-csc-ink">
             {{ label }}
-            <span v-if="required" class="text-csc-red-ink" aria-hidden="true">*</span>
+            <span v-if="required" class="text-danger" aria-hidden="true">*</span>
         </label>
 
         <input
@@ -127,7 +127,7 @@ onBeforeUnmount(revokePreview);
             class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-csc-ink transition-colors duration-150 file:mr-3 file:rounded file:border-0 file:bg-csc-blue-tint file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-csc-blue"
             :class="
                 error
-                    ? 'border-csc-red-ink focus:outline-csc-red-ink'
+                    ? 'border-danger focus:outline-danger'
                     : 'border-csc-line hover:border-csc-blue/40 focus:border-csc-blue focus:outline-csc-blue'
             "
             :aria-invalid="error ? 'true' : undefined"
@@ -136,7 +136,7 @@ onBeforeUnmount(revokePreview);
         />
 
         <p v-if="hint" :id="`${id}-hint`" class="mt-1.5 text-xs text-csc-ink-subtle">{{ hint }}</p>
-        <p v-if="error" class="mt-1.5 text-xs font-medium text-csc-red-ink">{{ error }}</p>
+        <p v-if="error" class="mt-1.5 text-xs font-medium text-danger">{{ error }}</p>
 
         <!-- The self-check: what was actually picked, before it is submitted. -->
         <div v-if="selected" class="mt-3 flex items-start gap-3 rounded-lg border border-csc-line bg-csc-mist/30 p-3">

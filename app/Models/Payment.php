@@ -13,7 +13,35 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int|null $registration_id
+ * @property int $user_id
+ * @property int $training_id
+ * @property numeric-string $amount
+ * @property numeric-string $discount_amount
+ * @property bool $prime_hrm_discount
+ * @property PaymentMethod $payment_method
+ * @property PaymentStatus $status
+ * @property string|null $reference_number
+ * @property string|null $or_number
+ * @property Carbon|null $or_date
+ * @property int|null $collecting_officer_id
+ * @property Carbon|null $payment_date
+ * @property string|null $proof_path
+ * @property int|null $verified_by
+ * @property Carbon|null $verified_at
+ * @property string|null $rejection_reason
+ * @property string|null $remarks
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
+ * @property-read Registration|null $registration
+ * @property-read User $user
+ * @property-read Training $training
+ * @property-read User|null $verifier
+ */
 #[Fillable([
     'registration_id', 'user_id', 'training_id', 'amount', 'payment_method',
     'reference_number', 'or_number', 'or_date', 'collecting_officer_id',

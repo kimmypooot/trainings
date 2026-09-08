@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
@@ -10,6 +10,7 @@ import AppInput from '@/Components/AppInput.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppFilterChips from '@/Components/AppFilterChips.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import { useFilters, filteringClass } from '@/useFilters';
 
@@ -30,6 +31,10 @@ const tabs = [
     { value: 'open', label: 'All Open' },
     { value: 'all', label: 'Everything' },
 ];
+
+// The chips carry their own counts; `counts` is keyed the same way, so the two
+// are paired here rather than looked up inside the markup.
+const chips = computed(() => tabs.map((tab) => ({ ...tab, count: props.counts[tab.value] ?? null })));
 
 /*
  * `counts` is what the tabs are numbered with, across the whole queue — it is
@@ -129,35 +134,12 @@ const submitReject = () =>
 
     <AuthenticatedLayout title="Agency Requests" current="admin-agency-requests">
         <div class="mx-auto max-w-7xl space-y-5">
-            <div class="flex flex-wrap gap-2" role="tablist">
-                <button
-                    v-for="tab in tabs"
-                    :key="tab.value"
-                    type="button"
-                    role="tab"
-                    :aria-selected="(filters.filter ?? 'ours') === tab.value"
-                    class="rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        (filters.filter ?? 'ours') === tab.value
-                            ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                    "
-                    @click="setFilter(tab.value)"
-                >
-                    {{ tab.label }}
-                    <span
-                        v-if="counts[tab.value]"
-                        class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                        :class="
-                            (filters.filter ?? 'ours') === tab.value
-                                ? 'bg-white/20'
-                                : 'bg-csc-blue-tint text-csc-blue'
-                        "
-                    >
-                        {{ counts[tab.value] }}
-                    </span>
-                </button>
-            </div>
+            <AppFilterChips
+                :model-value="filters.filter ?? 'ours'"
+                :options="chips"
+                aria-label="Filter agency requests by whose move it is"
+                @update:model-value="setFilter"
+            />
 
             <!--
                  The results dim while a filtered visit is out. The controls above stay
@@ -212,7 +194,7 @@ const submitReject = () =>
                                 <template v-if="request.ord_notified"> · ORD notified</template>
                             </p>
 
-                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-csc-red-ink">
+                            <p v-if="request.rejection_reason" class="mt-2 text-sm text-danger">
                                 Declined: {{ request.rejection_reason }}
                             </p>
                             <p v-if="request.cancellation_reason" class="mt-2 text-sm text-csc-ink-muted">

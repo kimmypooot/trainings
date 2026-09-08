@@ -191,7 +191,6 @@ class TrainingController extends Controller
                     ->all(),
                 'prerequisites' => $training->prerequisites,
                 'target_participants' => $training->target_participants,
-                'level_label' => $training->level?->label(),
                 'venue_details' => $training->venue_details,
                 'is_supervisory' => $training->is_supervisory,
                 'accepts_promissory' => $training->payment_required && $training->accepts_promissory,
@@ -446,7 +445,6 @@ class TrainingController extends Controller
             'description' => $training->description,
             'prerequisites' => $training->prerequisites,
             'target_participants' => $training->target_participants,
-            'level_label' => $training->level?->label(),
             'venue_details' => $training->venue_details,
             'is_supervisory' => $training->is_supervisory,
             /*

@@ -151,4 +151,47 @@ class SampleUsersSeederTest extends TestCase
 
         $this->assertSame(0, User::count(), 'Known credentials must never be seeded in production.');
     }
+
+    /**
+     * Every staff role must seed at least one account that can actually sign in.
+     *
+     * `is_active` is a 92% coin flip per account and `admin` seeds one to three
+     * of them, so about one run in forty used to produce a dataset with no
+     * usable admin — and the failure surfaced in whichever admin-screen test
+     * ran next, reading as a bug in whatever was being changed at the time.
+     *
+     * Replayed across a spread of seeds rather than trusted once: a single run
+     * of a randomised seeder passing proves only that this seed was lucky,
+     * which is exactly how the original defect stayed hidden.
+     */
+    public function test_every_staff_role_seeds_at_least_one_active_account(): void
+    {
+        // These are not arbitrary. Each one was found by running the
+        // seeder without the guarantee and recording which seeds produced a
+        // role with nobody active: 10 and 180 strand management, 20 and 130
+        // strand superadmin, 64 and 141 strand admin. A sweep of the first
+        // 400 seeds failed on 56 of them — 14%, not the rare accident it
+        // looked like — because superadmin seeds exactly one account, so an
+        // 8% coin flip is the whole story for that role. Picking round
+        // numbers instead would have produced a test that passes with the
+        // fix reverted, which is how this went unnoticed in the first place.
+        foreach ([10, 20, 64, 130, 141, 180] as $seed) {
+            User::query()->delete();
+            putenv("SAMPLE_USERS_SEED={$seed}");
+            $_ENV['SAMPLE_USERS_SEED'] = $seed;
+
+            $this->seed(SampleUsersSeeder::class);
+
+            foreach ([Role::Admin, Role::FieldOffice, Role::Management, Role::SuperAdmin] as $role) {
+                $this->assertGreaterThan(
+                    0,
+                    User::where('role', $role)->where('is_active', true)->count(),
+                    "Seed {$seed} produced no active {$role->value} account."
+                );
+            }
+        }
+
+        putenv('SAMPLE_USERS_SEED');
+        unset($_ENV['SAMPLE_USERS_SEED']);
+    }
 }

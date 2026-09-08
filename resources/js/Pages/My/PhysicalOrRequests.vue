@@ -4,6 +4,7 @@ import { Head, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppBadge from '@/Components/AppBadge.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppFileField from '@/Components/AppFileField.vue';
@@ -69,14 +70,22 @@ const confirmCancel = () => {
 </script>
 
 <template>
-    <Head title="Physical OR Requests" />
+    <Head title="Official Receipts" />
 
-    <AuthenticatedLayout title="Physical OR Requests" current="physical-or">
-        <div class="mx-auto max-w-4xl space-y-5">
-            <AppCard title="Physical OR Requests" :padded="requests.length > 0">
+    <AuthenticatedLayout title="Official Receipts" current="physical-or">
+        <div class="mx-auto max-w-7xl space-y-5">
+            <AppHelpLink anchor="payments">How to ask for a printed receipt</AppHelpLink>
+
+            <!--
+                "Physical OR" is the finance office's name for this and remains
+                the staff queue's label; the participant meets it as what it is,
+                a request for the printed receipt. The route, the nav key and
+                the request code are all unchanged.
+            -->
+            <AppCard title="Printed Receipt Requests" :padded="requests.length > 0">
                 <AppEmptyState
                     v-if="!requests.length"
-                    title="No physical OR requests"
+                    title="You have not asked for a printed receipt"
                     description="Requests for a physical copy of your official receipt appear here. Ask from your Payments page on a verified payment."
                     icon="document"
                 />
@@ -101,7 +110,7 @@ const confirmCancel = () => {
 
                         <p class="mt-3 text-sm text-csc-ink-muted">{{ request.message }}</p>
 
-                        <p v-if="request.rejection_reason" class="mt-1.5 text-sm text-csc-red-ink">
+                        <p v-if="request.rejection_reason" class="mt-1.5 text-sm text-danger">
                             {{ request.rejection_reason }}
                         </p>
 

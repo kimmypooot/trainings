@@ -19,6 +19,10 @@ const props = defineProps({
     // Render a plain <a> instead of an Inertia <Link>, for file downloads and
     // other responses Inertia's XHR layer cannot handle.
     external: { type: Boolean, default: false },
+    // Open the external link in a new tab — for a document meant to be looked
+    // at beside the admin page, not navigated away to (a proof, a rendered
+    // certificate). No-op unless `external` is also set.
+    newTab: { type: Boolean, default: false },
     type: { type: String, default: 'button' },
     disabled: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
@@ -64,7 +68,13 @@ const isDisabled = computed(() => props.disabled || props.loading);
 </script>
 
 <template>
-    <a v-if="href && external && !isDisabled" :href="href" :class="classes">
+    <a
+        v-if="href && external && !isDisabled"
+        :href="href"
+        :target="newTab ? '_blank' : undefined"
+        :rel="newTab ? 'noopener noreferrer' : undefined"
+        :class="classes"
+    >
         <AppIcon v-if="icon" :name="icon" :size="size === 'lg' ? 'md' : 'sm'" class="shrink-0" />
         <slot />
     </a>

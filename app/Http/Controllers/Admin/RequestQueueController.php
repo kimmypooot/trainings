@@ -6,10 +6,8 @@ use App\Enums\RequestStatus;
 use App\Http\Controllers\Controller;
 use App\Models\CancellationRequest;
 use App\Models\RegistrationOutput;
-use App\Models\TrainingRequest;
 use App\Support\CancellationRequestService;
 use App\Support\RegistrationOutputService;
-use App\Support\TrainingRequestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -18,11 +16,10 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The three staff review queues: withdrawals, agency training requests, and
- * submitted outputs.
+ * The staff review queues: withdrawals and submitted outputs.
  *
- * Kept in one controller because they are one screen with three tabs, and each
- * decision is a couple of lines — three controllers would be three copies of
+ * Kept in one controller because they are one screen with two tabs, and each
+ * decision is a couple of lines — two controllers would be two copies of
  * the same validation.
  */
 class RequestQueueController extends Controller
@@ -35,23 +32,28 @@ class RequestQueueController extends Controller
      * hide decided items — which is what the pending-first ordering below
      * guarantees, and what the summary() counts make visible.
      */
-    private const LIMIT = 100;
+    /**
+     * Rows shown per queue.
+     *
+     * Public because the staff guide quotes it. A guide that says "100" while
+     * the screen shows fifty is wrong on the page somebody opened because they
+     * were unsure, so it reads the number rather than repeating it.
+     */
+    public const LIMIT = 100;
 
     /**
-     * How a request in each of the three queues reaches a field office.
+     * How a request in each queue reaches a field office.
      *
-     * Two shapes: a withdrawal and an output hang off a registration, while a
-     * training request is filed by the participant directly. Named once here
-     * because the listing and the decision must narrow by exactly the same
-     * path — they used not to, and that was the bug: `index()` scoped all three
-     * queues while the three POSTs that act on them scoped none, so a field
-     * office could approve another office's withdrawal (freeing a seat and
-     * starting a refund) by posting its id.
+     * Both hang off a registration. Named once here because the listing and
+     * the decision must narrow by exactly the same path — they used not to,
+     * and that was the bug: `index()` scoped both queues while the POSTs that
+     * act on them scoped neither, so a field office could approve another
+     * office's withdrawal (freeing a seat and starting a refund) by posting
+     * its id.
      */
     private const OFFICE_PATHS = [
         CancellationRequest::class => 'registration.user.profile',
         RegistrationOutput::class => 'registration.user.profile',
-        TrainingRequest::class => 'requester.profile',
     ];
 
     /**
@@ -97,17 +99,12 @@ class RequestQueueController extends Controller
             fn ($profile) => $profile->where('field_office_id', $officeId)
         ));
 
-        $scopeTrainingRequests = fn ($query) => $query->when($officeId !== null, fn ($inner) => $inner->whereHas(
-            self::OFFICE_PATHS[TrainingRequest::class],
-            fn ($profile) => $profile->where('field_office_id', $officeId)
-        ));
-
         /*
          * Pending first, then newest.
          *
          * The cap is what makes the ordering matter. These lists are capped at
-         * 100 rather than paginated — three independent paginators on one
-         * three-tab screen is a worse answer than a bound — and with a plain
+         * 100 rather than paginated — independent paginators on one
+         * multi-tab screen is a worse answer than a bound — and with a plain
          * `latest()` the hundredth decided item pushed the oldest *pending* one
          * off the end. That item then existed only in the sidebar badge, which
          * counts the database: a number telling a staff member there is work,
@@ -132,12 +129,6 @@ class RequestQueueController extends Controller
             ->limit(self::LIMIT)
             ->get();
 
-        $trainingRequests = TrainingRequest::with(['requester.profile', 'training'])
-            ->tap($scopeTrainingRequests)
-            ->tap($pendingFirst)
-            ->limit(self::LIMIT)
-            ->get();
-
         return Inertia::render('Admin/Requests/Index', [
             'cancellations' => $cancellations->map(fn (CancellationRequest $item) => [
                 'id' => $item->id,
@@ -148,20 +139,6 @@ class RequestQueueController extends Controller
                 'status_label' => $item->status->label(),
                 'review_remarks' => $item->review_remarks,
                 'submitted_at' => $item->created_at->format('d M Y'),
-            ])->all(),
-            'trainingRequests' => $trainingRequests->map(fn (TrainingRequest $item) => [
-                'id' => $item->id,
-                'requester' => $item->requester?->name,
-                'title' => $item->title,
-                'category' => $item->category,
-                'justification' => $item->justification,
-                'expected_participants' => $item->expected_participants,
-                'preferred_start' => $item->preferred_start?->format('d M Y'),
-                'status' => $item->status->value,
-                'status_label' => $item->status->label(),
-                'review_remarks' => $item->review_remarks,
-                'submitted_at' => $item->created_at->format('d M Y'),
-                'converted' => $item->training_id !== null,
             ])->all(),
             'outputs' => $outputs->map(fn (RegistrationOutput $item) => [
                 'id' => $item->id,
@@ -191,7 +168,6 @@ class RequestQueueController extends Controller
              */
             'queues' => [
                 'cancellations' => $this->summary(CancellationRequest::query()->tap($scope), $cancellations),
-                'trainings' => $this->summary(TrainingRequest::query()->tap($scopeTrainingRequests), $trainingRequests),
                 'outputs' => $this->summary(RegistrationOutput::query()->tap($scope), $outputs),
             ],
             'scopedTo' => $request->user()->fieldOffice?->name,
@@ -227,32 +203,6 @@ class RequestQueueController extends Controller
         );
 
         return back()->with('success', 'Withdrawal request reviewed.');
-    }
-
-    public function reviewTrainingRequest(Request $request, TrainingRequest $trainingRequest): RedirectResponse
-    {
-        $validated = $this->decision($request);
-
-        TrainingRequestService::review(
-            $this->scoped($request, $trainingRequest),
-            RequestStatus::from($validated['decision']),
-            $request->user(),
-            $validated['remarks'] ?? null
-        );
-
-        return back()->with('success', 'Training request reviewed.');
-    }
-
-    /**
-     * Turn an approved request into a draft training.
-     */
-    public function convertTrainingRequest(Request $request, TrainingRequest $trainingRequest): RedirectResponse
-    {
-        $training = TrainingRequestService::convert($trainingRequest, $request->user());
-
-        return redirect()
-            ->route('admin.trainings.edit', $training)
-            ->with('success', 'Draft training created — fill in the venue and schedule before publishing.');
     }
 
     public function reviewOutput(Request $request, RegistrationOutput $output): RedirectResponse

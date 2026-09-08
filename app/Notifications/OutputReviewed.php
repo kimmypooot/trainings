@@ -9,6 +9,11 @@ class OutputReviewed extends ParticipantNotification
 {
     public function __construct(private readonly RegistrationOutput $output) {}
 
+    public function kind(): string
+    {
+        return 'document';
+    }
+
     public function title(object $notifiable): string
     {
         $training = $this->output->registration->training->title;

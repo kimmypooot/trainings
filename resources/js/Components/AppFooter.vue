@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { usePage } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 
 // The year advances on its own, so the copyright never goes stale.
 const year = new Date().getFullYear();
@@ -38,14 +38,20 @@ const legalLinks = [
             <span>&copy; {{ year }} {{ officeName }}. All rights reserved</span>
 
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <a
+                <!--
+                    Links, not anchors. All three are Inertia pages, so a plain
+                    <a> tore the whole SPA down and rebuilt it to move one page
+                    sideways — and this footer is on every signed-in screen, so
+                    it was the most-rendered full reload in the application.
+                -->
+                <Link
                     v-for="link in legalLinks"
                     :key="link.href"
                     :href="link.href"
                     class="rounded transition-colors hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
                 >
                     {{ link.label }}
-                </a>
+                </Link>
                 <span v-if="version" class="hidden sm:inline">v{{ version }}</span>
             </div>
         </div>

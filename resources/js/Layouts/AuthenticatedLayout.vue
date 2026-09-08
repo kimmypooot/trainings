@@ -5,6 +5,7 @@ import AppAvatar from '@/Components/AppAvatar.vue';
 import AppFooter from '@/Components/AppFooter.vue';
 import AppChangePasswordModal from '@/Components/AppChangePasswordModal.vue';
 import AppGlobalSearch from '@/Components/AppGlobalSearch.vue';
+import AppNotificationsPopover from '@/Components/AppNotificationsPopover.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppToast from '@/Components/AppToast.vue';
 import AppModal from '@/Components/AppModal.vue';
@@ -19,7 +20,6 @@ const props = defineProps({
 const page = usePage();
 const user = computed(() => page.props.auth?.user ?? {});
 const role = computed(() => user.value.role ?? 'participant');
-const unread = computed(() => page.props.unreadNotifications ?? 0);
 const pendingActions = computed(() => page.props.pendingActions ?? {});
 // Staff pass straight through maintenance mode, so without a banner it can sit
 // on for days unnoticed — see HandleInertiaRequests' maintenanceMode prop.
@@ -30,6 +30,21 @@ const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
 // both read the participants directory and the trainings catalogue, which is
 // exactly what the header search reaches — see the admin group in web.php.
 const isStaff = computed(() => role.value !== 'participant');
+
+/*
+ * Where "home" is for this account.
+ *
+ * The seal in the rail linked to /dashboard for everybody. That route is the
+ * *participant* dashboard and carries no role gate — only auth, a complete
+ * profile and a verified address — so it renders for staff too, showing them
+ * their own zero registrations. Clicking the logo, which every user on the web
+ * has learned means "take me home", put a staff member on an empty page
+ * belonging to someone else's job.
+ *
+ * Derived from the same fact the two Dashboard nav rows already split on,
+ * rather than a second copy of the rule.
+ */
+const homeHref = computed(() => (isStaff.value ? '/admin' : '/dashboard'));
 
 // Every sidebar badge is a pending action fed in by key (see
 // PendingActionCounter). The unread notification count is not one of them — it
@@ -53,6 +68,16 @@ const ALL_ROLES = [
  */
 const STAFF_ROLES = ['field-office', 'admin', 'management', 'superadmin'];
 
+/*
+ * Who works a venue door. Deliberately *not* STAFF_ROLES: management is
+ * excluded because it records nothing, and a collecting officer is included
+ * because taking payments at an event is a door job. This is the same list
+ * routes/web.php puts on /admin/scanner and on /scan/{token}, and the two must
+ * stay identical — a nav row for a page the role gets a 403 from is worse than
+ * no row at all.
+ */
+const VENUE_ROLES = ['field-office', 'collecting-officer', 'admin', 'superadmin'];
+
 const navGroups = [
     {
         key: 'overview',
@@ -71,9 +96,30 @@ const navGroups = [
                 label: 'Dashboard',
                 href: '/admin',
                 primary: true,
-                // Collecting officers reach /admin too — they are staff, they
-                // just have no business in the roster or participant directory,
-                // which is why they are not in STAFF_ROLES.
+                /*
+                 * Collecting officers reach /admin too — they are staff. They
+                 * are outside STAFF_ROLES because that list drives the nav rows
+                 * for *managing* trainings and participants, which is not their
+                 * job; it is not a statement about what they may read.
+                 *
+                 * This comment used to say they had "no business in the roster
+                 * or participant directory", and that was wrong twice over. It
+                 * contradicted the note on isStaff seventy lines above, which
+                 * says they read the directory and the catalogue — that is what
+                 * the header search reaches — and it contradicted the routes
+                 * themselves, where the participants desk is introduced with
+                 * "reading the directory is every staff role's — a collecting
+                 * officer needs to look someone up as much as HRD does". They
+                 * reach the roster and the certificate register as well, both
+                 * deliberately: the register is open because the office fields
+                 * "where is my certificate?" on whichever phone rings.
+                 *
+                 * The pattern across the admin group is read-open,
+                 * act-narrowed. Editing a profile, mailing a reset, releasing a
+                 * certificate and converting a request are each gated; looking
+                 * things up is not. A wrong comment about who may read what is
+                 * how somebody ends up "fixing" a gate that was never a gap.
+                 */
                 roles: [...STAFF_ROLES, 'collecting-officer'],
                 icon: 'home',
             },
@@ -138,14 +184,6 @@ const navGroups = [
                 icon: 'bookmark',
             },
             {
-                key: 'certificates',
-                label: 'Certificates',
-                href: '/my/certificates',
-                primary: true,
-                roles: ['participant'],
-                icon: 'certificate',
-            },
-            {
                 // Badged with the number of training days still owed an
                 // evaluation — see PendingActionCounter.
                 key: 'evaluations',
@@ -164,8 +202,51 @@ const navGroups = [
         ],
     },
     {
+        /*
+         * The venue door, and the reason this group exists at all.
+         *
+         * /admin/scanner had no inbound link anywhere in the application — not
+         * from here, not from the roster, not from any page. A complete
+         * offline-first attendance station with a service worker, a camera and
+         * a sync queue was reachable only by typing the URL, which meant it was
+         * reachable only by whoever had already been told about it.
+         *
+         * The roster's scan-station card is not that link and never was: it
+         * issues shareable /station/{token} links for an unauthenticated device
+         * at the door. This is the signed-in staff door to the same service.
+         *
+         * The page itself is deliberately chrome-less — it is a tool held at a
+         * venue, not a screen inside the shell — which is a good reason for it
+         * to have no sidebar *highlight* and no reason at all for it to have no
+         * sidebar *row*.
+         */
+        key: 'attendance',
+        label: 'Attendance',
+        items: [
+            {
+                key: 'admin-scanner',
+                label: 'Scan Station',
+                href: '/admin/scanner',
+                roles: VENUE_ROLES,
+                icon: 'qr',
+            },
+        ],
+    },
+    {
+        /*
+         * Money and the paperwork that comes out of it.
+         *
+         * Certificates moved in here from Trainings, where they sat between
+         * "My Registrations" and "Session Evaluations". A certificate is a
+         * document you collect, not a training you browse or a task you owe,
+         * and the Trainings group had grown into all three jobs at once — five
+         * rows covering finding a course, enrolling on it, and what it leaves
+         * behind. The label says "Documents" for the certificate row below;
+         * for staff this group is unchanged. The participant's own receipt
+         * request lives in Requests instead — see the note there.
+         */
         key: 'payments',
-        label: 'Payments & Fees',
+        label: 'Payments & Documents',
         items: [
             {
                 key: 'payments',
@@ -175,11 +256,12 @@ const navGroups = [
                 icon: 'card',
             },
             {
-                key: 'physical-or',
-                label: 'Physical OR',
-                href: '/my/physical-or',
+                key: 'certificates',
+                label: 'Certificates',
+                href: '/my/certificates',
+                primary: true,
                 roles: ['participant'],
-                icon: 'document',
+                icon: 'certificate',
             },
             {
                 key: 'admin-payments',
@@ -206,11 +288,18 @@ const navGroups = [
         label: 'Requests',
         items: [
             {
+                /*
+                 * Collecting officers too: routes/web.php lets this role review
+                 * cancellations and outputs, and the queue page itself is open
+                 * to every staff role. Without this the sidebar for that role
+                 * was two rows — Dashboard and My Profile — while the job it
+                 * can actually do sat behind a URL nobody had written down.
+                 */
                 key: 'admin-requests',
                 label: 'Requests',
                 href: '/admin/requests',
                 primary: true,
-                roles: STAFF_ROLES,
+                roles: [...STAFF_ROLES, 'collecting-officer'],
                 icon: 'document',
             },
             {
@@ -221,16 +310,26 @@ const navGroups = [
                 icon: 'building',
             },
             {
-                key: 'training-requests',
-                label: 'Suggest a Training',
-                href: '/my/training-requests',
+                /*
+                 * "Physical OR" is what the finance office calls this and what
+                 * the staff queue is still labelled — but a participant cannot
+                 * be expected to expand OR, and this row is the only place they
+                 * meet the term. It lives here rather than under Payments &
+                 * Documents because a participant experiences it as a request
+                 * they file and wait on, not as a payment or a document they
+                 * hold — the route, the key and the staff label are all
+                 * unchanged; only the word this participant reads, and the
+                 * group it sits in, are.
+                 */
+                key: 'physical-or',
+                label: 'Official Receipts',
+                href: '/my/physical-or',
                 roles: ['participant'],
-                icon: 'plus',
+                icon: 'document',
             },
             {
-                // Named for what it is, so it is not confused with the
-                // suggestion box above: this one is a formal request from an
-                // agency, with letters going both ways.
+                // Named for what it is: a formal request from an agency, with
+                // letters going both ways.
                 key: 'agency-requests',
                 label: 'Agency Requests',
                 href: '/my/agency-requests',
@@ -287,6 +386,16 @@ const navGroups = [
                 href: '/admin/field-offices',
                 roles: ['admin', 'superadmin'],
                 icon: 'building',
+            },
+            {
+                // The employer list behind the profile form's picker.
+                // Reference data in the same sense a field office is,
+                // and managed by the same roles.
+                key: 'admin-agencies',
+                label: 'Agencies',
+                href: '/admin/agencies',
+                roles: ['admin', 'superadmin'],
+                icon: 'clipboard',
             },
             {
                 key: 'admin-smes',
@@ -365,6 +474,44 @@ const navGroups = [
                 href: '/profile',
                 roles: ALL_ROLES,
                 icon: 'user',
+            },
+            {
+                /*
+                 * The staff guide, for everybody who is not a participant. The
+                 * page shows each reader the sections their role covers, so one
+                 * row serves five roles rather than five rows serving one each.
+                 *
+                 * Beside the participant guide rather than in Administration:
+                 * it is not a thing you administer, it is the thing you read
+                 * when you are unsure what you may do — which is an account
+                 * question, and where the person looking for it would look.
+                 */
+                key: 'admin-help',
+                label: 'Staff Guide',
+                href: '/admin/help',
+                roles: [...STAFF_ROLES, 'collecting-officer'],
+                icon: 'info',
+            },
+            {
+                /*
+                 * Participants only, because the guide is written for them —
+                 * staff are trained and have docs/. The route itself refuses
+                 * nobody signed in, so a staff member following a link into it
+                 * reads the page rather than meeting a 403: who is *offered* a
+                 * thing and who is *allowed* it are different questions, and
+                 * only the second one is security.
+                 *
+                 * Last in Account rather than first in Overview. A guide is
+                 * what you reach for when something has gone wrong, so it wants
+                 * to be findable rather than prominent — putting it at the top
+                 * would spend the best row in the sidebar on the screen a
+                 * participant should need least often.
+                 */
+                key: 'help',
+                label: 'Help & Guide',
+                href: '/help',
+                roles: ['participant'],
+                icon: 'info',
             },
         ],
     },
@@ -522,7 +669,7 @@ const confirmSignOut = () => {
                 :class="collapsed ? 'md:justify-center md:px-0' : ''"
             >
                 <Link
-                    href="/dashboard"
+                    :href="homeHref"
                     class="flex items-center gap-3 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
                 >
                     <!--
@@ -676,46 +823,12 @@ const confirmSignOut = () => {
 
                     <div class="flex items-center gap-1 sm:gap-2">
                         <!--
-                            The bell is now the only route to notifications, so
-                            it carries the current-page state the sidebar row
-                            used to hold.
+                            A preview popover rather than a link straight to
+                            the full list — see AppNotificationsPopover for
+                            why. "See previous notifications" inside it is the
+                            hand-off to Notifications/Index.
                         -->
-                        <Link
-                            href="/notifications"
-                            class="relative inline-flex size-11 items-center justify-center rounded-lg transition-colors hover:bg-csc-blue-tint hover:text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                            :class="
-                                props.current === 'notifications'
-                                    ? 'bg-csc-blue-tint text-csc-blue'
-                                    : 'text-csc-ink'
-                            "
-                            :aria-current="props.current === 'notifications' ? 'page' : undefined"
-                        >
-                            <AppIcon name="bell" />
-                            <!-- Unread alert: a pulsing ring draws the eye, the count carries the detail -->
-                            <template v-if="unread">
-                                <!--
-                                    Keyed on the count so the pulse replays
-                                    when the number actually changes. It used to
-                                    be animate-ping, which is infinite: a
-                                    permanent attention-grab for a figure that
-                                    was not moving. Three beats, then it rests.
-                                -->
-                                <span
-                                    :key="unread"
-                                    class="bell-ping absolute top-1 right-1 inline-flex size-4 rounded-full bg-danger/50"
-                                    aria-hidden="true"
-                                />
-                                <span
-                                    class="absolute top-1 right-1 inline-flex min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-semibold text-white ring-2 ring-white"
-                                    aria-hidden="true"
-                                >
-                                    {{ unread > 9 ? '9+' : unread }}
-                                </span>
-                            </template>
-                            <span class="sr-only" aria-live="polite">
-                                Notifications{{ unread ? ` — ${unread} unread` : '' }}
-                            </span>
-                        </Link>
+                        <AppNotificationsPopover :current="props.current" />
 
                         <div ref="accountRef" class="relative">
                             <button
@@ -954,21 +1067,4 @@ const confirmSignOut = () => {
     background: color-mix(in srgb, white 35%, transparent);
 }
 
-/*
- * Tailwind's animate-ping is infinite. The unread badge only has news to break
- * when the count changes, so this is the same motion bounded to three beats;
- * the element is keyed on the count, which replays it on the next arrival.
- * The global prefers-reduced-motion block in app.css already neutralises it.
- */
-.bell-ping {
-    animation: bell-ping 1s cubic-bezier(0, 0, 0.2, 1) 3;
-}
-
-@keyframes bell-ping {
-    75%,
-    100% {
-        transform: scale(2);
-        opacity: 0;
-    }
-}
 </style>

@@ -21,6 +21,13 @@ use Inertia\Response;
 class EmailVerificationController extends Controller
 {
     /**
+     * Said in one place because two of them say it: this controller when the
+     * "continue" button is pressed too early, and EnsureEmailIsVerified when
+     * any gated route is reached the same way.
+     */
+    public const NOT_YET_VERIFIED = 'That address is not verified yet. Open the link in the email we sent, or resend it below.';
+
+    /**
      * The "check your inbox" screen shown to an unverified, signed-in user.
      */
     public function notice(Request $request): Response
@@ -28,6 +35,34 @@ class EmailVerificationController extends Controller
         return Inertia::render('Auth/VerifyEmail', [
             'email' => $request->user()->email,
         ]);
+    }
+
+    /**
+     * The notice page's "I've already verified — continue" button.
+     *
+     * The emailed link is usually opened in another tab, another browser, or
+     * on a phone, so this page has no way of knowing it was clicked — the
+     * button exists to go and ask. It used to point straight at the dashboard,
+     * which asked the *profile* gate first because that middleware is listed
+     * ahead of the verification one: an unverified participant who had not
+     * finished their profile — which is every participant at this point in the
+     * sequence — was sent into the profile form as though the answer had been
+     * yes. Asking the one question the button is about, before any of that,
+     * is the whole job.
+     */
+    public function check(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        // Staff are exempt here for the same reason EnsureEmailIsVerified
+        // exempts them: they are not asked to verify a self-service address,
+        // and a button that answered differently from the gate behind it would
+        // be its own bug.
+        if (! $user->role->isStaff() && ! $user->hasVerifiedEmail()) {
+            return redirect()->route('verification.notice')->with('error', self::NOT_YET_VERIFIED);
+        }
+
+        return redirect()->route('dashboard');
     }
 
     /**

@@ -60,14 +60,6 @@ const format = (value) => (value === null || value === undefined ? '—' : value
                         <dt class="text-xs text-csc-ink-subtle">Areas of expertise</dt>
                         <dd class="text-csc-ink">{{ expert.expertise }}</dd>
                     </div>
-                    <div v-if="expert.bio" class="sm:col-span-2">
-                        <dt class="text-xs text-csc-ink-subtle">Biography</dt>
-                        <dd class="leading-relaxed text-csc-ink-muted">{{ expert.bio }}</dd>
-                    </div>
-                    <div v-if="expert.remarks" class="sm:col-span-2">
-                        <dt class="text-xs text-csc-ink-subtle">Internal remarks</dt>
-                        <dd class="leading-relaxed text-csc-ink-muted">{{ expert.remarks }}</dd>
-                    </div>
                 </dl>
             </AppCard>
 

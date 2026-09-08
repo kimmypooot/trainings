@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\Role;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\FieldOffice;
 use App\Models\Payment;
 use App\Models\Profile;
@@ -94,6 +95,29 @@ class AnalyticsReportTest extends TestCase
     }
 
     /** Drain a streamed download into a string. */
+    /**
+     * The overview prop is deferred, so a plain GET does not contain it and an
+     * assertion against overview.* would quietly be asserting about an absent
+     * key. This asks for it the way the browser does.
+     *
+     * The version must come from the middleware and be cast to a string: it
+     * hashes the Vite manifest, so it is null wherever the frontend has not
+     * been built, and an uncast null arrives as a header that cannot match the
+     * empty string the server computed — every visit then answers 409 instead
+     * of the status under test.
+     */
+    private function analyticsOverview(): TestResponse
+    {
+        $version = app(HandleInertiaRequests::class)->version(request());
+
+        return $this->get('/admin/analytics', [
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => (string) $version,
+            'X-Inertia-Partial-Component' => 'Admin/Analytics',
+            'X-Inertia-Partial-Data' => 'overview',
+        ]);
+    }
+
     private function body(TestResponse $response): string
     {
         return $response->streamedContent();
@@ -535,5 +559,44 @@ class AnalyticsReportTest extends TestCase
                 $this->assertContains('Foundations of Public Service — 03–04 March 2026', $labels->all());
                 $this->assertContains('Foundations of Public Service — 24–25 March 2026', $labels->all());
             });
+    }
+
+    /**
+     * One employer is one bar, whatever case its name is stored in.
+     *
+     * This is the one place in the application that groups employer names in
+     * PHP rather than in SQL, and PHP array keys are case-sensitive while the
+     * column's collation is not. Everywhere else folds case for free; here a
+     * picked agency ("Department of Education", the reference's own spelling)
+     * and a typed one ("DEPARTMENT OF EDUCATION") would stand as two bars for
+     * one employer — the exact split the agency list exists to end, reappearing
+     * on the one chart drawn to show it.
+     *
+     * The label is asserted too: where both spellings exist, the chart should
+     * show the reference's proper name rather than the shouted free-text one.
+     */
+    public function test_top_agencies_counts_one_employer_once_whatever_its_casing(): void
+    {
+        $training = Training::factory()->create();
+
+        foreach (['Department of Education', 'DEPARTMENT OF EDUCATION', 'department of education'] as $spelling) {
+            $registration = $this->registrationIn($this->officeA, $training, 'P '.$spelling);
+            $registration->user->profile->update(['organization_name' => $spelling]);
+        }
+
+        $rows = $this->actingAs($this->admin())
+            ->analyticsOverview()
+            ->assertOk()
+            ->json('props.overview.topAgencies');
+
+        $employers = array_column($rows, 'count', 'label');
+
+        $this->assertCount(1, $employers, 'Three spellings of one employer must be one bar.');
+        $this->assertSame(3, reset($employers));
+        $this->assertSame(
+            'Department of Education',
+            array_key_first($employers),
+            'The reference spelling wins the label, not the shouted one.'
+        );
     }
 }

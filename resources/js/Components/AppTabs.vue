@@ -46,6 +46,16 @@ defineProps({
         default: 'segmented',
         validator: (value) => ['segmented', 'underline'].includes(value),
     },
+    /*
+     * `segmented` only. Spans the container's full width with each tab
+     * sharing it equally, instead of the strip shrinking to its labels' own
+     * width. The station's three-tab list (Recent scans / Roster / QR codes)
+     * needed this — shrink-wrapped and `flex-wrap`, three labels plus icons
+     * plus counts had nowhere to go on a phone but onto a cramped second line
+     * inside the pill. A full-width, evenly-split strip gives each tab a
+     * touch target worth the name instead.
+     */
+    block: { type: Boolean, default: false },
 });
 
 defineEmits(['update:modelValue']);
@@ -109,7 +119,8 @@ const sizes = {
 
     <div
         v-else
-        class="inline-flex flex-wrap gap-1 rounded-xl bg-csc-blue-tint p-1 print:hidden"
+        class="gap-1 rounded-xl bg-csc-blue-tint p-1 print:hidden"
+        :class="block ? 'flex w-full' : 'inline-flex flex-wrap'"
         role="tablist"
         :aria-label="ariaLabel"
     >
@@ -119,9 +130,10 @@ const sizes = {
             type="button"
             role="tab"
             :aria-selected="modelValue === tab.key"
-            class="inline-flex items-center gap-1.5 rounded-lg font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
+            class="items-center gap-1.5 rounded-lg font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
             :class="[
                 sizes.segmented[size],
+                block ? 'flex flex-1 justify-center' : 'inline-flex',
                 modelValue === tab.key
                     ? 'bg-csc-blue text-white shadow-sm'
                     : 'text-csc-ink-muted hover:bg-white/70 hover:text-csc-blue',

@@ -27,6 +27,19 @@ const props = defineProps({
     // shouldn't show the header bar with its close button — there is nothing
     // to dismiss except the choice itself.
     hideHeader: { type: Boolean, default: false },
+    /*
+     * Let a child draw outside the body.
+     *
+     * The body scrolls by default, which is right for a long form and wrong
+     * for a modal whose whole content is a combobox: the results list is
+     * positioned against the field, so a clipping ancestor cuts it off after
+     * the first row and scrolls the dialog instead of floating over it.
+     *
+     * Only for a dialog whose content is short enough not to need scrolling —
+     * it gives up the body's own scrollbar. The backdrop still scrolls, so an
+     * over-tall one is reachable rather than trapped.
+     */
+    allowOverflow: { type: Boolean, default: false },
     size: {
         type: String,
         default: 'md', // sm | md | lg
@@ -134,8 +147,8 @@ onBeforeUnmount(release);
                     aria-modal="true"
                     :aria-labelledby="title ? titleId : undefined"
                     tabindex="-1"
-                    class="my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
-                    :class="width"
+                    class="my-auto flex w-full flex-col rounded-2xl bg-white shadow-2xl focus:outline-none"
+                    :class="[width, allowOverflow ? '' : 'max-h-[calc(100dvh-2rem)] overflow-hidden']"
                 >
                     <header
                         v-if="!hideHeader"
@@ -158,7 +171,10 @@ onBeforeUnmount(release);
                         </button>
                     </header>
 
-                    <div class="flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5">
+                    <div
+                        class="flex-1 px-5 py-4 sm:px-6 sm:py-5"
+                        :class="allowOverflow ? '' : 'overflow-y-auto'"
+                    >
                         <slot />
                     </div>
 

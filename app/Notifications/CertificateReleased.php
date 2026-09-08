@@ -8,6 +8,11 @@ class CertificateReleased extends ParticipantNotification
 {
     public function __construct(private readonly Certificate $certificate) {}
 
+    public function kind(): string
+    {
+        return 'certificate';
+    }
+
     public function title(object $notifiable): string
     {
         return "Your certificate for “{$this->certificate->training->title}” is ready";

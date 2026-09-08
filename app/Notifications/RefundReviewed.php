@@ -17,6 +17,11 @@ class RefundReviewed extends ParticipantNotification
 {
     public function __construct(private readonly RefundRequest $request) {}
 
+    public function kind(): string
+    {
+        return 'refund';
+    }
+
     public function title(object $notifiable): string
     {
         return match ($this->request->status) {

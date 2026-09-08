@@ -178,15 +178,18 @@ class PaymentTest extends TestCase
     }
 
     /**
-     * A missing slip is a gap for staff to chase, not a wall for the
-     * participant.
+     * An online transfer has nothing else standing behind it — no counter
+     * receipt, no signed note, nothing CSC's own records already show — so
+     * unlike a method with its own paper, the slip *is* the only evidence the
+     * money moved and its absence is refused rather than merely flagged.
      *
-     * Refusing the submission put everybody who cannot scan — no printer, a
-     * lost slip, a transfer somebody else made — through the counter, which is
-     * a lot of load to add for a document staff can ask for. So it goes
-     * through, and the queue is told.
+     * This reverses what the participant form used to do: refusing the
+     * submission used to push everybody who cannot scan — no printer, a lost
+     * slip, a transfer somebody else made — through the counter, and the
+     * queue was told about the gap instead. The office decided that trade the
+     * other way — see PaymentMethod::requiresProof().
      */
-    public function test_an_online_transfer_without_proof_is_accepted(): void
+    public function test_an_online_transfer_without_proof_is_refused(): void
     {
         $participant = $this->participant();
         $registration = $this->paidRegistration($participant);
@@ -198,12 +201,19 @@ class PaymentTest extends TestCase
                 'payment_method' => PaymentMethod::Online->value,
                 'payment_date' => now()->subDay()->toDateString(),
             ])
-            ->assertSessionHasNoErrors()
-            ->assertSessionHas('success');
+            ->assertSessionHasErrors('proof');
 
-        $this->assertNull(Payment::sole()->proof_path);
+        $this->assertSame(0, Payment::count());
     }
 
+    /**
+     * Official receipt is the one method left where a missing document is a
+     * gap for staff to chase rather than a wall for the participant: its
+     * whole purpose is filing a claim CSC's own records do not show, and
+     * demanding the one document that stands for the claim would refuse the
+     * very case the method exists for. See PaymentMethod::expectsProof() vs
+     * ::requiresProof().
+     */
     public function test_the_verification_queue_flags_a_missing_slip(): void
     {
         $participant = $this->participant();
@@ -211,7 +221,8 @@ class PaymentTest extends TestCase
 
         $this->actingAs($participant)->post("/my/registrations/{$registration->id}/payments", [
             'amount' => 1500,
-            'payment_method' => PaymentMethod::Online->value,
+            'payment_method' => PaymentMethod::OfficialReceipt->value,
+            'reference_number' => 'OR-2026-00123',
             'payment_date' => now()->subDay()->toDateString(),
         ]);
 
@@ -274,10 +285,107 @@ class PaymentTest extends TestCase
                 'amount' => 1500,
                 'payment_method' => PaymentMethod::Lddap->value,
                 'payment_date' => now()->subDay()->toDateString(),
+                // Required like every other bank-settled method — the ADA
+                // itself is the only evidence CSC has that the agency's
+                // accountant actually drew on it.
+                'proof' => UploadedFile::fake()->create('ada.pdf', 60, 'application/pdf'),
             ])
             ->assertSessionHas('success');
 
         $this->assertSame(PaymentMethod::Lddap, Payment::sole()->payment_method);
+    }
+
+    // --- Deposit slips -------------------------------------------------
+
+    public function test_the_deposit_slip_methods_are_offered(): void
+    {
+        $offered = collect(PaymentMethod::options())->keyBy('value');
+
+        $this->assertSame('Cash Deposit Slip', $offered['cash_deposit_slip']['label']);
+        $this->assertSame('Check Deposit Slip', $offered['check_deposit_slip']['label']);
+        $this->assertTrue($offered['cash_deposit_slip']['requires_proof']);
+        $this->assertTrue($offered['check_deposit_slip']['requires_proof']);
+    }
+
+    /**
+     * A cash or cheque deposited over a bank counter, distinct from Cash and
+     * Check — those are the walk-in case where the collecting officer has the
+     * money (or the cheque) in hand and there is nothing to attach. A deposit
+     * slip is the only evidence CSC has that this happened at all, so unlike
+     * the walk-in pair it is refused without one.
+     */
+    public function test_a_cash_deposit_slip_requires_proof(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::CashDepositSlip->value,
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHasErrors('proof');
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::CashDepositSlip->value,
+                'payment_date' => now()->subDay()->toDateString(),
+                'proof' => UploadedFile::fake()->create('cash-deposit-slip.jpg', 60, 'image/jpeg'),
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(PaymentMethod::CashDepositSlip, Payment::sole()->payment_method);
+    }
+
+    public function test_a_check_deposit_slip_requires_proof(): void
+    {
+        $participant = $this->participant();
+        $registration = $this->paidRegistration($participant);
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::CheckDepositSlip->value,
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertSessionHasErrors('proof');
+
+        $this->actingAs($participant)
+            ->post("/my/registrations/{$registration->id}/payments", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::CheckDepositSlip->value,
+                'payment_date' => now()->subDay()->toDateString(),
+                'proof' => UploadedFile::fake()->create('check-deposit-slip.jpg', 60, 'image/jpeg'),
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(PaymentMethod::CheckDepositSlip, Payment::sole()->payment_method);
+    }
+
+    /**
+     * The walk-in pair stays exempt: the collecting officer already has the
+     * cash or the cheque in hand, so there is nothing for the participant to
+     * attach — unlike the deposit-slip pair above, which exist for exactly
+     * the case where the money never crossed a CSC counter at all.
+     */
+    public function test_walk_in_cash_and_check_still_do_not_require_proof(): void
+    {
+        $participant = $this->participant();
+
+        foreach ([PaymentMethod::Cash, PaymentMethod::Check] as $method) {
+            $registration = $this->paidRegistration($participant);
+
+            $this->actingAs($participant)
+                ->post("/my/registrations/{$registration->id}/payments", [
+                    'amount' => 1500,
+                    'payment_method' => $method->value,
+                    'payment_date' => now()->subDay()->toDateString(),
+                ])
+                ->assertSessionHasNoErrors()
+                ->assertSessionHas('success');
+        }
     }
 
     /**
@@ -401,6 +509,112 @@ class PaymentTest extends TestCase
             ->post("/my/registrations/{$registration->id}/payments", [
                 'amount' => 1500,
                 'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+            ])
+            ->assertForbidden();
+    }
+
+    // --- Resubmitting a rejected payment -----------------------------------
+
+    public function test_a_participant_can_correct_and_resubmit_a_rejected_payment(): void
+    {
+        $participant = $this->participant();
+        $payment = Payment::factory()->rejected()->create([
+            'registration_id' => $this->paidRegistration($participant)->getKey(),
+            'user_id' => $participant->getKey(),
+        ]);
+
+        $this->actingAs($participant)
+            ->post("/my/payments/{$payment->id}/resubmit", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Online->value,
+                'reference_number' => 'REF987654321',
+                'payment_date' => now()->subDay()->toDateString(),
+                'proof' => UploadedFile::fake()->create('corrected-slip.pdf', 80, 'application/pdf'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $payment->refresh();
+
+        $this->assertSame(PaymentStatus::Pending, $payment->status);
+        $this->assertSame('REF987654321', $payment->reference_number);
+        $this->assertNull($payment->rejection_reason);
+        $this->assertNull($payment->verified_by);
+        $this->assertNull($payment->verified_at);
+        Storage::disk('local')->assertExists($payment->proof_path);
+    }
+
+    /** Resubmitting without a new file keeps the one already on record. */
+    public function test_resubmitting_without_a_new_file_keeps_the_existing_proof(): void
+    {
+        $participant = $this->participant();
+        $payment = Payment::factory()->rejected()->create([
+            'registration_id' => $this->paidRegistration($participant)->getKey(),
+            'user_id' => $participant->getKey(),
+            'proof_path' => 'payment-proofs/original.pdf',
+        ]);
+
+        $this->actingAs($participant)
+            ->post("/my/payments/{$payment->id}/resubmit", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Online->value,
+                'reference_number' => 'REF987654321',
+                'payment_date' => now()->subDay()->toDateString(),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame('payment-proofs/original.pdf', $payment->fresh()->proof_path);
+    }
+
+    public function test_a_pending_payment_cannot_be_resubmitted(): void
+    {
+        $participant = $this->participant();
+        $payment = Payment::factory()->create([
+            'registration_id' => $this->paidRegistration($participant)->getKey(),
+            'user_id' => $participant->getKey(),
+        ]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('cannot be resubmitted');
+
+        PaymentService::resubmit($payment, [
+            'amount' => 1500,
+            'payment_method' => PaymentMethod::Online->value,
+            'payment_date' => now()->toDateString(),
+        ]);
+    }
+
+    public function test_a_verified_payment_cannot_be_resubmitted(): void
+    {
+        $participant = $this->participant();
+        $payment = Payment::factory()->verified()->create([
+            'registration_id' => $this->paidRegistration($participant)->getKey(),
+            'user_id' => $participant->getKey(),
+        ]);
+
+        $this->actingAs($participant)
+            // Cash rather than Online: this test is about the status guard,
+            // not the proof requirement, and Cash needs no file to reach it.
+            ->post("/my/payments/{$payment->id}/resubmit", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Cash->value,
+                'payment_date' => now()->toDateString(),
+            ])
+            ->assertSessionHasErrors('payment');
+
+        $this->assertSame(PaymentStatus::Verified, $payment->fresh()->status);
+    }
+
+    public function test_a_participant_cannot_resubmit_someone_elses_payment(): void
+    {
+        $payment = Payment::factory()->rejected()->create();
+
+        $this->actingAs($this->participant())
+            ->post("/my/payments/{$payment->id}/resubmit", [
+                'amount' => 1500,
+                'payment_method' => PaymentMethod::Online->value,
                 'payment_date' => now()->toDateString(),
             ])
             ->assertForbidden();

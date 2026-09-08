@@ -81,6 +81,7 @@ class CertificateController extends Controller
                 // what a caller is looking at without leaving the page.
                 'verify_url' => $certificate->verificationUrl(),
                 'download_url' => route('admin.certificates.download', $certificate),
+                'view_url' => route('admin.certificates.view', $certificate),
             ]),
             'filters' => $filters,
             'stats' => $this->stats($officeId),
@@ -94,7 +95,11 @@ class CertificateController extends Controller
                 ->pluck('year')
                 ->map(fn ($year) => ['value' => (string) $year, 'label' => (string) $year])
                 ->all(),
-            'can' => ['resend' => $this->mayResend($request)],
+            // Regenerate carries the same permission as resend — both correct
+            // an already-issued document rather than issuing a new one — so
+            // one gate serves both rather than a second copy of the same role
+            // list drifting from it.
+            'can' => ['resend' => $this->mayResend($request), 'regenerate' => $this->mayResend($request)],
             'scopedTo' => $request->user()->fieldOffice?->name,
             // The export honours the same filters the register is showing, and
             // the field-office scope, so what staff download is what they see.
@@ -142,6 +147,7 @@ class CertificateController extends Controller
                 'last_downloaded_at' => $certificate->last_downloaded_at?->format('d M Y, g:i A'),
                 'verify_url' => $certificate->verificationUrl(),
                 'download_url' => route('admin.certificates.download', $certificate),
+                'view_url' => route('admin.certificates.view', $certificate),
                 // The same code printed on the document. Rendered server-side
                 // as a data URI so the page stays self-contained — no request
                 // to an external QR service with a certificate code in the URL.
@@ -166,7 +172,11 @@ class CertificateController extends Controller
                     'user_agent' => $hit->user_agent,
                 ])
                 ->all(),
-            'can' => ['resend' => $this->mayResend($request)],
+            // Regenerate carries the same permission as resend — both correct
+            // an already-issued document rather than issuing a new one — so
+            // one gate serves both rather than a second copy of the same role
+            // list drifting from it.
+            'can' => ['resend' => $this->mayResend($request), 'regenerate' => $this->mayResend($request)],
         ]);
     }
 
@@ -193,6 +203,26 @@ class CertificateController extends Controller
     }
 
     /**
+     * The same PDF as `download()`, but inline — a staff member confirming
+     * what a caller is looking at wants it opened beside this page, not saved
+     * to disk and reopened from downloads. Same authorization, same file.
+     */
+    public function view(Request $request, Certificate $certificate): StreamedResponse
+    {
+        $this->authorizeCertificate($request, $certificate);
+
+        abort_unless($certificate->isReleased(), 404);
+
+        abort_unless(Storage::disk(CertificateService::DISK)->exists($certificate->file_path), 404);
+
+        return Storage::disk(CertificateService::DISK)->download(
+            $certificate->file_path,
+            null,
+            ['Content-Disposition' => "inline; filename=\"{$certificate->certificate_number}.pdf\""],
+        );
+    }
+
+    /**
      * Send the certificate email again, ported from v1's
      * `send-certificate-email.php`.
      *
@@ -214,6 +244,26 @@ class CertificateController extends Controller
         return back()->with(
             'success',
             "Certificate {$certificate->certificate_number} re-sent to {$certificate->user->email}."
+        );
+    }
+
+    /**
+     * Re-render the stored PDF from the certificate's current data — the same
+     * number and verification code, a fresh file. For a name corrected on the
+     * profile after release, or a template fix that should reach a document
+     * already issued. Never automatic: see CertificateService::regenerate().
+     */
+    public function regenerate(Request $request, Certificate $certificate): RedirectResponse
+    {
+        $this->authorizeCertificate($request, $certificate);
+
+        abort_unless($certificate->isReleased(), 404);
+
+        CertificateService::regenerate($certificate, $request->user());
+
+        return back()->with(
+            'success',
+            "Certificate {$certificate->certificate_number} PDF regenerated."
         );
     }
 

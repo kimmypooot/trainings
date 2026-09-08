@@ -121,8 +121,6 @@ class SubjectMatterExpertController extends Controller
                 'email' => $expert->email,
                 'contact_number' => $expert->contact_number,
                 'expertise' => $expert->expertise,
-                'bio' => $expert->bio,
-                'remarks' => $expert->remarks,
                 'is_active' => $expert->is_active,
                 'trainings_count' => $expert->trainings_count,
                 'edit_url' => route('admin.smes.edit', $expert),
@@ -144,8 +142,6 @@ class SubjectMatterExpertController extends Controller
                 'email' => $expert->email,
                 'contact_number' => $expert->contact_number,
                 'expertise' => $expert->expertise,
-                'bio' => $expert->bio,
-                'remarks' => $expert->remarks,
                 'is_active' => $expert->is_active,
             ],
         ]);
@@ -212,8 +208,6 @@ class SubjectMatterExpertController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:32'],
             'expertise' => ['nullable', 'string', 'max:2000'],
-            'bio' => ['nullable', 'string', 'max:5000'],
-            'remarks' => ['nullable', 'string', 'max:2000'],
             'is_active' => ['boolean'],
         ]);
     }

@@ -93,6 +93,8 @@ export const paymentMethodValues = [
     'lddap',
     'promissory',
     'official_receipt',
+    'cash_deposit_slip',
+    'check_deposit_slip',
 ] as const;
 
 export type PaymentMethod = (typeof paymentMethodValues)[number];
@@ -167,14 +169,6 @@ export const supervisoryDocumentStatusValues = [
 ] as const;
 
 export type SupervisoryDocumentStatus = (typeof supervisoryDocumentStatusValues)[number];
-
-export const trainingLevelValues = [
-    'foundational',
-    'intermediate',
-    'advanced',
-] as const;
-
-export type TrainingLevel = (typeof trainingLevelValues)[number];
 
 export const trainingModeValues = [
     'face_to_face',

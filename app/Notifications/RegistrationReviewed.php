@@ -45,6 +45,21 @@ class RegistrationReviewed extends ParticipantNotification
         return parent::via($notifiable);
     }
 
+    /*
+     * The outcome, not the event: a confirmation and a refusal are the two
+     * things a participant most needs to tell apart in a list, and both would
+     * otherwise be one blue "registration" tile.
+     */
+    public function kind(): string
+    {
+        return match ($this->registration->status) {
+            RegistrationStatus::Approved => 'approved',
+            RegistrationStatus::Waitlisted => 'waitlisted',
+            RegistrationStatus::Rejected => 'rejected',
+            default => 'registered',
+        };
+    }
+
     public function title(object $notifiable): string
     {
         $training = $this->registration->training->title;

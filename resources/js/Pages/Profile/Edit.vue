@@ -1,11 +1,14 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import AppAvatar from '@/Components/AppAvatar.vue';
+import AppAvatarCropper from '@/Components/AppAvatarCropper.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppCard from '@/Components/AppCard.vue';
 import AppIcon from '@/Components/AppIcon.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
+import AgencyFields from '@/Components/AgencyFields.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppModal from '@/Components/AppModal.vue';
 import AppSelect from '@/Components/AppSelect.vue';
@@ -47,6 +50,7 @@ const form = useForm({
 
     position_title: props.profile?.position_title ?? '',
     salary_grade: props.profile?.salary_grade ?? '',
+    agency_id: props.profile?.agency_id ?? '',
     organization_name: props.profile?.organization_name ?? '',
     sector: props.profile?.sector ?? '',
     region: regionInit,
@@ -64,7 +68,16 @@ const form = useForm({
 // The state the page loaded with. `isDirty` compares against this, and a
 // successful save re-baselines it, so the guard never complains about a
 // profile that was just persisted.
-const pristine = { ...form.data() };
+//
+// Reactive, not a plain object: `isDirty` below reads `pristine[key]` inside
+// a `.some()` that short-circuits on the first mismatch, so Vue's computed
+// caches its result and only tracks the fields it read before stopping. A
+// plain object's mutation (the re-baseline on save) is invisible to that
+// tracking, so the cached `true` from the edit session would survive the
+// save and the guard would fire on the very next navigation even though
+// nothing was left unsaved. Making pristine reactive means the fields it
+// reads are tracked too, so re-baselining it correctly invalidates the cache.
+const pristine = reactive({ ...form.data() });
 
 // Region → Province → City/Municipality cascade, fed by the PSGC reference.
 // Each select only lists the children of the pick above it; changing a parent
@@ -111,14 +124,14 @@ watch(
 // Employment classification, derived from the saved sector. Profiles whose
 // sector is private/others fall under "Private"; everything else is treated as
 // a government employee so the normal fields stay available.
-const isPrivateSector = ['Private Sector', 'Non-Government Organization', 'Other'].includes(props.profile?.sector);
+const isPrivateSector = ['Private Sector', 'Non-Government Organization (NGO)', 'Other'].includes(props.profile?.sector);
 const employmentType = ref(isPrivateSector ? 'private' : 'government');
 const isPrivate = computed(() => employmentType.value === 'private');
 
 // Non-government roles: salary grade and position level do not apply, and
 // employment status is "Others". Sector stays pickable so an NGO or "Other"
 // profile keeps its own answer instead of being forced to Private Sector.
-const privateSectorOptions = ['Private Sector', 'Non-Government Organization', 'Other'];
+const privateSectorOptions = ['Private Sector', 'Non-Government Organization (NGO)', 'Other'];
 
 // What the employment gate overwrote on load, so a Government → Private →
 // Government round trip restores the participant's own answers instead of
@@ -142,6 +155,22 @@ const applyGovernment = () => {
     if (form.position_level === 'Not Applicable') form.position_level = storedGovernment.position_level;
     if (form.employment_status === 'Others') form.employment_status = storedGovernment.employment_status;
     if (form.sector === 'Private Sector') form.sector = storedGovernment.sector;
+};
+
+/*
+ * A picked agency answers the employment-classification gate rather than
+ * arguing with it — the same rule as the first-time form, and for the same
+ * reason: the reference list knowing the employer is an NGA is better evidence
+ * than the radio button somebody pressed before they got to the agency field.
+ *
+ * "Other" flips nothing; it is no evidence either way.
+ */
+const NON_GOVERNMENT_SECTORS = ['Private Sector', 'Non-Government Organization (NGO)'];
+
+const onAgencySelected = (agency) => {
+    if (!agency || agency.sector === 'Other') return;
+
+    employmentType.value = NON_GOVERNMENT_SECTORS.includes(agency.sector) ? 'private' : 'government';
 };
 
 watch(employmentType, (value) => {
@@ -373,6 +402,17 @@ const photoVisit = (options = {}) => {
 
 const choosePhoto = () => photoInput.value?.click();
 
+/*
+ * The photo picked from disk, held only long enough to be cropped.
+ *
+ * Nothing is uploaded yet at this point — AppAvatarCropper produces the file
+ * that actually gets posted, once the participant has said which part of the
+ * photo to keep. Server-side, AvatarImageService still centre-crops whatever
+ * arrives, but the cropper always hands back a square, so that step becomes
+ * a no-op on the common case rather than the only crop that ever happened.
+ */
+const croppingFile = ref(null);
+
 const onPhotoChosen = (event) => {
     const file = event.target.files?.[0] ?? null;
     // Clear the input so re-picking the same file still fires a change.
@@ -382,11 +422,21 @@ const onPhotoChosen = (event) => {
     photoError.value = null;
 
     // Mirrors the server rules, so an obviously-too-large file is refused
-    // before it is uploaded rather than after.
+    // before it is even opened for cropping.
     if (file.size > 2 * 1024 * 1024) {
         photoError.value = 'The photo may not be larger than 2 MB.';
         return;
     }
+
+    croppingFile.value = file;
+};
+
+const cancelCrop = () => {
+    croppingFile.value = null;
+};
+
+const uploadCroppedPhoto = (file) => {
+    croppingFile.value = null;
 
     releasePreview();
     localPreview.value = URL.createObjectURL(file);
@@ -593,6 +643,7 @@ onBeforeUnmount(() => {
 
     <AuthenticatedLayout title="My Profile" current="profile">
         <div class="mx-auto max-w-7xl space-y-5">
+
             <!-- Identity summary -->
             <AppCard>
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -644,6 +695,9 @@ onBeforeUnmount(() => {
                                     worse than one that simply says nothing.
                                 -->
                             </p>
+                        </div>
+                        <div class="mt-3">
+                            <AppHelpLink anchor="profile">What CSC needs from your profile, and why</AppHelpLink>
                         </div>
                     </div>
 
@@ -798,7 +852,7 @@ onBeforeUnmount(() => {
                                 <button
                                     v-if="user.avatar"
                                     type="button"
-                                    class="text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-csc-red-ink hover:underline disabled:opacity-50"
+                                    class="text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-danger hover:underline disabled:opacity-50"
                                     :disabled="photoBusy"
                                     @click="removePhoto"
                                 >
@@ -806,7 +860,7 @@ onBeforeUnmount(() => {
                                 </button>
                             </div>
 
-                            <p v-if="photoError" class="mt-1.5 text-xs font-medium text-csc-red-ink">
+                            <p v-if="photoError" class="mt-1.5 text-xs font-medium text-danger">
                                 {{ photoError }}
                             </p>
                             <p v-else class="mt-1.5 text-xs text-csc-ink-subtle">
@@ -993,7 +1047,7 @@ onBeforeUnmount(() => {
                             </p>
                             <button
                                 type="button"
-                                class="mt-2 rounded text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-csc-red-ink hover:underline disabled:opacity-50"
+                                class="mt-2 rounded text-xs font-medium text-csc-ink-subtle underline-offset-2 hover:text-danger hover:underline disabled:opacity-50"
                                 :disabled="cancellingEmail"
                                 @click="cancelPendingEmail"
                             >
@@ -1260,7 +1314,7 @@ onBeforeUnmount(() => {
                         <div>
                             <p id="employment-type-label" class="mb-2 text-sm font-medium text-csc-ink">
                                 Are you a government employee?
-                                <span class="text-csc-red-ink" aria-hidden="true">*</span>
+                                <span class="text-danger" aria-hidden="true">*</span>
                             </p>
                             <div
                                 role="radiogroup"
@@ -1316,7 +1370,7 @@ onBeforeUnmount(() => {
                                     </span>
                                 </label>
                             </div>
-                            <p v-if="form.errors.employmentType" class="mt-1.5 text-xs font-medium text-csc-red-ink">
+                            <p v-if="form.errors.employmentType" class="mt-1.5 text-xs font-medium text-danger">
                                 {{ form.errors.employmentType }}
                             </p>
                         </div>
@@ -1367,39 +1421,14 @@ onBeforeUnmount(() => {
                                 />
                             </div>
 
-                            <div class="sm:col-span-12">
-                                <AppInput
-                                    v-model="form.organization_name"
-                                    label="Name of Agency / Company / Organization"
-                                    autocomplete="organization"
-                                    placeholder="e.g. DEPARTMENT OF EDUCATION"
-                                    maxlength="255"
-                                    hint="Enter the full name — do not abbreviate."
-                                    :error="errorFor('organization_name')"
-                                    uppercase
-                                    required
-                                />
-                            </div>
-
-                            <div class="sm:col-span-6">
-                                <AppSelect
-                                    v-model="form.sector"
-                                    label="Sector"
-                                    :options="isPrivate ? privateSectorOptions : options.sectors"
-                                    :hint="isPrivate ? 'Pick the closest match for your organization.' : undefined"
-                                    :error="errorFor('sector')"
-                                    required
-                                />
-                            </div>
-                            <div class="sm:col-span-6">
-                                <AppSelect
-                                    v-model="form.field_office_id"
-                                    label="CSC Field Office"
-                                    :options="options.fieldOffices"
-                                    :error="errorFor('field_office_id')"
-                                    required
-                                />
-                            </div>
+                            <AgencyFields
+                                :form="form"
+                                :options="options"
+                                :sector-options="isPrivate ? privateSectorOptions : options.sectors"
+                                :sector-hint="isPrivate ? 'Pick the closest match for your organization.' : undefined"
+                                :error-for="errorFor"
+                                @agency-selected="onAgencySelected"
+                            />
 
                             <div class="sm:col-span-12">
                                 <AppTextarea
@@ -1470,5 +1499,12 @@ onBeforeUnmount(() => {
                 </div>
             </template>
         </AppModal>
+
+        <AppAvatarCropper
+            :open="croppingFile !== null"
+            :file="croppingFile"
+            @cropped="uploadCroppedPhoto"
+            @close="cancelCrop"
+        />
     </AuthenticatedLayout>
 </template>

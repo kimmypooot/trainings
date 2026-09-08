@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Enums\PaymentMethod;
 use App\Enums\RegistrationStatus;
 use App\Enums\Role;
-use App\Enums\TrainingLevel;
 use App\Enums\TrainingMode;
 use App\Enums\TrainingStatus;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -251,7 +250,6 @@ class AdminAreaTest extends TestCase
                 'venue_details' => 'Link is re-sent an hour before each session.',
                 'meeting_link' => 'https://meet.google.com/abc-defg-hij',
                 'mode' => TrainingMode::Hybrid->value,
-                'level' => TrainingLevel::Intermediate->value,
                 'starts_at' => now()->addWeek()->format('Y-m-d\TH:i'),
                 'ends_at' => now()->addWeek()->addHours(8)->format('Y-m-d\TH:i'),
                 'capacity' => 25,
@@ -265,7 +263,6 @@ class AdminAreaTest extends TestCase
 
         $training = Training::first();
 
-        $this->assertSame(TrainingLevel::Intermediate, $training->level);
         $this->assertSame('https://meet.google.com/abc-defg-hij', $training->meeting_link);
         $this->assertSame('Link is re-sent an hour before each session.', $training->venue_details);
         $this->assertFalse($training->accepts_promissory);
@@ -293,9 +290,6 @@ class AdminAreaTest extends TestCase
             ->post('/admin/trainings', [
                 'title' => 'In Person Run',
                 'venue' => 'CSC Regional Office',
-                // Blank rather than absent: the select posts an empty string
-                // when HRD has not decided on a level.
-                'level' => '',
                 'mode' => TrainingMode::FaceToFace->value,
                 'starts_at' => now()->addWeek()->format('Y-m-d\TH:i'),
                 'ends_at' => now()->addWeek()->addHours(8)->format('Y-m-d\TH:i'),

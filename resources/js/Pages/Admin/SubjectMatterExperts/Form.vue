@@ -29,8 +29,6 @@ const form = useForm({
     email: props.expert?.email ?? '',
     contact_number: props.expert?.contact_number ?? '',
     expertise: props.expert?.expertise ?? '',
-    bio: props.expert?.bio ?? '',
-    remarks: props.expert?.remarks ?? '',
     is_active: props.expert?.is_active ?? true,
 });
 
@@ -100,19 +98,6 @@ const submit = () => {
                             :rows="2"
                             hint="What this expert is usually invited to deliver. Shown on the directory."
                             :error="form.errors.expertise"
-                        />
-                        <AppTextarea
-                            v-model="form.bio"
-                            label="Short Biography"
-                            :rows="4"
-                            :error="form.errors.bio"
-                        />
-                        <AppTextarea
-                            v-model="form.remarks"
-                            label="Internal Remarks"
-                            :rows="2"
-                            hint="Scheduling notes, availability, honorarium arrangements."
-                            :error="form.errors.remarks"
                         />
 
                         <label class="flex items-start gap-3">

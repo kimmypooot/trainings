@@ -23,3 +23,77 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# Compress text responses.
+#
+# This is the single largest performance lever the application has, and it is
+# server configuration rather than code: nothing in Laravel or Vite can turn it
+# on. Inertia ships each page as JSON — the profile form alone is ~117 KB of it,
+# 85 KB being the agency picker's few hundred rows — and that JSON is almost
+# entirely repeated keys and repeated office names, so it compresses by roughly
+# an order of magnitude. Vite's build output already reports gzip sizes; those
+# numbers are what a visitor actually downloads only if the server does this.
+#
+# It matters here more than it would elsewhere. This system is used from field
+# offices and from training venues — the scanning station is built offline-first
+# precisely because the connection at a venue cannot be relied on — so a page
+# that is ten times smaller is the difference between usable and not.
+#
+# Images, PDFs, fonts and the archives tims:backup writes are already
+# compressed; running deflate over them spends CPU to make them very slightly
+# larger, so they are excluded rather than listed.
+<IfModule mod_deflate.c>
+    <IfModule mod_filter.c>
+        AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+        AddOutputFilterByType DEFLATE text/javascript application/javascript
+        AddOutputFilterByType DEFLATE application/json application/ld+json
+        AddOutputFilterByType DEFLATE application/xml application/rss+xml
+        AddOutputFilterByType DEFLATE image/svg+xml
+    </IfModule>
+</IfModule>
+
+# Cache the built assets forever; never cache the documents.
+#
+# Everything Vite emits into /build carries a content hash in its filename, so
+# a changed file is a changed URL and a stale cache is impossible by
+# construction. Without this the browser revalidates every chunk on every
+# navigation — a round trip each, on a connection where the round trip is the
+# expensive part — and answers 304 every time.
+#
+# The HTML document and every Inertia JSON response must NOT be cached: they
+# carry the CSRF token, the signed-in user's identity and their flash messages,
+# and a cached copy served to the next person on a shared office machine is a
+# correctness and privacy problem, not a performance one. Laravel already sends
+# no-cache on session responses; this states it for the front controller too
+# rather than relying on that.
+<IfModule mod_headers.c>
+    # Scoped to /build/ deliberately, and NOT applied by file extension alone.
+    #
+    # Only Vite's output carries a content hash, so only it is safe to freeze.
+    # public/ also holds files whose names never change — the seal and the
+    # favicon, and above all public/scanner-sw.js. Marking a service worker
+    # immutable for a year would strand every scanning station on the build it
+    # first installed, unable to take a fix, on the one screen in this system
+    # that runs offline at a venue with nobody available to clear a cache. An
+    # extension-matched rule would have done exactly that.
+    SetEnvIf Request_URI "/build/" TIMS_HASHED_ASSET=1
+    Header set Cache-Control "public, max-age=31536000, immutable" env=TIMS_HASHED_ASSET
+
+    # The service worker decides when every other cached asset is replaced, so
+    # it is the one file that must always be fetched fresh.
+    <FilesMatch "^scanner-sw\.js$">
+        Header set Cache-Control "no-cache, must-revalidate, max-age=0"
+    </FilesMatch>
+
+    # The HTML document and every Inertia JSON response carry the CSRF token,
+    # the signed-in user's identity and their flash messages. A cached copy
+    # served to the next person on a shared office machine is a correctness and
+    # privacy problem, not a performance one.
+    <FilesMatch "\.(php|html)$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    </FilesMatch>
+
+    # Vary on Accept-Encoding so a shared cache never hands a compressed body
+    # to a client that did not ask for one.
+    Header append Vary Accept-Encoding
+</IfModule>

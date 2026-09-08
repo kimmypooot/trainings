@@ -9,6 +9,11 @@ class PaymentReviewed extends ParticipantNotification
 {
     public function __construct(private readonly Payment $payment) {}
 
+    public function kind(): string
+    {
+        return $this->payment->status === PaymentStatus::Verified ? 'payment' : 'rejected';
+    }
+
     public function title(object $notifiable): string
     {
         $training = $this->payment->training->title;

@@ -22,11 +22,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * v1's `training_activity_log` is not reproduced either: activity_logs already
  * records every transition, and a second per-feature trail was exactly the
- * fragmentation that made v1's history unreadable.
- *
- * This is deliberately separate from the existing `training_requests` table,
- * which in this codebase means something else — a participant suggesting a
- * topic, ending in a Training being created. See AgencyRequestStatus.
+ * fragmentation that made v1's history unreadable. See AgencyRequestStatus.
  */
 return new class extends Migration
 {

@@ -11,11 +11,9 @@ namespace App\Enums;
  * requirements, the agency returns a signed confirmation, runs the training,
  * and finally submits the post-training documents and proof of payment.
  *
- * Deliberately not RequestStatus, and deliberately not the same table as v2's
- * `training_requests`. That one is a suggestion box — a participant proposing a
- * topic CSC might run for the region, which ends with a Training being created.
- * This one ends with an agency having run its own training and CSC holding the
- * paperwork. Same opening sentence, different process.
+ * Deliberately not RequestStatus: this ends with an agency having run its own
+ * training and CSC holding the paperwork, which is a correspondence rather
+ * than a simple approve/reject decision.
  */
 enum AgencyRequestStatus: string
 {

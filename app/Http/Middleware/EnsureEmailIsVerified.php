@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Controllers\Auth\EmailVerificationController;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -27,7 +28,11 @@ class EnsureEmailIsVerified
         }
 
         if ($user && ! $user->hasVerifiedEmail()) {
-            return redirect()->route('verification.notice');
+            // Say why, in the same words the notice page's own "continue"
+            // button gets: landing back on the page you just left, with
+            // nothing said, reads as a dead control rather than as an answer.
+            return redirect()->route('verification.notice')
+                ->with('error', EmailVerificationController::NOT_YET_VERIFIED);
         }
 
         return $next($request);

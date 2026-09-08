@@ -45,20 +45,38 @@ return [
     'address' => env('OFFICE_ADDRESS', 'Government Center, Candahug, Palo, Leyte'),
 
     /*
-     * The prefix on a printed certificate number: CSC8-2026-000042.
+     * The prefix on a printed certificate number: CERT-2026-00042.
      *
-     * The "8" is Region VIII, so this is an office identity string like the
-     * rest — but unlike the others it is stored on the row, not just rendered,
-     * and it is quoted in correspondence ("certificate 42 of 2026"). Changing
-     * it therefore affects certificates issued from that point on and leaves
-     * every existing number exactly as it was printed, which is the right way
+     * This is an office identity string like the rest — but unlike the others
+     * it is stored on the row, not just rendered, and it is quoted in
+     * correspondence ("certificate 42 of 2026"). Changing it therefore
+     * affects certificates issued from that point on and leaves every
+     * existing number exactly as it was printed, which is the right way
      * round: an already-issued number must keep matching the paper copy.
      *
      * Deliberately not derived from `region`, which is a place name and not a
      * number, and not from `short_name`, which contains a space and roman
-     * numerals that do not belong in a serial.
+     * numerals that do not belong in a serial. A deployment that wants a
+     * region-coded prefix (CSC8 for Region VIII, say) sets it explicitly —
+     * the generic default carries no region of its own to be wrong.
      */
-    'certificate_prefix' => env('OFFICE_CERTIFICATE_PREFIX', 'CSC8'),
+    'certificate_prefix' => env('OFFICE_CERTIFICATE_PREFIX', 'CERT'),
+
+    /*
+     * Who signs a certificate when the training itself names nobody.
+     *
+     * `trainings.signatory_name` wins when a run sets it — a training
+     * actually presided over by someone else should read that way. This is
+     * the office-wide fallback for the common case, where the same person
+     * (typically the Director) signs most runs. Left null, the template
+     * prints the generic "Authorized Signatory" rather than guessing a name —
+     * no signatory beats the wrong one, the same rule every field here
+     * follows. `default_signatory_title` is the line beneath the name (a job
+     * title, "Director IV" say) and is independent of `short_name`, which is
+     * the office's own short name, not a person's title.
+     */
+    'default_signatory_name' => env('OFFICE_DEFAULT_SIGNATORY_NAME'),
+    'default_signatory_title' => env('OFFICE_DEFAULT_SIGNATORY_TITLE'),
 
     /*
      * Deliberately null by default. The old number was verifiably the wrong

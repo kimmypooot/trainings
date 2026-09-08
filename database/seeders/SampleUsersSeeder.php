@@ -100,9 +100,20 @@ class SampleUsersSeeder extends Seeder
             $count = fake()->numberBetween($min, $max);
 
             for ($i = 0; $i < $count; $i++) {
+                // The first account of every staff role is always active.
+                //
+                // `is_active` is a 92% coin flip per account and `admin` seeds
+                // between one and three of them, so roughly one run in forty
+                // produced a dataset with no usable admin at all — nobody who
+                // could sign in and open the admin area. That is a broken demo
+                // dataset before it is a failing test, and it failed as a flake
+                // that looked like whatever was being changed at the time.
+                //
+                // Only the first is forced, so the deactivated accounts the
+                // login guard and the user listing exist to show are still there.
                 $role === Role::Participant
                     ? $this->participant($offices)
-                    : $this->staff($role, $offices);
+                    : $this->staff($role, $offices, alwaysActive: $i === 0);
             }
 
             $created[$role->label()] = $count;
@@ -159,13 +170,13 @@ class SampleUsersSeeder extends Seeder
      * A staff account. Only field-office staff carry an office — that
      * assignment is what scopes everything they can see.
      */
-    private function staff(Role $role, $offices): void
+    private function staff(Role $role, $offices, bool $alwaysActive = false): void
     {
         $officeId = $role === Role::FieldOffice && $offices->isNotEmpty()
             ? fake()->randomElement($offices->all())
             : null;
 
-        $this->account($role, $officeId);
+        $this->account($role, $officeId, $alwaysActive);
     }
 
     /**
@@ -173,7 +184,7 @@ class SampleUsersSeeder extends Seeder
      * mass-assignable, so they are forced rather than filled — passing them to
      * fill() drops them silently and every account lands as a participant.
      */
-    private function account(Role $role, ?int $officeId): User
+    private function account(Role $role, ?int $officeId, bool $alwaysActive = false): User
     {
         $name = mb_strtoupper(fake()->name());
 
@@ -188,7 +199,11 @@ class SampleUsersSeeder extends Seeder
             'field_office_id' => $officeId,
             // A few deactivated accounts, so the login guard and the user
             // listing have something real to show.
-            'is_active' => fake()->boolean(92),
+            // Drawn unconditionally even when the answer is forced: skipping
+            // the call would consume one fewer value from Faker's stream and
+            // every later field would shift, so a recorded SAMPLE_*_SEED would
+            // no longer replay the dataset it was recorded from.
+            'is_active' => fake()->boolean(92) || $alwaysActive,
             'email_verified_at' => now(),
             // Staff never fill in a participant profile; participants get one
             // written immediately after this.

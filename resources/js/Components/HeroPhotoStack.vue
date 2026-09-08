@@ -64,14 +64,20 @@ const drop = (src) => {
                 class="absolute overflow-hidden rounded-2xl bg-white/10 p-1.5 shadow-2xl ring-1 ring-white/25 backdrop-blur-sm"
                 :class="photo.className"
             >
-                <img
-                    :src="photo.src"
-                    :alt="photo.alt"
-                    loading="lazy"
-                    decoding="async"
-                    class="size-full rounded-xl object-cover"
-                    @error="drop(photo.src)"
-                />
+                <!-- WebP first, JPEG fallback, same convention as AppBrandBackdrop's
+                     facade photo — each source ships a sibling .webp generated
+                     alongside it. -->
+                <picture>
+                    <source :srcset="photo.src.replace(/\.jpe?g$/i, '.webp')" type="image/webp" />
+                    <img
+                        :src="photo.src"
+                        :alt="photo.alt"
+                        loading="lazy"
+                        decoding="async"
+                        class="size-full rounded-xl object-cover"
+                        @error="drop(photo.src)"
+                    />
+                </picture>
             </figure>
         </template>
     </div>

@@ -81,6 +81,8 @@ class OfficeSettingController extends Controller
             'phone' => ['nullable', 'string', 'max:64'],
             'email' => ['nullable', 'email', 'max:128'],
             'certificate_prefix' => ['required', 'string', 'max:16', 'regex:/^[A-Za-z0-9-]+$/'],
+            'default_signatory_name' => ['nullable', 'string', 'max:128'],
+            'default_signatory_title' => ['nullable', 'string', 'max:128'],
         ], [
             'certificate_prefix.regex' => 'The prefix may use letters, numbers and hyphens only — it becomes part of a printed certificate number.',
             'psgc_region.in' => 'Choose the region from the list, so it matches the names used on participants\' profiles.',

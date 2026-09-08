@@ -48,6 +48,21 @@ enum PaymentMethod: string
      * instead of being stuck with a payment that has nowhere to go.
      */
     case OfficialReceipt = 'official_receipt';
+    /*
+     * Money deposited to CSC's account over a bank counter rather than
+     * handed over in person — distinct from Cash, which is the walk-in case
+     * the collecting officer already has in hand and has nothing to upload
+     * for. A deposit slip is the one piece of paper proving this happened at
+     * all, so unlike Cash it always carries a proof requirement — see
+     * requiresProof().
+     */
+    case CashDepositSlip = 'cash_deposit_slip';
+    /*
+     * The cheque counterpart of CashDepositSlip: a cheque deposited to the
+     * bank rather than handed to a collecting officer at a walk-in counter,
+     * where Check already covers the in-person case with no slip to chase.
+     */
+    case CheckDepositSlip = 'check_deposit_slip';
 
     public function label(): string
     {
@@ -59,6 +74,8 @@ enum PaymentMethod: string
             self::Lddap => 'LDDAP-ADA',
             self::Promissory => 'Promissory Note',
             self::OfficialReceipt => 'Official Receipt (already paid, not yet reflected)',
+            self::CashDepositSlip => 'Cash Deposit Slip',
+            self::CheckDepositSlip => 'Check Deposit Slip',
         };
     }
 
@@ -79,29 +96,61 @@ enum PaymentMethod: string
     }
 
     /**
-     * Whether a document is expected with this payment — not demanded.
+     * Whether a document is expected with this payment — a flag for the
+     * verification queue, not the submission form.
      *
-     * An online transfer leaves nothing at the office: no counter receipt, no
-     * signed note, and since the participant form stopped asking, no reference
-     * number either. So the slip is what finance would otherwise match against
-     * the bank statement, and its absence is worth knowing about.
+     * `proof_missing` (Admin\PaymentController::index()) reads this to warn a
+     * reviewer, and it stays useful for exactly the row requiresProof() below
+     * cannot reach: one entered by a collecting officer through the *counter*
+     * form (Admin\PaymentController::record()), which has never had a file
+     * upload of its own, so nothing there can be "required" in the way the
+     * participant's own form can enforce. Every method requiresProof() covers
+     * is expected here too, for that reason — the two lists agree, they just
+     * answer different questions to different screens.
      *
-     * Expected rather than required on purpose. Refusing the submission put
-     * every participant who cannot scan — no printer, a lost slip, a transfer
-     * made by somebody else — through the counter, which is a lot of load to
-     * add for a document staff can chase. So the payment is accepted and the
-     * gap is raised in the verification queue instead, where somebody can do
-     * something about it. Cash and a promissory note carry their own paper and
-     * are never flagged.
-     *
-     * An official receipt is the opposite case from cash: the whole point of
-     * choosing it is that CSC's own records do not show the payment, so a
-     * photo of the OR is the only thing staff have to go on while they chase
-     * down where it went missing.
+     * Cash and Check are walk-in payments with their own paper already in
+     * the collecting officer's hand, and a promissory note *is* its own
+     * document, so none of the three is ever flagged. An official receipt is
+     * the opposite case from cash: the whole point of choosing it is that
+     * CSC's own records do not show the payment, so a photo of the OR is the
+     * only thing staff have to go on while they chase down where it went
+     * missing — expected here, though see requiresProof() for why it is not
+     * on that stricter list.
      */
     public function expectsProof(): bool
     {
-        return in_array($this, [self::Online, self::OfficialReceipt], true);
+        return in_array($this, [
+            self::Online, self::OfficialReceipt, self::Lddap,
+            self::CashDepositSlip, self::CheckDepositSlip,
+        ], true);
+    }
+
+    /**
+     * Whether the participant's own form must refuse a submission with no
+     * file attached.
+     *
+     * Online, LDDAP-ADA and the two deposit slips have nothing else standing
+     * behind them: no counter receipt, no signed note, nothing CSC's own
+     * records already show — the slip *is* the only evidence the money moved,
+     * so unlike expectsProof() above (a soft flag for the review queue) this
+     * one is enforced at the door, in PaymentController::store() and
+     * ::resubmit().
+     *
+     * This used to be soft for Online and LDDAP too, on the reasoning that
+     * refusing the submission pushes every participant who cannot scan — no
+     * printer, a lost slip, a transfer made by somebody else — through the
+     * counter. The office decided that trade the other way: a bank-settled
+     * payment with nothing to check it against is now refused rather than
+     * merely flagged. Cash and Check keep their receipt in the collecting
+     * officer's hand already, and a promissory note is itself the document.
+     * Official receipt stays off this list deliberately, unchanged by that
+     * policy shift — see expectsProof() for what it keeps instead.
+     */
+    public function requiresProof(): bool
+    {
+        return in_array($this, [
+            self::Online, self::Lddap, self::CashDepositSlip, self::CheckDepositSlip,
+        ], true);
     }
 
     /**
@@ -179,11 +228,13 @@ enum PaymentMethod: string
 
     /**
      * The dropdowns. Selectable methods only, each carrying whether a document
-     * is expected with it and whether it has a reference number at all — so a
-     * form shows the fields the method actually has from the same source the
-     * server reads, rather than a second copy of the rule that drifts.
+     * is expected with it, whether one is outright required, and whether it
+     * has a reference number at all — so a form shows the fields the method
+     * actually has, and marks the file field required or not, from the same
+     * source the server validates against, rather than a second copy of the
+     * rule that drifts.
      *
-     * @return array<int, array{value: string, label: string, expects_proof: bool, collects_reference: bool}>
+     * @return array<int, array{value: string, label: string, expects_proof: bool, requires_proof: bool, collects_reference: bool}>
      */
     public static function options(): array
     {
@@ -192,6 +243,7 @@ enum PaymentMethod: string
                 'value' => $method->value,
                 'label' => $method->label(),
                 'expects_proof' => $method->expectsProof(),
+                'requires_proof' => $method->requiresProof(),
                 'collects_reference' => $method->collectsReference(),
             ],
             self::selectable()

@@ -7,6 +7,7 @@ import AppButton from '@/Components/AppButton.vue';
 import AppBadge from '@/Components/AppBadge.vue';
 import AppAlert from '@/Components/AppAlert.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppFilterChips from '@/Components/AppFilterChips.vue';
 import AppPagination from '@/Components/AppPagination.vue';
 import AppRowActions from '@/Components/AppRowActions.vue';
 import AppStatTile from '@/Components/AppStatTile.vue';
@@ -151,31 +152,8 @@ const totals = computed(() => {
                 />
             </div>
 
-            <div class="flex flex-wrap gap-2" role="tablist" aria-label="Filter trainings by status">
-                <button
-                    v-for="tab in tabs"
-                    :key="tab.value"
-                    type="button"
-                    role="tab"
-                    :aria-selected="status === tab.value"
-                    class="rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        status === tab.value
-                            ? 'bg-csc-blue text-white'
-                            : 'bg-white text-csc-ink-muted ring-1 ring-csc-line hover:text-csc-blue'
-                    "
-                    @click="status = tab.value"
-                >
-                    {{ tab.label }}
-                    <span
-                        v-if="tab.count"
-                        class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                        :class="status === tab.value ? 'bg-white/20' : 'bg-csc-red text-white'"
-                    >
-                        {{ tab.count }}
-                    </span>
-                </button>
-            </div>
+            <!-- The "All" chip is one of the tabs the server sends, with the catalogue total on it. -->
+            <AppFilterChips v-model="status" :options="tabs" aria-label="Filter trainings by status" />
 
             <!--
                  The results dim while a filtered visit is out. The controls above stay

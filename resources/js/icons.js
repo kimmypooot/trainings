@@ -95,6 +95,22 @@ export const icons = {
     // Board plus clip, drawn as one path so it keeps the 1.8 stroke of the set.
     clipboard: 'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM8 6H6.5A1.5 1.5 0 0 0 5 7.5v12A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 6H16',
     search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM20 20l-4.05-4.05',
+
+    /*
+     * The attendance station.
+     *
+     * A venue scanner is the one screen in this app whose controls are all
+     * about a piece of hardware, and it was labelling them in words alone
+     * because the set held no camera, torch or retry. At arm's length, over a
+     * queue, the glyph is read before the label is.
+     */
+    camera: 'M4 8h3l1.6-2.2a1 1 0 0 1 .8-.4h5.2a1 1 0 0 1 .8.4L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1ZM12 16.4a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z',
+    // The torch. Drawn as an outline like everything else here: a filled bolt
+    // would be the only solid shape in a stroked set.
+    flash: 'M13.2 3 6 13.2h4.6L10.8 21 18 10.8h-4.6L13.2 3Z',
+    pause: 'M9.5 5v14M14.5 5v14',
+    // Two arcs with their heads, as one path so the stroke matches the set.
+    refresh: 'M20 12a8 8 0 0 1-13.7 5.7M4 12a8 8 0 0 1 13.7-5.7M17.7 6.3h-4m4 0v-4M6.3 17.7h4m-4 0v4',
 };
 
 /** Names, for prop validators. */

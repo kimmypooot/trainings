@@ -8,8 +8,10 @@ import AppBadge from '@/Components/AppBadge.vue';
 import AppButton from '@/Components/AppButton.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
 import AppIcon from '@/Components/AppIcon.vue';
-import AppStat from '@/Components/AppStat.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
+import AppStatTile from '@/Components/AppStatTile.vue';
 import { formatDateRange } from '@/dateRange';
+import { tone } from '@/activityTone';
 
 const props = defineProps({
     summary: { type: Object, required: true },
@@ -188,28 +190,10 @@ const quickActions = [
 ];
 
 /*
- * How each kind of event reads on the feed.
- *
- * The tones borrow the semantic palette the badges already use, so a green tile
- * means the same thing here as it does anywhere else in the app. Every tile
- * also carries a distinct glyph — the feed has to survive greyscale print and
- * colour blindness on its own, exactly as AppBadge does.
+ * How each kind of event reads on the feed — the icon and the chip tone — is in
+ * activityTone.ts, because the notifications page draws the same events and two
+ * copies of the map would eventually show one event in two colours.
  */
-const activityTones = {
-    // The fallback matters more than it looks: the feed's kinds are minted
-    // server-side, and a new one arriving here without a matching entry used to
-    // take the whole dashboard down with a TypeError, nowhere near the change
-    // that caused it. An unstyled-but-rendered tile is the better failure.
-    default: { icon: 'clock', node: 'bg-csc-line/60 text-csc-ink-subtle' },
-    registered: { icon: 'bookmark', node: 'bg-csc-blue-tint text-csc-blue' },
-    approved: { icon: 'check', node: 'bg-info-soft text-info' },
-    waitlisted: { icon: 'clock', node: 'bg-warning-soft text-warning' },
-    rejected: { icon: 'close', node: 'bg-danger-soft text-danger' },
-    withdrawn: { icon: 'close', node: 'bg-csc-line/60 text-csc-ink-subtle' },
-    completed: { icon: 'check', node: 'bg-success-soft text-success' },
-    certificate: { icon: 'certificate', node: 'bg-success-soft text-success' },
-};
-
 // Consecutive entries sharing a day band sit under one heading, so the eye gets
 // "Today" once rather than the same date stamped on every row.
 const activityGroups = computed(() => {
@@ -229,8 +213,6 @@ const activityGroups = computed(() => {
     return groups;
 });
 
-const tone = (kind) => activityTones[kind] ?? activityTones.default;
-
 /*
  * The counts, as handles on the lists behind them.
  *
@@ -248,10 +230,40 @@ const tone = (kind) => activityTones[kind] ?? activityTones.default;
  * true, and a row that stays put can be aimed at without reading it first.
  */
 const stats = computed(() => [
-    { label: 'Pending', value: props.summary.pending, href: '/my/registrations?status=pending' },
-    { label: 'Approved', value: props.summary.registered, href: '/my/registrations?status=approved' },
-    { label: 'Completed', value: props.summary.completed, href: '/my/registrations?status=completed' },
-    { label: 'Certificates', value: props.summary.certificates, href: '/my/certificates' },
+    {
+        label: 'Pending',
+        value: props.summary.pending,
+        href: '/my/registrations?status=pending',
+        icon: 'clock',
+        // Amber only when there is something to wait for. A standing amber
+        // tile reading zero teaches the participant to stop reading the row.
+        tone: props.summary.pending > 0 ? 'warning' : 'brand',
+        caption: props.summary.pending > 0 ? 'Awaiting CSC approval' : 'Nothing awaiting approval',
+    },
+    {
+        label: 'Approved',
+        value: props.summary.registered,
+        href: '/my/registrations?status=approved',
+        icon: 'check-circle',
+        caption: 'Your slot is confirmed',
+    },
+    {
+        label: 'Completed',
+        value: props.summary.completed,
+        href: '/my/registrations?status=completed',
+        icon: 'bookmark',
+        caption: 'Trainings you have finished',
+    },
+    {
+        label: 'Certificates',
+        value: props.summary.certificates,
+        href: '/my/certificates',
+        icon: 'certificate',
+        // The one figure here that is unambiguously good news, so it is the
+        // one that gets the green. Nothing else on the row is a verdict.
+        tone: props.summary.certificates > 0 ? 'success' : 'brand',
+        caption: props.summary.certificates > 0 ? 'Ready to download' : 'None released yet',
+    },
 ]);
 </script>
 
@@ -266,6 +278,16 @@ const stats = computed(() => [
                     {{ greetingLine }}
                 </h2>
                 <p class="mt-1.5 text-sm leading-relaxed text-csc-ink-muted">{{ statusLine }}</p>
+
+                <!--
+                    Under the status line rather than beside the greeting: this
+                    is for the participant on their first visit, and it should be
+                    findable without competing with the sentence that tells a
+                    returning one what is waiting.
+                -->
+                <AppHelpLink anchor="getting-started" class="mt-2">
+                    New here? How CSC TIMS works
+                </AppHelpLink>
             </div>
 
             <!-- 2. Action required — rendered only when something is genuinely pending -->
@@ -473,7 +495,7 @@ const stats = computed(() => [
             <!-- 5. Recent activity -->
             <AppCard title="Recent Activity" :padded="recentActivity.length > 0">
                 <template v-if="recentActivity.length" #action>
-                    <AppButton href="/my/registrations" size="sm" variant="ghost">View All</AppButton>
+                    <AppButton href="/notifications" size="sm" variant="ghost">View All</AppButton>
                 </template>
 
                 <!--
@@ -551,12 +573,15 @@ const stats = computed(() => [
                 label, and the label is what breaks first, so they stack.
             -->
             <div class="grid grid-cols-1 gap-3 min-[26rem]:grid-cols-2 lg:grid-cols-4">
-                <AppStat
+                <AppStatTile
                     v-for="stat in stats"
                     :key="stat.label"
                     :label="stat.label"
                     :value="stat.value"
                     :href="stat.href"
+                    :icon="stat.icon"
+                    :tone="stat.tone ?? 'brand'"
+                    :caption="stat.caption"
                 />
             </div>
         </div>

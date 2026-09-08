@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ActivityLogController as AdminActivityLogController;
+use App\Http\Controllers\Admin\AgencyController as AdminAgencyController;
 use App\Http\Controllers\Admin\AgencyRequestController as AdminAgencyRequestController;
 use App\Http\Controllers\Admin\AnalyticsController as AdminAnalyticsController;
 use App\Http\Controllers\Admin\AttendanceController as AdminAttendanceController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Admin\EvaluationCodeController;
 use App\Http\Controllers\Admin\EvaluationController as AdminEvaluationController;
 use App\Http\Controllers\Admin\ExportController as AdminExportController;
 use App\Http\Controllers\Admin\FieldOfficeController as AdminFieldOfficeController;
+use App\Http\Controllers\Admin\HelpController as AdminHelpController;
 use App\Http\Controllers\Admin\MaintenanceController as AdminMaintenanceController;
 use App\Http\Controllers\Admin\OfficeSettingController as AdminOfficeSettingController;
 use App\Http\Controllers\Admin\ParticipantController as AdminParticipantController;
@@ -40,6 +42,7 @@ use App\Http\Controllers\CertificateVerificationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\EvaluationScanController;
+use App\Http\Controllers\HelpController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
@@ -51,7 +54,6 @@ use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\RegistrationOutputController;
 use App\Http\Controllers\ScanLinkController;
 use App\Http\Controllers\TrainingController;
-use App\Http\Controllers\TrainingRequestController;
 use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureProfileIsComplete;
 use App\Http\Middleware\EnsureUserCollectsPayments;
@@ -86,7 +88,20 @@ Route::permanentRedirect('/programs', '/#upcoming')->name('programs');
  * recreated as a file in public/.
  */
 Route::get('/robots.txt', function () {
-    return response("User-agent: *\nDisallow:\n\nSitemap: ".url('/sitemap.xml')."\n")
+    // Everything under these prefixes sits behind auth (or, for /station and
+    // /scan, behind a one-time code) — a crawler gets nothing there but a
+    // redirect to /login or a 403, so indexing them wastes crawl budget on a
+    // page with no content and risks the login form itself getting indexed
+    // as the "result". Listing them here is defence in depth, not the gate:
+    // the middleware groups in this file are what actually keep them private.
+    $private = [
+        '/dashboard', '/admin', '/profile', '/notifications', '/my',
+        '/station', '/scan', '/help/admin', '/auth/google',
+    ];
+
+    $disallow = implode("\n", array_map(fn (string $path) => "Disallow: {$path}", $private));
+
+    return response("User-agent: *\n{$disallow}\n\nSitemap: ".url('/sitemap.xml')."\n")
         ->header('Content-Type', 'text/plain');
 })->name('robots');
 
@@ -271,6 +286,10 @@ Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 've
 
 Route::middleware('auth')->group(function () {
     Route::get('/email/verify', [EmailVerificationController::class, 'notice'])->name('verification.notice');
+    // The notice page's "I've already verified — continue" button. One segment,
+    // so it cannot be mistaken for the two-segment signed link above.
+    Route::get('/email/verify/continue', [EmailVerificationController::class, 'check'])
+        ->name('verification.continue');
     Route::post('/email/verification-notification', [EmailVerificationController::class, 'send'])
         ->middleware('throttle:3,1')
         ->name('verification.send');
@@ -365,6 +384,18 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
          * relying on this line to narrow it.
          */
         Route::get('/search', SearchController::class)->name('search');
+
+        /*
+         * The staff guide. Every staff role, unnarrowed, because the page shows
+         * each reader the sections that apply to them — narrowing the route as
+         * well would mean maintaining the same role list twice and having it
+         * disagree with itself the first time one moved.
+         *
+         * Documentation, not a permission: what stops a field office releasing
+         * a certificate is the middleware on that route, not whether the guide
+         * mentions it.
+         */
+        Route::get('/help', AdminHelpController::class)->name('help');
 
         // Creating and editing trainings is HRD work; field offices and
         // management get the roster but not the pen.
@@ -493,6 +524,15 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                  */
                 Route::post('/scanner/walk-in', [ScannerController::class, 'walkIn'])
                     ->name('scanner.walk-in');
+
+                /*
+                 * The desk's QR lookup — for a participant who arrived
+                 * without the phone their code lives on. Deliberately
+                 * online, alongside walk-in admission and for the same
+                 * reason; see ScannerController::participantQr().
+                 */
+                Route::get('/scanner/registrations/{registration}/qr', [ScannerController::class, 'participantQr'])
+                    ->name('scanner.participant-qr');
 
                 /*
                  * Issuing a station to someone without an account. Kept with
@@ -664,6 +704,66 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('field-offices.destroy');
 
             /*
+             * Agencies: the employer list behind the profile form's picker.
+             *
+             * Reference data in the same sense a field office is, and managed
+             * by the same roles for the same reason — it is region-wide, so a
+             * field-office user editing it would be changing what every other
+             * office is offered.
+             *
+             * The index carries more than the list. `agency_id` was written by
+             * the profile form and read by nothing, so an employer missing
+             * from this list was invisible: the participant simply typed their
+             * own and nobody was told, which quietly rebuilds the "one
+             * employer, three spellings" split the table exists to end. The
+             * typed employers are ranked on that page, and `agencies.create`
+             * accepts a `name` so one becomes a row without retyping it.
+             */
+            Route::get('/agencies', [AdminAgencyController::class, 'index'])
+                ->name('agencies.index');
+            Route::get('/agencies/create', [AdminAgencyController::class, 'create'])
+                ->name('agencies.create');
+            Route::post('/agencies', [AdminAgencyController::class, 'store'])
+                ->name('agencies.store');
+
+            /*
+             * A typed employer that turned out to be an agency already on
+             * the list — "DEPED" against "Department of Education". Adding
+             * it again is refused by the unique name, correctly, so this is
+             * the only way that spelling ever leaves the gap panel.
+             */
+            Route::post('/agencies/resolve', [AdminAgencyController::class, 'resolve'])
+                ->name('agencies.resolve');
+
+            /*
+             * Correcting what was typed, without deciding what it is.
+             * "DEPED", "DEP ED" and "Dep. Ed." are three rows in the gap
+             * panel until they read the same; merging them makes the next
+             * pass one decision instead of three. Links nothing.
+             */
+            Route::post('/agencies/typed-employers/rename', [AdminAgencyController::class, 'rename'])
+                ->name('agencies.typed-employers.rename');
+            Route::get('/agencies/{agency}/edit', [AdminAgencyController::class, 'edit'])
+                ->name('agencies.edit');
+            Route::put('/agencies/{agency}', [AdminAgencyController::class, 'update'])
+                ->name('agencies.update');
+            Route::post('/agencies/{agency}/toggle', [AdminAgencyController::class, 'toggle'])
+                ->name('agencies.toggle');
+
+            /*
+             * Same split as field offices, and the same reasoning: every other
+             * action here is reversible, this one is not. The controller
+             * refuses outright for an agency anyone is still filed under,
+             * whoever asks — `profiles.agency_id` is nullOnDelete, so the
+             * database would silently unlink those participants rather than
+             * object, dropping them back to the typed-employer state with
+             * nothing recording that it happened.
+             */
+            Route::delete('/agencies/{agency}', [AdminAgencyController::class, 'destroy'])
+                ->middleware(EnsureUserIsStaff::class.':superadmin')
+                ->name('agencies.destroy');
+
+            /*
              * Subject matter experts. Reference data in the same sense a field
              * office is — created once, assigned to many runs — and managed by
              * the same roles that own the trainings those assignments appear
@@ -738,7 +838,7 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
          * as much as it is work. Deciding an item is the work, so management
          * is named out of it — a granted cancellation refunds money and frees
          * a seat, which is not something a role that reads reports should be
-         * able to do. Only HRD may convert a request into an actual training.
+         * able to do.
          */
         Route::get('/requests', [AdminRequestQueueController::class, 'index'])->name('requests.index');
 
@@ -746,8 +846,6 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             ->group(function () {
                 Route::post('/requests/cancellations/{cancellationRequest}', [AdminRequestQueueController::class, 'reviewCancellation'])
                     ->name('requests.cancellations.review');
-                Route::post('/requests/trainings/{trainingRequest}', [AdminRequestQueueController::class, 'reviewTrainingRequest'])
-                    ->name('requests.trainings.review');
                 Route::post('/requests/outputs/{output}', [AdminRequestQueueController::class, 'reviewOutput'])
                     ->name('requests.outputs.review');
             });
@@ -770,11 +868,6 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
                 ->name('agency-requests.verify-payment');
             Route::post('/agency-requests/{agencyRequest}/reject', [AdminAgencyRequestController::class, 'reject'])
                 ->name('agency-requests.reject');
-        });
-
-        Route::middleware(EnsureUserIsStaff::class.':admin|superadmin')->group(function () {
-            Route::post('/requests/trainings/{trainingRequest}/convert', [AdminRequestQueueController::class, 'convertTrainingRequest'])
-                ->name('requests.trainings.convert');
         });
 
         /*
@@ -864,12 +957,16 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
             ->name('certificates.index');
         Route::get('/certificates/{certificate}/download', [AdminCertificateController::class, 'download'])
             ->name('certificates.download');
+        Route::get('/certificates/{certificate}/view', [AdminCertificateController::class, 'view'])
+            ->name('certificates.view');
         Route::get('/certificates/{certificate}', [AdminCertificateController::class, 'show'])
             ->name('certificates.show');
 
         Route::middleware(EnsureUserIsStaff::class.':admin|superadmin|field-office')->group(function () {
             Route::post('/certificates/{certificate}/resend', [AdminCertificateController::class, 'resend'])
                 ->name('certificates.resend');
+            Route::post('/certificates/{certificate}/regenerate', [AdminCertificateController::class, 'regenerate'])
+                ->name('certificates.regenerate');
         });
     });
 
@@ -877,6 +974,25 @@ Route::middleware(['auth', EnsureUserIsStaff::class])
 Route::middleware('auth')->group(function () {
     Route::get('/profile/complete', [ProfileController::class, 'create'])->name('profile.complete');
     Route::post('/profile/complete', [ProfileController::class, 'store'])->name('profile.complete.store');
+
+    /*
+     * The participant guide, outside the completeness gate for the same reason
+     * the form above it is — and that is not a technicality.
+     *
+     * EnsureProfileIsComplete redirects the whole participant area to
+     * profile.complete. Put the guide inside it and the one person who most
+     * needs "what does this office mean by my employer, and why can I not get
+     * past this screen" is bounced away from the page that answers it and into
+     * the screen that is confusing them. Same reasoning EmailChangeService
+     * carries about a dead agency inbox: a locked door with the key inside the
+     * room is not a gate, it is a trap.
+     *
+     * Gated on 'auth' alone, so no signed-in account is ever refused it. The
+     * sidebar shows the row to participants, because the guide is written for
+     * them — staff are trained and have docs/ — but a staff member who follows
+     * a link here gets the page rather than a 403.
+     */
+    Route::get('/help', HelpController::class)->name('help');
 });
 
 Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified::class])->group(function () {
@@ -912,6 +1028,12 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
     Route::get('/my/payments', [PaymentController::class, 'index'])->name('payments.index');
     Route::post('/my/registrations/{registration}/payments', [PaymentController::class, 'store'])
         ->name('payments.store');
+    // Correcting a rejected payment — the wrong screenshot, a mistyped
+    // reference number — in place, the same move
+    // registrations.supporting-document.resubmit makes for a rejected
+    // supporting document. See PaymentService::resubmit().
+    Route::post('/my/payments/{payment}/resubmit', [PaymentController::class, 'resubmit'])
+        ->name('payments.resubmit');
     Route::post('/my/payments/{payment}/refund', [PaymentController::class, 'requestRefund'])
         ->name('payments.refund');
     Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->name('payments.proof');
@@ -942,8 +1064,7 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
 
     /*
      * Agency requests: an agency formally asking CSC to run a training for its
-     * own staff, and the document exchange that follows. Distinct from the
-     * training-requests routes below, which are the suggestion box.
+     * own staff, and the document exchange that follows.
      */
     Route::get('/my/agency-requests', [AgencyRequestController::class, 'index'])
         ->name('agency-requests.index');
@@ -959,11 +1080,6 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
     // correspondence need to read what the other sent.
     Route::get('/agency-request-documents/{document}', [AgencyRequestController::class, 'download'])
         ->name('agency-requests.documents.download');
-
-    Route::get('/my/training-requests', [TrainingRequestController::class, 'index'])
-        ->name('training-requests.index');
-    Route::post('/my/training-requests', [TrainingRequestController::class, 'store'])
-        ->name('training-requests.store');
 
     Route::post('/my/registrations/{registration}/outputs', [RegistrationOutputController::class, 'store'])
         ->name('outputs.store');
@@ -1017,6 +1133,12 @@ Route::middleware(['auth', EnsureProfileIsComplete::class, EnsureEmailIsVerified
         ->name('certificates.download');
 
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    // The header bell's popover: the newest handful, fetched as JSON rather
+    // than a page visit — see NotificationController::recent().
+    Route::get('/notifications/recent', [NotificationController::class, 'recent'])
+        ->name('notifications.recent');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])
+        ->name('notifications.read-one');
     Route::post('/notifications/read', [NotificationController::class, 'markAllRead'])
         ->name('notifications.read');
 

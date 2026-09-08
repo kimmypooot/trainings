@@ -9,7 +9,10 @@ import AppFileField from '@/Components/AppFileField.vue';
 import AppIcon from '@/Components/AppIcon.vue';
 import AppInput from '@/Components/AppInput.vue';
 import AppEmptyState from '@/Components/AppEmptyState.vue';
+import AppFilterChips from '@/Components/AppFilterChips.vue';
+import AppHelpLink from '@/Components/AppHelpLink.vue';
 import AppModal from '@/Components/AppModal.vue';
+import AppRowActions from '@/Components/AppRowActions.vue';
 import AppPromptModal from '@/Components/AppPromptModal.vue';
 import AppTextarea from '@/Components/AppTextarea.vue';
 import TrainingDetailSections from '@/Components/TrainingDetailSections.vue';
@@ -145,6 +148,56 @@ const submitOutput = () => {
 };
 
 /*
+ * What a participant can do with a registration, built once.
+ *
+ * The upcoming and past sections are two loops over the same object, and the
+ * actions had been written out inside each of them — which is the drift the
+ * roster's two layouts were pulled apart to end. "View training details" was
+ * in both, "Request withdrawal" only in the first (correctly, a past training
+ * cannot be withdrawn from) and "Submit output" only in the second, and
+ * nothing said so: they simply differed, and adding a third action would have
+ * meant remembering to do it twice.
+ *
+ * The past section's output button stays where it is, inside the output panel
+ * — it belongs to the document beside it rather than to the registration, and
+ * its label changes with what has already been filed.
+ */
+const actionsFor = (registration) => {
+    const actions = [
+        {
+            label: 'View training details',
+            icon: 'eye',
+            onClick: () => (detailing.value = registration),
+        },
+    ];
+
+    if (registration.can_withdraw) {
+        actions.push({
+            label: 'Request withdrawal',
+            icon: 'close',
+            tone: 'danger',
+            onClick: () => (withdrawing.value = registration),
+        });
+    } else if (registration.withdrawal_pending) {
+        /*
+         * Shown refused rather than removed. A participant who has asked to
+         * withdraw comes back to this row to find out what happened, and an
+         * absent button answers nothing — they cannot tell whether the request
+         * landed or whether the option was never there. Disabled with the
+         * reason attached says both.
+         */
+        actions.push({
+            label: 'Withdrawal requested',
+            icon: 'clock',
+            disabled: true,
+            reason: 'Your slot is held until CSC reviews it.',
+        });
+    }
+
+    return actions;
+};
+
+/*
  * A rejected supervisory document can be replaced. The re-upload is its own
  * modal because it needs a file, and it is only offered while the workflow
  * still allows one — once verified, the document is settled.
@@ -177,46 +230,34 @@ const submitResubmit = () => {
     <Head title="My Registrations" />
 
     <AuthenticatedLayout title="My Registrations" current="registrations">
-        <div class="mx-auto max-w-4xl space-y-5">
+        <div class="mx-auto max-w-7xl space-y-5">
+            <AppHelpLink anchor="registering">What your registration status means</AppHelpLink>
+
             <!--
                 Filter chips, shown only once there is more than one status to
                 choose between — a single chip is a label pretending to be a
                 control. Rendered above the empty state too, so a filter that
                 happens to match nothing can still be cleared.
             -->
-            <div v-if="statusOptions.length > 1" class="flex flex-wrap gap-2">
-                <button
-                    type="button"
-                    class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        filters.status
-                            ? 'border-csc-line bg-white text-csc-ink-muted hover:border-csc-blue/40'
-                            : 'border-csc-blue bg-csc-blue text-white'
-                    "
-                    :aria-pressed="!filters.status"
-                    @click="filterTo(null)"
-                >
-                    All
-                </button>
-                <button
-                    v-for="option in statusOptions"
-                    :key="option.value"
-                    type="button"
-                    class="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                    :class="
-                        filters.status === option.value
-                            ? 'border-csc-blue bg-csc-blue text-white'
-                            : 'border-csc-line bg-white text-csc-ink-muted hover:border-csc-blue/40'
-                    "
-                    :aria-pressed="filters.status === option.value"
-                    @click="filterTo(option.value)"
-                >
-                    {{ option.label }}
-                    <span :class="filters.status === option.value ? 'text-white/70' : 'text-csc-ink-subtle'">
-                        {{ option.count }}
-                    </span>
-                </button>
-            </div>
+            <!--
+                Filter chips, shown only once there is more than one status to
+                choose between — a single chip is a label pretending to be a
+                control. Rendered above the empty state too, so a filter that
+                happens to match nothing can still be cleared.
+
+                The same strip the admin index screens carry. It used to be a
+                seventh hand-rolled copy, and the most divergent of them: pill
+                shaped where every other one was a rounded rectangle, with the
+                count as bare text rather than the pill the others gave it.
+            -->
+            <AppFilterChips
+                v-if="statusOptions.length > 1"
+                :model-value="filters.status ?? null"
+                :options="statusOptions"
+                aria-label="Filter registrations by status"
+                allow-all
+                @update:model-value="filterTo"
+            />
 
             <!--
                 Two different nothings: no registrations at all, and none
@@ -303,16 +344,6 @@ const submitResubmit = () => {
                                     </div>
                                 </div>
 
-                                <div v-if="registration.training.level_label" class="flex items-start gap-2">
-                                    <AppIcon name="clipboard" size="sm" class="mt-0.5 shrink-0" />
-                                    <div>
-                                        <dt class="text-csc-ink-subtle">Level</dt>
-                                        <dd class="mt-0.5 font-medium text-csc-ink">
-                                            {{ registration.training.level_label }}
-                                        </dd>
-                                    </div>
-                                </div>
-
                                 <div v-if="registration.training.category" class="flex items-start gap-2">
                                     <AppIcon name="bookmark" size="sm" class="mt-0.5 shrink-0" />
                                     <div>
@@ -341,29 +372,8 @@ const submitResubmit = () => {
                                 {{ registration.training.description }}
                             </p>
 
-                            <div class="mt-4 flex flex-wrap items-center gap-3">
-                                <button
-                                    type="button"
-                                    class="inline-flex items-center gap-1.5 rounded text-sm font-medium text-csc-blue transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                    @click="detailing = registration"
-                                >
-                                    View training details
-                                    <AppIcon name="chevron-right" size="sm" />
-                                </button>
-                                <AppButton
-                                    v-if="registration.can_withdraw"
-                                    size="sm"
-                                    variant="ghost"
-                                    @click="withdrawing = registration"
-                                >
-                                    Request Withdrawal
-                                </AppButton>
-                                <p
-                                    v-else-if="registration.withdrawal_pending"
-                                    class="text-xs font-medium text-warning"
-                                >
-                                    Withdrawal requested — your slot is held until CSC reviews it.
-                                </p>
+                            <div class="mt-4">
+                                <AppRowActions :actions="actionsFor(registration)" layout="card" />
                             </div>
 
                             <!--
@@ -497,14 +507,9 @@ const submitResubmit = () => {
                                 </AppButton>
                             </div>
 
-                            <button
-                                type="button"
-                                class="mt-3 inline-flex items-center gap-1.5 rounded text-sm font-medium text-csc-blue transition-colors hover:text-csc-blue-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue"
-                                @click="detailing = registration"
-                            >
-                                View training details
-                                <AppIcon name="chevron-right" size="sm" />
-                            </button>
+                            <div class="mt-3">
+                                <AppRowActions :actions="actionsFor(registration)" layout="card" />
+                            </div>
                         </li>
                     </ul>
                 </section>
@@ -643,10 +648,6 @@ const submitResubmit = () => {
                         <dd class="mt-0.5 font-medium text-csc-ink">
                             {{ detailing.training.duration_days }} day{{ detailing.training.duration_days === 1 ? '' : 's' }}
                         </dd>
-                    </div>
-                    <div v-if="detailing.training.level_label">
-                        <dt class="text-csc-ink-subtle">Level</dt>
-                        <dd class="mt-0.5 font-medium text-csc-ink">{{ detailing.training.level_label }}</dd>
                     </div>
                     <div v-if="detailing.training.training_code">
                         <dt class="text-csc-ink-subtle">Training code</dt>

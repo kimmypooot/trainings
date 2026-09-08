@@ -297,7 +297,7 @@ class FieldOfficeTest extends TestCase
                 'position_title' => 'Officer',
                 'salary_grade' => 'SG 14',
                 'organization_name' => 'DepEd',
-                'sector' => 'National Government Agency',
+                'sector' => 'National Government Agency (NGA)',
                 'region' => 'Region VIII',
                 'province' => 'Leyte',
                 'city_municipality' => 'Palo',

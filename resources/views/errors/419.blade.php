@@ -3,5 +3,6 @@
     $heading = 'Session expired';
     $message = 'Your session has expired. Reload the page to continue where you left off.';
     $reload = true;
+    $tone = 'warning';
 @endphp
 @include('errors.error-shell')

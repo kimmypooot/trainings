@@ -27,6 +27,22 @@
     --color-csc-line: #e5e7eb;
 
     /*
+     * A nested panel's fill — a summary box sitting inside a white card,
+     * where the border alone is not enough to tell "this is a sub-section"
+     * from "this is the card". Neutral rather than a blue tint on purpose:
+     * `--color-csc-blue-tint` reads as brand/interactive, and a refund's bank
+     * details or a JSON activity-log dump is neither.
+     *
+     * This was missing entirely until now — twelve call sites across nine
+     * files (`bg-csc-mist/30`, `/40`, `/60`) referenced a token this file
+     * never defined, which Tailwind v4 drops silently rather than failing
+     * the build on: no error, no warning, just a class that resolves to no
+     * background at all. Every one of those panels has been rendering as
+     * plain white-on-white — bordered but fill-less — since it was written.
+     */
+    --color-csc-mist: #f3f4f6;
+
+    /*
      * Secondary text, as named tokens rather than an opacity on --color-csc-ink.
      *
      * These used to be written text-csc-ink/70, /60, /55 and /50, which is how
@@ -475,5 +491,121 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
         scroll-behavior: auto !important;
+    }
+}
+
+/*
+ * The attendance station.
+ *
+ * /admin/scanner and /station/{token} are the same job at two doors, and they
+ * are the only screens in this application that are *operated* rather than
+ * read: a facilitator stands at a registration desk for six hours with a queue
+ * in front of them, and the page has to answer one question — did that badge
+ * count? — faster than the next person can step forward.
+ *
+ * Everything below exists because a Tailwind utility could not say it. The
+ * ground is two stacked backgrounds; the viewfinder's sweep and the verdict's
+ * entrance are keyframes; the bracket corners are a border trick that would be
+ * four unreadable arbitrary-value classes per corner.
+ *
+ * The station is deliberately *light*. It was a full-bleed fill of
+ * --color-csc-blue-deep with translucent white boxes on it, which read as one
+ * enormous blue rectangle and gave the operator no hierarchy at all — the
+ * roster panel, the sync line and the camera all carried the same weight. Now
+ * only the viewfinder is dark, because a video frame needs a dark surround to
+ * be legible and because being the one dark thing on the page is what makes it
+ * the thing the eye lands on first.
+ */
+.station-ground {
+    background-color: color-mix(in srgb, var(--color-csc-blue-tint) 45%, white);
+    background-image: radial-gradient(
+        70rem 24rem at 50% -10rem,
+        color-mix(in srgb, var(--color-csc-blue) 9%, transparent),
+        transparent 72%
+    );
+    background-repeat: no-repeat;
+}
+
+/*
+ * The masthead's hairline: the seal's two colours, in the seal's own order.
+ *
+ * Three pixels tall and carrying no text, which is the one shape the palette
+ * rules allow --color-csc-red to take at full strength. It is what stops a
+ * white header on a white page from being a white page.
+ */
+.station-rule {
+    background-image: linear-gradient(
+        90deg,
+        var(--color-csc-red) 0%,
+        var(--color-csc-red) 20%,
+        var(--color-csc-blue) 58%,
+        var(--color-csc-blue) 100%
+    );
+}
+
+/*
+ * The sweep inside the viewfinder.
+ *
+ * A camera that is running and a camera that has frozen look identical on a
+ * tablet pointed at a badge, and the difference matters a great deal to
+ * somebody with twenty people waiting. The sweep is the cheapest honest signal
+ * that frames are still being decoded — it is rendered only while cameraState
+ * is 'running', so it cannot claim otherwise — and it is drawn in the brand red
+ * because a scanning line is the one place in this interface where a red
+ * accent is also a functional convention.
+ */
+@keyframes station-sweep {
+    0% {
+        top: 0%;
+        opacity: 0;
+    }
+    12% {
+        opacity: 1;
+    }
+    88% {
+        opacity: 1;
+    }
+    100% {
+        top: 100%;
+        opacity: 0;
+    }
+}
+
+.station-sweep {
+    animation: station-sweep 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/*
+ * The verdict.
+ *
+ * One short, firm entrance and nothing else. The result covers the viewfinder,
+ * so it has to arrive decisively enough to be noticed in peripheral vision and
+ * settle quickly enough that the operator is not waiting on an animation before
+ * they can wave somebody through. 140ms, once — anything longer is felt as lag
+ * by the fiftieth scan, and anything that loops competes with the queue.
+ */
+@keyframes station-verdict {
+    from {
+        opacity: 0;
+        transform: scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.station-verdict {
+    animation: station-verdict 0.14s ease-out both;
+}
+
+/*
+ * The global reduced-motion block above only slows an animation to nothing,
+ * which for the sweep means parking a red line somewhere across the viewfinder
+ * and leaving it there looking like a fault. It is decorative; it goes.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .station-sweep {
+        display: none;
     }
 }

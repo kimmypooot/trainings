@@ -14,7 +14,6 @@ use App\Models\Profile;
 use App\Models\Registration;
 use App\Models\RegistrationOutput;
 use App\Models\Training;
-use App\Models\TrainingRequest;
 use App\Models\User;
 use App\Support\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -516,24 +515,6 @@ class FieldOfficeScopingTest extends TestCase
             ->assertNotFound();
 
         $this->assertSame(RequestStatus::Pending, $output->fresh()->status);
-    }
-
-    public function test_an_officer_cannot_review_another_offices_training_request(): void
-    {
-        $requester = $this->participantIn($this->samar, 'samar.request@example.com');
-
-        $trainingRequest = TrainingRequest::create([
-            'requested_by' => $requester->getKey(),
-            'title' => 'Records Management',
-            'justification' => 'The unit has no trained records officer.',
-            'status' => RequestStatus::Pending,
-        ]);
-
-        $this->actingAs($this->fieldOfficeStaff($this->leyte))
-            ->post("/admin/requests/trainings/{$trainingRequest->id}", ['decision' => 'approved'])
-            ->assertNotFound();
-
-        $this->assertSame(RequestStatus::Pending, $trainingRequest->fresh()->status);
     }
 
     /**

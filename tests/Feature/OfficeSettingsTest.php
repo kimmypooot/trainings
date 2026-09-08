@@ -69,6 +69,37 @@ class OfficeSettingsTest extends TestCase
     }
 
     /**
+     * The office-wide certificate signatory — optional, like phone and email,
+     * and read back through config('office.*') the same as every other field
+     * here, since CertificateService reads it from there rather than from the
+     * row directly.
+     */
+    public function test_a_superadmin_can_set_the_default_certificate_signatory(): void
+    {
+        $this->actingAs($this->superadmin())
+            ->post('/admin/office', $this->payload([
+                'default_signatory_name' => 'Juan Dela Cruz',
+                'default_signatory_title' => 'Director IV',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        OfficeSettingsProvider::apply();
+
+        $this->assertSame('Juan Dela Cruz', config('office.default_signatory_name'));
+        $this->assertSame('Director IV', config('office.default_signatory_title'));
+    }
+
+    /** Optional, like the rest of this screen — no signatory beats the wrong one. */
+    public function test_the_default_signatory_is_optional(): void
+    {
+        $this->actingAs($this->superadmin())
+            ->post('/admin/office', $this->payload())
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(OfficeSetting::current()->default_signatory_name);
+    }
+
+    /**
      * The screen shows what the site is actually using, not the empty row.
      *
      * Open it on a fresh install and the boxes hold the configured defaults —

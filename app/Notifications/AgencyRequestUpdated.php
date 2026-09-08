@@ -16,6 +16,11 @@ class AgencyRequestUpdated extends ParticipantNotification
 {
     public function __construct(private readonly AgencyRequest $request) {}
 
+    public function kind(): string
+    {
+        return 'agency';
+    }
+
     public function title(object $notifiable): string
     {
         return match ($this->request->status) {

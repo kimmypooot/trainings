@@ -9,6 +9,11 @@ class CancellationReviewed extends ParticipantNotification
 {
     public function __construct(private readonly CancellationRequest $request) {}
 
+    public function kind(): string
+    {
+        return 'withdrawn';
+    }
+
     public function title(object $notifiable): string
     {
         $training = $this->request->registration->training->title;

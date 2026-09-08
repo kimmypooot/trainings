@@ -226,6 +226,74 @@ class PaymentService
     }
 
     /**
+     * Correct and resubmit a rejected payment.
+     *
+     * The one loop in the payment lifecycle, the same move
+     * SupervisoryDocumentService::resubmit() makes for a rejected supporting
+     * document: the mistake that got a payment sent back — the wrong
+     * screenshot, a blurry photo, a mistyped reference number — is exactly
+     * the kind a participant can see and fix themselves, and until this
+     * existed the only way back from a rejection was asking the office to
+     * intervene, or filing an entirely separate payment and leaving the
+     * wrong one sitting in their history unexplained.
+     *
+     * Locked and re-checked against PaymentStatus::allowsResubmission() the
+     * same way decide() locks before deciding: the status this reads has to
+     * be the live one, not the one the page had open, or a payment an
+     * officer rejects in the moment between the participant opening the form
+     * and submitting it would be silently overwritten back to Pending.
+     *
+     * The verdict is cleared, not kept — `rejection_reason`, `verified_by`
+     * and `verified_at` all described the *previous* attempt, and leaving
+     * them in place on a payment that once again reads Pending would tell
+     * the next reviewer a decision was already made on the very submission
+     * waiting for one.
+     *
+     * @param  array{amount: mixed, payment_method: string, payment_date: mixed,
+     *               reference_number?: ?string, proof_path?: ?string}  $data
+     */
+    public static function resubmit(Payment $payment, array $data): Payment
+    {
+        $payment = DB::transaction(function () use ($payment, $data) {
+            $locked = Payment::whereKey($payment->getKey())->lockForUpdate()->firstOrFail();
+
+            if (! $locked->status->allowsResubmission()) {
+                throw ValidationException::withMessages([
+                    'payment' => "A {$locked->status->label()} payment cannot be resubmitted.",
+                ]);
+            }
+
+            $from = $locked->status;
+
+            $locked->forceFill([
+                'status' => PaymentStatus::Pending,
+                'amount' => $data['amount'],
+                'payment_method' => $data['payment_method'],
+                'reference_number' => $data['reference_number'] ?? null,
+                'payment_date' => $data['payment_date'],
+                'proof_path' => $data['proof_path'] ?? $locked->proof_path,
+                'rejection_reason' => null,
+                'verified_by' => null,
+                'verified_at' => null,
+            ])->save();
+
+            ActivityLogger::recordTransition(
+                'payment.resubmitted',
+                $locked,
+                $from,
+                PaymentStatus::Pending,
+                'Payment corrected and resubmitted for verification.',
+                ['amount' => (float) $locked->amount],
+                $locked->user,
+            );
+
+            return $locked;
+        });
+
+        return $payment;
+    }
+
+    /**
      * Record a payment taken at the counter, already verified.
      *
      * v1's `payment-actions.php` let staff set a registration's payment status

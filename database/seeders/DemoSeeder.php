@@ -94,7 +94,7 @@ class DemoSeeder extends Seeder
                 // so the SDC document flow can be exercised with this account.
                 'salary_grade' => 'SG 16',
                 'organization_name' => 'DEPARTMENT OF EDUCATION',
-                'sector' => 'National Government Agency',
+                'sector' => 'National Government Agency (NGA)',
                 'region' => 'Region VIII (Eastern Visayas)',
                 'province' => 'Leyte',
                 'city_municipality' => 'Palo',

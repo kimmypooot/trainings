@@ -13,7 +13,6 @@ use App\Models\Payment;
 use App\Models\PhysicalOrRequest;
 use App\Models\RefundRequest;
 use App\Models\RegistrationOutput;
-use App\Models\TrainingRequest;
 use App\Models\User;
 
 /**
@@ -156,21 +155,10 @@ class PendingActionCounter
             )
         );
 
-        $scopeTrainingRequests = fn ($query) => $query->when(
-            $officeId !== null,
-            fn ($inner) => $inner->whereHas(
-                'requester.profile',
-                fn ($profile) => $profile->where('field_office_id', $officeId)
-            )
-        );
-
         $counts['admin-requests'] = CancellationRequest::tap($scopeCancellations)
             ->where('status', RequestStatus::Pending)
             ->count()
             + RegistrationOutput::tap($scopeOutputs)
-                ->where('status', RequestStatus::Pending)
-                ->count()
-            + TrainingRequest::tap($scopeTrainingRequests)
                 ->where('status', RequestStatus::Pending)
                 ->count();
 
