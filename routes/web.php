@@ -88,7 +88,20 @@ Route::permanentRedirect('/programs', '/#upcoming')->name('programs');
  * recreated as a file in public/.
  */
 Route::get('/robots.txt', function () {
-    return response("User-agent: *\nDisallow:\n\nSitemap: ".url('/sitemap.xml')."\n")
+    // Everything under these prefixes sits behind auth (or, for /station and
+    // /scan, behind a one-time code) — a crawler gets nothing there but a
+    // redirect to /login or a 403, so indexing them wastes crawl budget on a
+    // page with no content and risks the login form itself getting indexed
+    // as the "result". Listing them here is defence in depth, not the gate:
+    // the middleware groups in this file are what actually keep them private.
+    $private = [
+        '/dashboard', '/admin', '/profile', '/notifications', '/my',
+        '/station', '/scan', '/help/admin', '/auth/google',
+    ];
+
+    $disallow = implode("\n", array_map(fn (string $path) => "Disallow: {$path}", $private));
+
+    return response("User-agent: *\n{$disallow}\n\nSitemap: ".url('/sitemap.xml')."\n")
         ->header('Content-Type', 'text/plain');
 })->name('robots');
 
