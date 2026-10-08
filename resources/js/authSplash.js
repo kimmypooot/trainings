@@ -40,6 +40,9 @@ const state = reactive({
     // an account that does not exist yet was confusing in exactly the way a
     // status message should not be.
     title: null,
+    // Skip the fade-in: the IMIS hand-off, where the same card is already on
+    // screen (drawn by app.blade.php) and must not blink.
+    instant: false,
 });
 
 let showedAt = 0;
@@ -53,11 +56,12 @@ const clear = () => {
 /** Milliseconds still owed before a stage has had its minimum time on screen. */
 const remaining = (minimum) => Math.max(0, minimum - (Date.now() - showedAt));
 
-const show = (stage, subtitle, title = null) => {
+const show = (stage, subtitle, title = null, instant = false) => {
     clear();
     state.stage = stage;
     state.subtitle = subtitle;
     state.title = title;
+    state.instant = instant;
     state.visible = true;
     showedAt = Date.now();
 };
@@ -77,6 +81,12 @@ export const beginAccountCreation = () => show('loading', 'Please wait a momentâ
 
 /** Raise it for the trip out to Google, which is a real document navigation. */
 export const beginRedirect = (subtitle) => show('loading', subtitle);
+
+/**
+ * Raise it on arriving from IMIS, continuing IMIS's own "Opening <system>"
+ * card without a fade (the server drew the same card at first paint).
+ */
+export const beginImisSignIn = () => show('loading', 'Signing you in from IMIS', 'Opening TIMS', true);
 
 /** Raise it for a sign-out that is now in flight. */
 export const beginSignOut = () => show('goodbye', 'See you next time!');

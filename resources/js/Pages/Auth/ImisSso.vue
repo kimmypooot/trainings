@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
-import { beginRedirect, dismiss, welcome } from '@/authSplash';
+import { beginImisSignIn, dismiss, welcome } from '@/authSplash';
 
 /*
  * Where the IMIS portal sends staff. The splash is raised from the first
@@ -15,8 +15,10 @@ const props = defineProps({
     token: { type: String, required: true },
 });
 
+// Raised during setup, so it paints in the same frame as the server-drawn card.
+beginImisSignIn();
+
 onMounted(() => {
-    beginRedirect('Signing you in from IMIS…');
 
     router.post('/sso', { sso_token: props.token }, {
         replace: true,

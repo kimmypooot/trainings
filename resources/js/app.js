@@ -5,6 +5,7 @@ import AppProgressBar from '@/Components/AppProgressBar.vue';
 import AppAuthSplash from '@/Components/AppAuthSplash.vue';
 import { playWelcome } from '@/authSplash';
 import { warmSeal } from '@/brandSeal';
+import { dismissBootPreloader } from '@/imisBoot';
 import '@/analytics';
 
 // The seal in the middle of the splash's spinning rings is an <img>, and the
@@ -51,5 +52,8 @@ createInertiaApp({
         createApp({ render: () => [h(AppProgressBar), h(AppAuthSplash), h(App, props)] })
             .use(plugin)
             .mount(el);
+
+        // The IMIS loading screen from app.blade.php.
+        dismissBootPreloader();
     },
 });

@@ -17,7 +17,7 @@
  * the same file AppLogo and both layouts use, so reaching a sign-in page has
  * usually put it in cache already.
  */
-const SEAL_URL = '/images/csc-logo-256.png';
+const SEAL_URL = '/images/imis/csc-logo.png';
 
 let pending = null;
 
