@@ -45,6 +45,13 @@ return [
     'vite_dev_origin' => env('VITE_DEV_ORIGIN'),
 
     /*
+    | The port the local Vite dev server listens on (vite.config.js reads the same
+    | variable). Needed here so the Content-Security-Policy names the right one.
+    */
+
+    'vite_dev_port' => (int) env('VITE_DEV_PORT', 5173),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

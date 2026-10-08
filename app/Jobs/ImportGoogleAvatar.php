@@ -44,6 +44,8 @@ class ImportGoogleAvatar implements ShouldQueue
     public function __construct(
         public int $userId,
         public string $url,
+        // 'google', or 'imis' for a staff photo from the IMIS portal.
+        public string $source = 'google',
     ) {}
 
     public function handle(): void
@@ -57,7 +59,9 @@ class ImportGoogleAvatar implements ShouldQueue
             return;
         }
 
-        $path = GoogleAvatarFetcher::fetch($this->url, $this->userId);
+        $path = $this->source === 'imis'
+            ? GoogleAvatarFetcher::fetchFromImis($this->url, $this->userId)
+            : GoogleAvatarFetcher::fetch($this->url, $this->userId);
 
         if ($path === null) {
             return;

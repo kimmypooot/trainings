@@ -17,6 +17,12 @@ export default defineConfig(({ mode }) => {
     // instead of at its own localhost:5173 (which is what breaks otherwise: the
     // page renders with no CSS and no JS). Leave it unset for normal local dev.
     const devOrigin = env.VITE_DEV_ORIGIN;
+
+    // The dev server's port. Several apps can share one machine, and two Vite
+    // servers on 5173 (one on IPv4, one on IPv6) leave `localhost` pointing at
+    // whichever the browser resolves first, which serves the wrong app's pages.
+    // Set VITE_DEV_PORT to give this one its own; 5173 when unset.
+    const devPort = Number(env.VITE_DEV_PORT) || 5173;
     const devOriginHost = devOrigin ? new URL(devOrigin).hostname : null;
 
     return {
@@ -55,7 +61,7 @@ export default defineConfig(({ mode }) => {
                 ignored: ['**/storage/framework/views/**'],
             },
             host: '0.0.0.0',
-            port: 5173,
+            port: devPort,
             strictPort: true,
             origin: devOrigin,
             // Over a tunnel the HMR socket has to dial the tunnel hostname on

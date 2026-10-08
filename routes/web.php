@@ -34,6 +34,7 @@ use App\Http\Controllers\Auth\ChangePasswordController;
 use App\Http\Controllers\Auth\EmailChangeController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\Auth\ImisSsoController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -96,7 +97,7 @@ Route::get('/robots.txt', function () {
     // the middleware groups in this file are what actually keep them private.
     $private = [
         '/dashboard', '/admin', '/profile', '/notifications', '/my',
-        '/station', '/scan', '/help/admin', '/auth/google',
+        '/station', '/scan', '/help/admin', '/auth/google', '/sso',
     ];
 
     $disallow = implode("\n", array_map(fn (string $path) => "Disallow: {$path}", $private));
@@ -323,6 +324,10 @@ Route::middleware('auth')->group(function () {
         ->name('profile.email.store');
     Route::delete('/profile/email', [EmailChangeController::class, 'destroy'])->name('profile.email.destroy');
 });
+
+// Sign-in from the IMIS portal (one-time token; see ImisSsoController).
+Route::get('/sso', [ImisSsoController::class, 'show'])->middleware('throttle:30,1')->name('sso');
+Route::post('/sso', [ImisSsoController::class, 'store'])->middleware('throttle:30,1')->name('sso.store');
 
 Route::get('/auth/google', [GoogleController::class, 'redirect'])->name('auth.google');
 Route::get('/auth/google/callback', [GoogleController::class, 'callback'])->name('auth.google.callback');

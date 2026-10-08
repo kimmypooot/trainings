@@ -219,6 +219,6 @@ class SecurityHeaders
             return rtrim($configured, '/');
         }
 
-        return 'http://localhost:5173';
+        return 'http://localhost:'.config('app.vite_dev_port');
     }
 }

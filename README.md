@@ -404,3 +404,26 @@ tests/Feature/          48 files, organised by workflow
 - `CLAUDE.md` — the working guide to this codebase, in more depth than this file.
 - `docs/prime-hrm-discount.md` — the pricing rule that is not derivable from
   code.
+
+## Sign-in from IMIS
+
+Staff sign in through the IMIS portal (the hub); participants are external and
+keep their own sign-in and Google. IMIS sends the browser to
+`/sso?sso_token=…`; the page shows the splash and posts the token back to
+`POST /sso` (`Auth\ImisSsoController`), which redeems it at IMIS.
+
+- IMIS grants one of the staff roles; its **Code** is the `Role` value
+  (`admin`, `management`, `field-office`, `collecting-officer`, `superadmin`).
+  Participants cannot be granted from IMIS.
+- The account is linked by `users.imis_user_id` (else once by email, never to a
+  participant), created on first sign-in, and has its name, role and field office
+  rewritten from IMIS each time. Field offices are matched through
+  `field_offices.imis_code`; a field-office role needs a match.
+- Staff cannot use a TIMS password or Google while IMIS sign-in is on; a Super
+  Administrator keeps the password as the break-glass way in. The
+  collecting-officer designation stays managed here.
+- The IMIS photo is copied once into private storage (`ImportGoogleAvatar`, source
+  `imis`), only from `IMIS_ASSET_ORIGIN`, and never over a photo the person has.
+- `.env`: `IMIS_SSO_URL=<IMIS>/api/v1/sso/validate`, `IMIS_SSO_AUDIENCE` (this
+  app's host[:port] as registered in IMIS `SSO_HUB_HOSTS`, if it differs from
+  `APP_URL`) and `IMIS_ASSET_ORIGIN` (the origin that serves IMIS photos).

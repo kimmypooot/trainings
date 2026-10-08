@@ -175,6 +175,19 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return filled($given) ? Str::title($given) : null;
     }
 
+    /**
+     * Staff whose account is managed in IMIS, so they have no TIMS password or
+     * Google sign-in. Off while IMIS sign-in is not configured, and never for a
+     * Super Administrator, who keeps the password as the break-glass way in.
+     * Participants are external and unaffected.
+     */
+    public function isImisManaged(): bool
+    {
+        return filled(config('services.imis.sso_url'))
+            && $this->role->isStaff()
+            && $this->role !== Role::SuperAdmin;
+    }
+
     public function isParticipant(): bool
     {
         return $this->role === Role::Participant;
