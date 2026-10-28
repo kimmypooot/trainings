@@ -5,7 +5,7 @@
  * the white card with the CSC seal in two counter-rotating rings, used for
  * "Opening <system>", signing in and signing out).
  *
- * Copied from new-imis resources/css/app.css; change it there first and
+ * Copied from new-imis resources/css/boot.css; change it there first and
  * copy it here. Self-contained: it brings its own colours and font, so it
  * does not depend on this app's design tokens.
  */
@@ -23,7 +23,7 @@
 }
 
 #boot-preloader {
-    transition: opacity 0.6s ease, visibility 0.6s ease;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
 }
 
 #boot-preloader.is-hidden {
@@ -459,4 +459,27 @@
     }
 }
 
+/*
+ * First-paint behaviour of the boot preloader (imisBoot.js dismisses it).
+ *
+ * - It fades in only after a short delay (keep in step with SHOW_DELAY in
+ *   imisBoot.js), so a page that is ready at once never flashes a loading
+ *   screen. `backwards` fill: hidden during the delay, then back to normal
+ *   styles so the fade-out above can take over.
+ * - Fade-out is 0.4s, as the card's own.
+ */
+.imis-preloader {
+    animation: imis-boot-in 0.2s ease 0.12s backwards;
+}
 
+@media (prefers-reduced-motion: reduce) {
+    .imis-preloader {
+        animation: none;
+    }
+}
+
+@keyframes imis-boot-in {
+    from {
+        opacity: 0;
+    }
+}

@@ -10,6 +10,10 @@
       light "Opening <system>" card, so the same card is drawn here instead of
       the navy preloader, and the page's splash takes over without a flash.
 --}}
+{{-- The styles are inlined, so a screen paints at once instead of waiting for
+    app.css (and look the same under the Vite dev server). Comments and
+    whitespace are stripped. --}}
+<style>{!! preg_replace(['!/\*.*?\*/!s', '/\s+/'], ['', ' '], file_get_contents(resource_path('css/imis-loading.css'))) !!}</style>
 @if ($opening ?? false)
     <div id="boot-preloader" data-instant class="imis-tr" role="status" aria-live="polite" aria-busy="true">
         <div class="imis-tr__card">
@@ -22,7 +26,7 @@
                     <circle cx="12" cy="12" r="8" class="imis-tr__track" stroke-width="1.5" />
                     <circle cx="12" cy="12" r="8" class="imis-tr__arc--red" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="50.265" stroke-dashoffset="15" />
                 </svg>
-                <img src="/images/imis/csc-logo.png" class="imis-tr__logo" alt="" draggable="false">
+                <img src="/images/imis/imis-logo.png" class="imis-tr__logo" alt="" draggable="false">
             </div>
             <div class="imis-tr__msg">Opening {{ $system }}</div>
             <div class="imis-tr__sub">Signing you in from IMIS</div>
@@ -48,4 +52,7 @@
             <div class="imis-preloader__bar"></div>
         </div>
     </div>
+    {{-- When the screen started, for imisBoot.js to hold it long enough to read
+         as deliberate (and to skip it if the page was ready first). --}}
+    <script>window.__bootAt = performance.now();</script>
 @endif

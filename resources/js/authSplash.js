@@ -43,6 +43,9 @@ const state = reactive({
     // Skip the fade-in: the IMIS hand-off, where the same card is already on
     // screen (drawn by app.blade.php) and must not blink.
     instant: false,
+    // Which logo the card shows: null is the splash's own (the CSC seal). The IMIS
+    // hand-off uses the IMIS logo, as IMIS's own "Opening <system>" card does.
+    logo: null,
 });
 
 let showedAt = 0;
@@ -56,12 +59,13 @@ const clear = () => {
 /** Milliseconds still owed before a stage has had its minimum time on screen. */
 const remaining = (minimum) => Math.max(0, minimum - (Date.now() - showedAt));
 
-const show = (stage, subtitle, title = null, instant = false) => {
+const show = (stage, subtitle, title = null, instant = false, logo = null) => {
     clear();
     state.stage = stage;
     state.subtitle = subtitle;
     state.title = title;
     state.instant = instant;
+    state.logo = logo;
     state.visible = true;
     showedAt = Date.now();
 };
@@ -86,7 +90,7 @@ export const beginRedirect = (subtitle) => show('loading', subtitle);
  * Raise it on arriving from IMIS, continuing IMIS's own "Opening <system>"
  * card without a fade (the server drew the same card at first paint).
  */
-export const beginImisSignIn = () => show('loading', 'Signing you in from IMIS', 'Opening TIMS', true);
+export const beginImisSignIn = () => show('loading', 'Signing you in from IMIS', 'Opening TIMS', true, '/images/imis/imis-logo.png');
 
 /** Raise it for a sign-out that is now in flight. */
 export const beginSignOut = () => show('goodbye', 'See you next time!');
@@ -101,6 +105,7 @@ export const welcome = (name = null) => {
     clear();
     timer = setTimeout(() => {
         state.stage = 'welcome';
+        state.logo = null;
         state.name = name;
         state.subtitle = 'Taking you to your dashboard…';
 

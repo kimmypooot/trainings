@@ -5,6 +5,7 @@
         :title="copy.title"
         :subtitle="copy.subtitle"
         :note="copy.note"
+        :logo="splash.logo ?? undefined"
     />
 </template>
 
