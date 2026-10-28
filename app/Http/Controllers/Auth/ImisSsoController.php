@@ -131,11 +131,16 @@ class ImisSsoController extends Controller
 
         // So signing out of IMIS can end this session (ImisSsoLogoutController).
         if (is_string($imis['sid'] ?? null) && strlen($imis['sid']) === 64) {
-            DB::table('imis_sessions')->insert([
-                'sid_hash' => hash('sha256', $imis['sid']),
-                'session_id' => $request->session()->getId(),
-                'created_at' => now(),
-            ]);
+            try {
+                DB::table('imis_sessions')->insert([
+                    'sid_hash' => hash('sha256', $imis['sid']),
+                    'session_id' => $request->session()->getId(),
+                    'created_at' => now(),
+                ]);
+            } catch (Throwable $e) {
+                // Only the sign-out link is lost; the person still signs in.
+                Log::warning('IMIS session could not be recorded', ['message' => $e->getMessage()]);
+            }
         }
 
         return redirect()->intended(route('admin.dashboard'));
