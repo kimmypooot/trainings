@@ -11,6 +11,7 @@ use App\Support\GoogleAvatarFetcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -127,6 +128,15 @@ class ImisSsoController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+
+        // So signing out of IMIS can end this session (ImisSsoLogoutController).
+        if (is_string($imis['sid'] ?? null) && strlen($imis['sid']) === 64) {
+            DB::table('imis_sessions')->insert([
+                'sid_hash' => hash('sha256', $imis['sid']),
+                'session_id' => $request->session()->getId(),
+                'created_at' => now(),
+            ]);
+        }
 
         return redirect()->intended(route('admin.dashboard'));
     }

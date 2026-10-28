@@ -35,6 +35,7 @@ use App\Http\Controllers\Auth\EmailChangeController;
 use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\ImisSsoController;
+use App\Http\Controllers\Auth\ImisSsoLogoutController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
@@ -328,6 +329,8 @@ Route::middleware('auth')->group(function () {
 // Sign-in from the IMIS portal (one-time token; see ImisSsoController).
 Route::get('/sso', [ImisSsoController::class, 'show'])->middleware('throttle:30,1')->name('sso');
 Route::post('/sso', [ImisSsoController::class, 'store'])->middleware('throttle:30,1')->name('sso.store');
+// IMIS signs the person out of TIMS when they sign out of IMIS.
+Route::post('/sso/logout', ImisSsoLogoutController::class)->middleware('throttle:60,1')->name('sso.logout');
 
 Route::get('/auth/google', [GoogleController::class, 'redirect'])->name('auth.google');
 Route::get('/auth/google/callback', [GoogleController::class, 'callback'])->name('auth.google.callback');

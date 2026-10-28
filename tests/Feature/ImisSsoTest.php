@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use App\Enums\Role;
 use App\Http\Controllers\ProfilePhotoController;
 use App\Models\FieldOffice;
+use App\Models\SiteSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -234,5 +237,48 @@ class ImisSsoTest extends TestCase
 
         Http::assertNotSent(fn ($r) => str_contains($r->url(), 'evil.test'));
         $this->assertNull(User::where('imis_user_id', 7)->value('avatar_path'));
+    }
+
+    public function test_imis_signing_out_ends_the_tims_session_it_started(): void
+    {
+        $sid = str_repeat('s', 64);
+        $this->imis(['sid' => $sid]);
+        $this->signIn()->assertRedirect(route('admin.dashboard'));
+
+        $row = DB::table('imis_sessions')->sole();
+        $this->assertSame(hash('sha256', $sid), $row->sid_hash);
+        Session::getHandler()->write($row->session_id, 'payload');
+
+        $this->postJson('/sso/logout', ['sid' => $sid])->assertOk()->assertJson(['success' => true]);
+
+        $this->assertSame(0, DB::table('imis_sessions')->count());
+        $this->assertSame('', Session::getHandler()->read($row->session_id));
+    }
+
+    public function test_an_unknown_sid_signs_nobody_out_and_is_not_an_error(): void
+    {
+        $this->imis(['sid' => str_repeat('s', 64)]);
+        $this->signIn();
+
+        $this->postJson('/sso/logout', ['sid' => str_repeat('x', 64)])->assertOk();
+        $this->postJson('/sso/logout', ['sid' => 'short'])->assertOk();
+        $this->postJson('/sso/logout')->assertOk();
+
+        $this->assertSame(1, DB::table('imis_sessions')->count());
+    }
+
+    public function test_the_logout_call_works_during_maintenance(): void
+    {
+        SiteSetting::current()->forceFill(['maintenance_mode' => true])->save();
+
+        $this->postJson('/sso/logout', ['sid' => str_repeat('x', 64)])->assertOk();
+    }
+
+    public function test_no_sid_from_imis_records_nothing(): void
+    {
+        $this->imis();
+        $this->signIn()->assertRedirect(route('admin.dashboard'));
+
+        $this->assertSame(0, DB::table('imis_sessions')->count());
     }
 }

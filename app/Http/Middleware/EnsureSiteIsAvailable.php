@@ -29,6 +29,10 @@ class EnsureSiteIsAvailable
         // staff without closing it to everyone; a participant who signs in
         // anyway meets the notice on the other side of it.
         'login', 'login.store', 'logout',
+
+        // IMIS signing someone out of TIMS: a server-to-server call that has to
+        // work however the site is set.
+        'sso.logout',
         'password.request', 'password.email', 'password.reset', 'password.store',
 
         // Google sign-in is how some staff authenticate too, so the same
