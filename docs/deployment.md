@@ -9,7 +9,7 @@ Two omissions in particular are worth naming up front, because neither announces
 itself. **Without a queue worker, no participant ever receives an email** — not
 a registration decision, not a certificate, not a password reset from the admin
 screen — and nothing errors; the `jobs` table simply grows. **Without one cron
-entry, none of the three scheduled jobs run**, including the nightly backup, and
+entry, none of the scheduled jobs run**, including the nightly backup, and
 that is discovered on the day it is needed.
 
 `php artisan tims:doctor` checks most of what follows. Run it at the end of
