@@ -32,6 +32,7 @@ class BootScreenTest extends TestCase
         $this->get('/sso?sso_token=abc')
             ->assertOk()
             ->assertSee('data-instant', false)
+            ->assertSee('imis-tr__lead">Opening</span>', false)
             ->assertSee('/images/imis/imis-logo.png', false)
             ->assertDontSee('class="imis-preloader"', false)
             ->assertDontSee('window.__bootAt', false);

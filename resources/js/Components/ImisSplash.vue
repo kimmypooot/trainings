@@ -16,6 +16,8 @@ const props = defineProps({
     note: { type: String, default: '' },
     // Skip the fade-in, when the card must cover a page from its first frame.
     instant: { type: Boolean, default: false },
+    // A small line above the title, e.g. "Opening" over the system's name.
+    lead: { type: String, default: '' },
     logo: { type: String, default: '/images/imis/csc-logo.png' },
 });
 
@@ -64,7 +66,7 @@ onBeforeUnmount(() => window.clearInterval(dotsTimer));
                         <img :src="logo" alt="" class="imis-tr__logo" draggable="false" />
                     </div>
 
-                    <div class="imis-tr__msg">{{ title }}</div>
+                    <div class="imis-tr__msg"><span v-if="lead" class="imis-tr__lead">{{ lead }}</span> {{ title }}</div>
                     <div v-if="subtitle" class="imis-tr__sub">{{ subtitle }}</div>
                     <div v-if="note" class="imis-tr__note">{{ note }}</div>
 

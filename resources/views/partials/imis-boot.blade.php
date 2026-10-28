@@ -28,7 +28,7 @@
                 </svg>
                 <img src="/images/imis/imis-logo.png" class="imis-tr__logo" alt="" draggable="false">
             </div>
-            <div class="imis-tr__msg">Opening {{ $system }}</div>
+            <div class="imis-tr__msg"><span class="imis-tr__lead">Opening</span> {{ $system }}</div>
             <div class="imis-tr__sub">Signing you in from IMIS</div>
             <div class="imis-tr__dots" aria-hidden="true"><span class="is-active"></span><span></span><span></span></div>
         </div>
