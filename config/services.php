@@ -35,6 +35,15 @@ return [
         ],
     ],
 
+    // The IMIS portal that signs staff in (ImisSsoController). Unset = off.
+    'imis' => [
+        'sso_url' => env('IMIS_SSO_URL'),
+        // This app's own host[:port], as registered in IMIS (SSO_HUB_HOSTS).
+        'audience' => env('IMIS_SSO_AUDIENCE', parse_url((string) env('APP_URL'), PHP_URL_HOST).(parse_url((string) env('APP_URL'), PHP_URL_PORT) ? ':'.parse_url((string) env('APP_URL'), PHP_URL_PORT) : '')),
+        // Origin that serves IMIS photos; the only host a staff photo is copied from.
+        'asset_origin' => env('IMIS_ASSET_ORIGIN'),
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),

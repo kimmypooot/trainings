@@ -65,6 +65,19 @@ class LoginController extends Controller
             ])->onlyInput('email');
         }
 
+        // Staff are managed in IMIS and sign in through it. Checked after the
+        // attempt, like deactivation, so the message cannot probe which
+        // addresses are staff.
+        if ($request->user()->isImisManaged()) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors([
+                'form' => 'Staff sign in through the IMIS portal.',
+            ])->onlyInput('email');
+        }
+
         // A deactivated account must not get a session, even with the right
         // password. Checked after the attempt so the message cannot be used to
         // probe which addresses exist.

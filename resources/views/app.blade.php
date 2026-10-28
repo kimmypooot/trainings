@@ -61,6 +61,7 @@
         @inertiaHead
     </head>
     <body class="min-h-screen bg-white font-sans text-csc-ink antialiased" @if ($gaId = config('services.ga4.measurement_id')) data-ga-measurement-id="{{ $gaId }}" @endif>
+        @include('partials.imis-boot', ['system' => 'TIMS', 'office' => trim(str_replace('Civil Service Commission', '', config('office.name'))), 'opening' => ($page['component'] ?? null) === 'Auth/ImisSso'])
         @inertia
     </body>
 </html>

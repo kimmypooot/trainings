@@ -54,6 +54,26 @@ class GoogleAvatarFetcher
             return null;
         }
 
+        return self::download($url, $userId);
+    }
+
+    /**
+     * The same import for a staff photo served by IMIS. Only the configured
+     * IMIS origin is fetched from, for the reason isGoogleUrl() pins Google's.
+     */
+    public static function fetchFromImis(string $url, ?int $userId = null): ?string
+    {
+        if (! self::isImisUrl($url)) {
+            Log::warning('Refused a non-IMIS avatar URL', ['user_id' => $userId]);
+
+            return null;
+        }
+
+        return self::download($url, $userId);
+    }
+
+    private static function download(string $url, ?int $userId): ?string
+    {
         try {
             $response = Http::timeout(self::TIMEOUT_SECONDS)->get($url);
         } catch (Throwable $e) {
@@ -104,5 +124,26 @@ class GoogleAvatarFetcher
         return $host === 'googleusercontent.com'
             || str_ends_with($host, '.googleusercontent.com')
             || str_ends_with($host, '.google.com');
+    }
+
+    /**
+     * Whether this URL is on the configured IMIS photo origin (scheme, host and
+     * port all equal). False while no origin is configured.
+     */
+    public static function isImisUrl(string $url): bool
+    {
+        $origin = parse_url((string) config('services.imis.asset_origin'));
+        $parts = parse_url($url);
+
+        if (blank($origin['host'] ?? null) || blank($parts['host'] ?? null)) {
+            return false;
+        }
+
+        $port = fn (array $p) => $p['port'] ?? ((($p['scheme'] ?? '') === 'https') ? 443 : 80);
+
+        return in_array($parts['scheme'] ?? '', ['http', 'https'], true)
+            && mb_strtolower($parts['scheme']) === mb_strtolower($origin['scheme'] ?? '')
+            && mb_strtolower($parts['host']) === mb_strtolower($origin['host'])
+            && $port($parts) === $port($origin);
     }
 }

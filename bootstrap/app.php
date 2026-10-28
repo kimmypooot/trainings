@@ -89,9 +89,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // Safe because these routes are not cookie-authenticated at all: the
         // grant is what authorises them, and an attacker's forged form cannot
         // read one out of another origin's localStorage.
+        //
+        // `sso/logout` is IMIS calling server-to-server; the `sid` is its
+        // credential.
         $middleware->validateCsrfTokens(except: [
             'station/*/unlock',
             'station/*/sync',
+            'sso/logout',
         ]);
 
         /*

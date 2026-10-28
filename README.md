@@ -300,7 +300,7 @@ hands stack traces, SQL and `.env` values to anyone who can trigger a 500) and
 `SESSION_SECURE_COOKIE=true`. Then two things that are easy to miss entirely and
 announce themselves in no way at all: **a supervised `queue:work`**, without
 which no participant ever receives an email, and **one cron entry running
-`schedule:run` every minute**, without which none of the three scheduled jobs
+`schedule:run` every minute**, without which none of the scheduled jobs
 run — including the nightly backup.
 
 `php artisan tims:doctor` checks all of that and exits non-zero on failure. Run
@@ -316,6 +316,10 @@ php artisan tims:send-reminders --days=1      # 08:00 — the day before, so lea
 php artisan tims:invite-evaluations            # 17:30 — after the sessions end, while the room is fresh
 php artisan tims:backup                        # 02:00 — db + storage/app/private into one zip
 ```
+
+A fourth, `prune-imis-sessions` (a closure, daily at 00:00), deletes the
+`imis_sessions` rows that link IMIS sign-ins to TIMS sessions once they are 30
+days old — see [Single sign-out](#single-sign-out).
 
 Two more that are run by hand:
 
@@ -404,7 +408,7 @@ resources/js/
   types/                generated from App\Enums by tims:types
 routes/
   web.php               the authoritative map of who can do what
-  console.php           the three scheduled jobs
+  console.php           the scheduled jobs
 tests/Feature/          48 files, organised by workflow
 ```
 
@@ -413,3 +417,62 @@ tests/Feature/          48 files, organised by workflow
 - `CLAUDE.md` — the working guide to this codebase, in more depth than this file.
 - `docs/prime-hrm-discount.md` — the pricing rule that is not derivable from
   code.
+
+## Sign-in from IMIS
+
+Staff sign in through the IMIS portal (the hub); participants are external and
+keep their own sign-in and Google. IMIS sends the browser to
+`/sso?sso_token=…`; the page shows the splash and posts the token back to
+`POST /sso` (`Auth\ImisSsoController`), which redeems it at IMIS.
+
+- IMIS grants one of the staff roles; its **Code** is the `Role` value
+  (`admin`, `management`, `field-office`, `collecting-officer`, `superadmin`).
+  Participants cannot be granted from IMIS.
+- The account is linked by `users.imis_user_id` (else once by email, never to a
+  participant), created on first sign-in, and has its name, role and field office
+  rewritten from IMIS each time. Field offices are matched through
+  `field_offices.imis_code`; a field-office role needs a match.
+- Staff cannot use a TIMS password or Google while IMIS sign-in is on; a Super
+  Administrator keeps the password as the break-glass way in. The
+  collecting-officer designation stays managed here.
+- The IMIS photo is copied once into private storage (`ImportGoogleAvatar`, source
+  `imis`), only from `IMIS_ASSET_ORIGIN`, and never over a photo the person has.
+- `.env`: `IMIS_SSO_URL=<IMIS>/api/v1/sso/validate`, `IMIS_SSO_AUDIENCE` (this
+  app's host[:port] as registered in IMIS `SSO_HUB_HOSTS`, if it differs from
+  `APP_URL`) and `IMIS_ASSET_ORIGIN` (the origin that serves IMIS photos).
+
+### Single sign-out
+
+Signing out of IMIS signs the person out of TIMS too. Signing out of TIMS ends
+only the TIMS session; it does not sign them out of IMIS or of another system.
+The contract between IMIS and a system is IMIS's `docs/sso-logout.md`.
+
+- **The link.** The sign-in response from IMIS carries `user.sid`, 64 random
+  characters. After `Auth::login`, `ImisSsoController` stores `sha256(sid)`
+  against the new session in `imis_sessions` (`sid_hash`, `session_id`,
+  `created_at`); the `sid` itself is never kept. Recording it is bookkeeping, so
+  a failure is logged ("IMIS session could not be recorded") and the person still
+  signs in; only the sign-out link is lost for that session.
+- **The call.** `POST /sso/logout` (`Auth\ImisSsoLogoutController`, route
+  `sso.logout`, 60/min) takes `sid`, destroys the session with that hash through
+  the session handler and deletes the row. An unknown, malformed or missing `sid`
+  still answers `200 {"success": true}`. The `sid` is the only credential, so
+  treat it like a password: never log it or put it in a URL.
+- **No session, no CSRF.** IMIS calls it server-to-server, so `sso/logout` is
+  excluded from CSRF checks in `bootstrap/app.php`, and its route name is in
+  `EnsureSiteIsAvailable::EXEMPT_ROUTES` so it works in maintenance mode.
+- **When IMIS calls it.** At once when the person signs out of IMIS, reaches the
+  8-hour cap, is signed out by an administrator, or is deactivated; for an idle
+  timeout, within about five minutes.
+- **A new sign-in wins.** A token from IMIS is always a new sign-in. If the
+  browser still holds a TIMS session (one IMIS could not end), `POST /sso` signs
+  it out and clears it before signing in the person IMIS names, so a different
+  person never lands as the previous one. `GET /sso` with no token still sends a
+  signed-in user to the dashboard.
+- **Housekeeping.** `imis_sessions` rows older than 30 days are deleted daily by
+  `prune-imis-sessions` (`routes/console.php`).
+- **Deploying.** `php artisan migrate` creates `imis_sessions`. If the code goes
+  live before the migration, sign-in still works, but IMIS cannot end the
+  sessions started in that gap.
+
+Covered by `tests/Feature/ImisSsoTest.php`.

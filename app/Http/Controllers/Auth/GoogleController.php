@@ -364,6 +364,13 @@ class GoogleController extends Controller
      */
     private function attachAndSignIn(Request $request, User $user, array $identity): RedirectResponse
     {
+        // Before anything is written to the account: staff sign in through IMIS.
+        if ($user->isImisManaged()) {
+            return redirect()->route('login')->withErrors([
+                'form' => 'Staff sign in through the IMIS portal.',
+            ]);
+        }
+
         // Captured before the fill, while `google_id` still says whether this
         // identity was already attached. The photo is imported only on the
         // first attach — see ImportGoogleAvatar.

@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+/* The IMIS loading screens, shared by every system under IMIS. */
+@import './imis-loading.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
