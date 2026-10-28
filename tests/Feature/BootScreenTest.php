@@ -20,6 +20,8 @@ class BootScreenTest extends TestCase
 
         $this->assertStringContainsString('class="imis-preloader"', $html);
         $this->assertStringContainsString('window.__bootAt', $html);
+        // The IMIS logo, as on IMIS's own preloader.
+        $this->assertStringContainsString('/images/imis/imis-logo.png" class="imis-preloader__logo"', $html);
         $this->assertStringContainsString('imis-boot-in', $html);
         // The inlined rules come before the Vite stylesheet, which is the point.
         $this->assertLessThan(strpos($html, 'app.css') ?: PHP_INT_MAX, strpos($html, '.imis-preloader{'));

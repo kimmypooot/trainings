@@ -37,7 +37,7 @@
     <div id="boot-preloader" class="imis-preloader" role="status" aria-live="polite" aria-busy="true" aria-label="{{ $system }} is loading. Please wait.">
         <div class="imis-preloader__accent" aria-hidden="true"></div>
         <div class="imis-preloader__logo-wrap" aria-hidden="true">
-            <img src="/images/imis/csc-logo.png" class="imis-preloader__logo" alt="" draggable="false">
+            <img src="/images/imis/imis-logo.png" class="imis-preloader__logo" alt="" draggable="false">
         </div>
         <div aria-hidden="true">
             <span class="imis-preloader__agency-main">Civil Service Commission</span>
