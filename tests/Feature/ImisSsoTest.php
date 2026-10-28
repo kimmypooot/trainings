@@ -292,4 +292,24 @@ class ImisSsoTest extends TestCase
 
         $this->assertAuthenticated();
     }
+
+    public function test_a_different_persons_token_replaces_the_session_the_browser_still_holds(): void
+    {
+        $previous = User::factory()->create(['role' => Role::Admin]);
+        $this->imis(['id' => 8, 'email' => 'other@csc.test']);
+
+        $this->actingAs($previous)->post('/sso', ['sso_token' => 'abc'])->assertRedirect(route('admin.dashboard'));
+
+        $this->assertAuthenticatedAs(User::where('imis_user_id', 8)->firstOrFail());
+    }
+
+    public function test_the_sso_page_still_takes_a_new_token_while_someone_is_signed_in(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => Role::Admin]));
+
+        $this->get('/sso?sso_token=abc')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Auth/ImisSso')->where('token', 'abc'));
+        $this->get('/sso')->assertRedirect(route('admin.dashboard'));
+    }
 }

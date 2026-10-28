@@ -42,11 +42,13 @@ class ImisSsoController extends Controller
      */
     public function show(Request $request): Response|RedirectResponse
     {
-        if (Auth::check()) {
+        $token = $request->query('sso_token');
+
+        // Already signed in and no new token: nothing to do. A token is a new IMIS
+        // sign-in, which store() lets replace the session the browser still holds.
+        if (Auth::check() && ! (is_string($token) && $token !== '')) {
             return redirect()->route('admin.dashboard');
         }
-
-        $token = $request->query('sso_token');
 
         if (! config('services.imis.sso_url') || ! is_string($token) || $token === '') {
             return $this->refuse('Single sign-on is not available. Please sign in below.');
@@ -57,8 +59,11 @@ class ImisSsoController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        // A token from IMIS is a new sign-in: whoever's session the browser still
+        // holds (one IMIS could not end, say) must not stay signed in as them.
         if (Auth::check()) {
-            return redirect()->route('admin.dashboard');
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
         }
 
         $url = config('services.imis.sso_url');
