@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ActingFieldOfficeController;
 use App\Http\Controllers\Admin\ActivityLogController as AdminActivityLogController;
 use App\Http\Controllers\Admin\AgencyController as AdminAgencyController;
 use App\Http\Controllers\Admin\AgencyRequestController as AdminAgencyRequestController;
@@ -57,6 +58,7 @@ use App\Http\Controllers\RegistrationOutputController;
 use App\Http\Controllers\ScanLinkController;
 use App\Http\Controllers\TrainingController;
 use App\Http\Middleware\EnsureEmailIsVerified;
+use App\Http\Middleware\EnsureFieldOfficeChosen;
 use App\Http\Middleware\EnsureProfileIsComplete;
 use App\Http\Middleware\EnsureUserCollectsPayments;
 use App\Http\Middleware\EnsureUserIsStaff;
@@ -379,6 +381,17 @@ Route::middleware('auth')->group(function () {
  * their own shell and are not asked to complete a participant profile.
  */
 Route::middleware(['auth', EnsureUserIsStaff::class])
+    ->prefix('admin')
+    ->name('admin.')
+    ->group(function () {
+        // A field-office user who heads more than one office chooses which to work
+        // as before anything else opens, and can switch later from the header.
+        // These two sit outside EnsureFieldOfficeChosen, which sends people here.
+        Route::get('/choose-office', [ActingFieldOfficeController::class, 'show'])->name('choose-office');
+        Route::post('/acting-office', [ActingFieldOfficeController::class, 'update'])->name('acting-office.update');
+    });
+
+Route::middleware(['auth', EnsureUserIsStaff::class, EnsureFieldOfficeChosen::class])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {

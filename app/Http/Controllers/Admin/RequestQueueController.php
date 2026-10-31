@@ -170,7 +170,7 @@ class RequestQueueController extends Controller
                 'cancellations' => $this->summary(CancellationRequest::query()->tap($scope), $cancellations),
                 'outputs' => $this->summary(RegistrationOutput::query()->tap($scope), $outputs),
             ],
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
         ]);
     }
 

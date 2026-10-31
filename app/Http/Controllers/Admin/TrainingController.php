@@ -128,7 +128,7 @@ class TrainingController extends Controller
              * scoped figure that does not say it is scoped is indistinguishable
              * from a wrong one. Null for everyone who sees the region.
              */
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
             // The status tabs, with their live counts. Counts are global (not
             // narrowed by the search box) so the tabs stay a stable map of the
             // catalogue; "All" carries the region-wide total.
@@ -473,7 +473,7 @@ class TrainingController extends Controller
             'summary' => RescheduleService::summarise($affected),
             'scopedTo' => $request->user()->scopedFieldOfficeId() === null
                 ? null
-                : $request->user()->fieldOffice?->name,
+                : $request->user()->workingFieldOffice()?->name,
             // Where a selection can go. Same rule as the roster's transfer
             // dialog: open runs only, never this one.
             'transferTargets' => TransferTargets::for($training),

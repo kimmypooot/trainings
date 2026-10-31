@@ -49,7 +49,7 @@ class AnalyticsController extends Controller
 
         return Inertia::render('Admin/Analytics', [
             'view' => $view,
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
             // Money is gated on the collecting-officer designation, the same
             // gate the overview block and the payment exports use.
             'canSeeMoney' => $canSeeMoney,

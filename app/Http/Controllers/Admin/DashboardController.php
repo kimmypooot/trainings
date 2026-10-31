@@ -90,7 +90,7 @@ class DashboardController extends Controller
                     Registration::whereIn('status', RegistrationStatus::occupying()), 'user.profile'
                 )->count(),
             ],
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
             // So a dialog can say it is showing a capped slice rather than
             // letting the reader assume fifty rows is the whole set.
             'modalLimit' => self::MODAL_LIMIT,

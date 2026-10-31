@@ -25,6 +25,10 @@ const pendingActions = computed(() => page.props.pendingActions ?? {});
 // on for days unnoticed — see HandleInertiaRequests' maintenanceMode prop.
 const maintenanceMode = computed(() => page.props.maintenanceMode ?? false);
 
+// The offices a concurrent field-office user can work as; null for everyone else.
+const actingOffice = computed(() => user.value.acting_office ?? null);
+const switchOffice = (id) => router.post('/admin/acting-office', { field_office_id: Number(id) });
+
 // Everyone who is not a participant. Deliberately broader than STAFF_ROLES
 // below: collecting officers and management are kept out of the *roster*, but
 // both read the participants directory and the trainings catalogue, which is
@@ -822,6 +826,25 @@ const confirmSignOut = () => {
                     </div>
 
                     <div class="flex items-center gap-1 sm:gap-2">
+                        <!--
+                            Only for a field-office user who also heads another
+                            office (a concurrent Director): everything on screen
+                            is scoped to the office chosen here.
+                        -->
+                        <div v-if="actingOffice" class="flex items-center">
+                            <label for="acting-office" class="sr-only">Working as</label>
+                            <select
+                                id="acting-office"
+                                class="max-w-48 truncate rounded-lg border border-csc-line bg-white py-1.5 pr-8 pl-3 text-sm font-medium text-csc-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-csc-blue sm:max-w-64"
+                                :value="actingOffice.active"
+                                @change="switchOffice($event.target.value)"
+                            >
+                                <option v-for="office in actingOffice.offices" :key="office.id" :value="office.id">
+                                    {{ office.name }}
+                                </option>
+                            </select>
+                        </div>
+
                         <!--
                             A preview popover rather than a link straight to
                             the full list — see AppNotificationsPopover for

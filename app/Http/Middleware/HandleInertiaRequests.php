@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\SiteSetting;
+use App\Support\ActingFieldOffice;
 use App\Support\PendingActionCounter;
 use App\Support\VisitorCounter;
 use Illuminate\Http\Request;
@@ -78,6 +79,9 @@ class HandleInertiaRequests extends Middleware
                     // asking for a current password that was never issued.
                     'has_password' => $request->user()->hasPassword(),
                     'has_google' => $request->user()->hasGoogleAccount(),
+                    // Only for a field-office user who heads more than one office:
+                    // the offices they can work as, and the one they are.
+                    'acting_office' => ActingFieldOffice::options($request->user()),
                 ] : null,
             ],
             'unreadNotifications' => fn () => $request->user()?->unreadNotifications()->count() ?? 0,

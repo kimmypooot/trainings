@@ -126,7 +126,7 @@ class RosterController extends Controller
                     'is_past' => $day['date']->isPast() && ! $day['date']->isToday(),
                 ], $training->trainingDays()),
             ],
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
             'attendanceStatuses' => AttendanceStatus::options(),
             /*
              * The counter-payment dialog. Only the roles that may actually post

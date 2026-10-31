@@ -89,7 +89,7 @@ class ParticipantController extends Controller
             // from what the export controller reads.
             'exportUrl' => route('admin.exports.participants', array_filter($filters)),
             'can' => ['manage' => $this->mayManage($request)],
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
         ]);
     }
 

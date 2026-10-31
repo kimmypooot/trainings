@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ImportGoogleAvatar;
 use App\Models\FieldOffice;
 use App\Models\User;
+use App\Support\ActingFieldOffice;
 use App\Support\GoogleAvatarFetcher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -134,6 +135,10 @@ class ImisSsoController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
+        // A field-office user who also heads other offices by designation works
+        // as one at a time (the header switcher); see ActingFieldOffice.
+        ActingFieldOffice::remember($role === Role::FieldOffice ? [$office->id, ...$this->headedOffices($imis)] : []);
+
         // So signing out of IMIS can end this session (ImisSsoLogoutController).
         if (is_string($imis['sid'] ?? null) && strlen($imis['sid']) === 64) {
             try {
@@ -170,6 +175,27 @@ class ImisSsoController extends Controller
         }
 
         return $match->imis_user_id === null && $match->role->isStaff() ? $match : false;
+    }
+
+    /**
+     * The TIMS offices IMIS says the person heads besides their own. One that
+     * does not match a TIMS office (no `imis_code`) is left out and logged.
+     *
+     * @return list<int>
+     */
+    private function headedOffices(array $imis): array
+    {
+        $codes = collect($imis['headed_offices'] ?? [])
+            ->filter(fn ($entry) => is_array($entry) && is_string($entry['code'] ?? null) && in_array($entry['type'] ?? null, ['field_office', 'satellite_office'], true))
+            ->pluck('code');
+
+        $found = FieldOffice::whereIn('imis_code', $codes)->get(['id', 'imis_code']);
+
+        foreach ($codes->diff($found->pluck('imis_code')) as $missing) {
+            Log::warning('IMIS names an office this person heads that has no TIMS field office', ['imis_code' => $missing, 'imis_user_id' => $imis['id']]);
+        }
+
+        return $found->pluck('id')->all();
     }
 
     /** The TIMS field office for the person's IMIS unit. */

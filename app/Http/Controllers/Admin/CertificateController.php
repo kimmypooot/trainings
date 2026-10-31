@@ -100,7 +100,7 @@ class CertificateController extends Controller
             // one gate serves both rather than a second copy of the same role
             // list drifting from it.
             'can' => ['resend' => $this->mayResend($request), 'regenerate' => $this->mayResend($request)],
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
             // The export honours the same filters the register is showing, and
             // the field-office scope, so what staff download is what they see.
             //

@@ -79,7 +79,7 @@ class ScannerController extends Controller
             'trainings' => $trainings,
             'syncUrl' => route('admin.scanner.sync'),
             'walkInUrl' => route('admin.scanner.walk-in'),
-            'scopedTo' => $request->user()->fieldOffice?->name,
+            'scopedTo' => $request->user()->workingFieldOffice()?->name,
             'operator' => $request->user()->name,
             // Whether this operator may rehearse. Sent so the toggle is simply
             // absent for everyone else rather than present and refused.
@@ -105,7 +105,7 @@ class ScannerController extends Controller
                 $request->user()->scopedFieldOfficeId(),
                 ScanStationService::since($request),
             ),
-            'scoped_to' => $request->user()->fieldOffice?->name,
+            'scoped_to' => $request->user()->workingFieldOffice()?->name,
         ]);
     }
 

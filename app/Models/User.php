@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Role;
 use App\Notifications\ResetPassword;
 use App\Notifications\VerifyEmail;
+use App\Support\ActingFieldOffice;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail as MustVerifyEmailContract;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -211,6 +212,18 @@ class User extends Authenticatable implements MustVerifyEmailContract
     }
 
     /**
+     * The office this user is working as: the active one for a concurrent
+     * field-office user (see ActingFieldOffice), otherwise their own. What
+     * the screens name as "scoped to", so the label matches the data.
+     */
+    public function workingFieldOffice(): ?FieldOffice
+    {
+        $activeId = ActingFieldOffice::activeId($this);
+
+        return $activeId !== null ? FieldOffice::find($activeId) : $this->fieldOffice;
+    }
+
+    /**
      * Whether this user only sees the participants of one field office.
      *
      * Applies to the field-office role alone: HRD, management, and superadmin
@@ -233,7 +246,13 @@ class User extends Authenticatable implements MustVerifyEmailContract
             return null;
         }
 
-        return $this->field_office_id ?? 0;
+        // A concurrent field-office user works as one of their offices at a time,
+        // and sees nothing until they have chosen which.
+        if (ActingFieldOffice::needsChoice($this)) {
+            return 0;
+        }
+
+        return ActingFieldOffice::activeId($this) ?? $this->field_office_id ?? 0;
     }
 
     /**
